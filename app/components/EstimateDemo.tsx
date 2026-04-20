@@ -79,12 +79,13 @@ export function EstimateDemo() {
   const [showEditBtn, setShowEditBtn] = useState(false);
   const [sendReady, setSendReady]     = useState(false);
 
-  const ttextRef   = useRef<HTMLSpanElement>(null);
-  const scrollRef  = useRef<HTMLDivElement>(null);
-  const streamRef  = useRef<HTMLDivElement>(null);
-  const tblRef     = useRef<HTMLDivElement | null>(null);
-  const pricingRef = useRef<HTMLDivElement | null>(null);
-  const cancelRef  = useRef(false);
+  const ttextRef    = useRef<HTMLSpanElement>(null);
+  const scrollRef   = useRef<HTMLDivElement>(null);
+  const streamRef   = useRef<HTMLDivElement>(null);
+  const tblRef      = useRef<HTMLDivElement | null>(null);
+  const pricingRef  = useRef<HTMLDivElement | null>(null);
+  const cancelRef   = useRef(false);
+  const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Stream renderer ────────────────────────────────────────────────────────
 
@@ -250,6 +251,10 @@ export function EstimateDemo() {
   // ── Handlers ───────────────────────────────────────────────────────────────
 
   const handleGenerate = useCallback(() => {
+    if (autoTimerRef.current) {
+      clearTimeout(autoTimerRef.current);
+      autoTimerRef.current = null;
+    }
     setBtnReady(false);
     setShowSavedRow(false);
     setShowEditBtn(false);
@@ -260,6 +265,18 @@ export function EstimateDemo() {
       setTimeout(() => setScreen('estimate'), 1800);
     }, 280);
   }, []);
+
+  // ── Auto-trigger after typing finishes ────────────────────────────────────
+
+  useEffect(() => {
+    if (!btnReady) return;
+    autoTimerRef.current = setTimeout(() => {
+      handleGenerate();
+    }, 4000);
+    return () => {
+      if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
+    };
+  }, [btnReady, handleGenerate]);
 
   const handleSend = useCallback(() => {
     setSendReady(false);
