@@ -35,6 +35,19 @@ export default function ResetPasswordPage() {
       setPageState("expired");
     }
 
+    const code = new URLSearchParams(window.location.search).get("code");
+
+    if (code) {
+      supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+        if (error) {
+          markExpired();
+        } else {
+          markReady();
+        }
+      });
+      return;
+    }
+
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) {
         markReady();
@@ -47,11 +60,8 @@ export default function ResetPasswordPage() {
       }
     });
 
-    const timer = setTimeout(markExpired, 5000);
-
     return () => {
       subscription.unsubscribe();
-      clearTimeout(timer);
     };
   }, []);
 
