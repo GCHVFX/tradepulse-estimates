@@ -272,7 +272,7 @@ export function EstimateDemo() {
     if (!btnReady) return;
     autoTimerRef.current = setTimeout(() => {
       handleGenerate();
-    }, 4000);
+    }, 5000);
     return () => {
       if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
     };
