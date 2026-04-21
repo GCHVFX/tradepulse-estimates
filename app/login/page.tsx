@@ -48,8 +48,6 @@ export default function LoginPage() {
     setResetLoading(true);
     const supabase = createSupabaseBrowserClient();
     const redirectTo = `${window.location.origin}/auth/callback`
-console.log('RESET redirectTo:', redirectTo)
-
 const { error } = await supabase.auth.resetPasswordForEmail(email, {
   redirectTo,
 })
