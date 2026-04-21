@@ -47,7 +47,7 @@ export default function LoginPage() {
     setResetError("");
     setResetLoading(true);
     const supabase = createSupabaseBrowserClient();
-    const redirectTo = `${window.location.origin}/auth/callback`
+   const redirectTo = 'https://trytradepulse.com/reset-password'
 const { error } = await supabase.auth.resetPasswordForEmail(email, {
   redirectTo,
 })

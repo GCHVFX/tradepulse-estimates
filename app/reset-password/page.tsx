@@ -19,50 +19,38 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    const supabase = createSupabaseBrowserClient();
-    let settled = false;
+useEffect(() => {
+  const init = async () => {
+    const supabase = createSupabaseBrowserClient()
 
-    function markReady() {
-      if (settled) return;
-      settled = true;
-      setPageState("ready");
-    }
+    try {
+      const url = new URL(window.location.href)
+      const code = url.searchParams.get("code")
 
-    function markExpired() {
-      if (settled) return;
-      settled = true;
-      setPageState("expired");
-    }
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code)
 
-    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-    const accessToken = hash.get("access_token");
-    const refreshToken = hash.get("refresh_token") ?? "";
-    const type = hash.get("type");
-
-    if (type === "recovery" && accessToken) {
-      supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken }).then(({ error }) => {
         if (error) {
-          markExpired();
-        } else {
-          markReady();
+          setPageState("expired")
+          return
         }
-      });
-      return;
-    }
-
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) {
-        markReady();
       }
-    });
 
-    const timer = setTimeout(markExpired, 5000);
+      const { data, error } = await supabase.auth.getSession()
 
-    return () => {
-      clearTimeout(timer);
-    };
-  }, []);
+      if (error || !data.session) {
+        setPageState("expired")
+        return
+      }
+
+      setPageState("ready")
+    } catch {
+      setPageState("expired")
+    }
+  }
+
+  init()
+}, [])
 
   async function handleUpdate() {
     setError("");
