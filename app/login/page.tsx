@@ -47,11 +47,10 @@ export default function LoginPage() {
     setResetError("");
     setResetLoading(true);
     const supabase = createSupabaseBrowserClient();
-const redirectTo = "https://trytradepulse.com/auth/callback?next=/reset-password"
-
-const { error } = await supabase.auth.resetPasswordForEmail(email, {
-  redirectTo,
-})
+    const redirectTo = `${window.location.origin}/auth/callback?next=/reset-password`;
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo,
+    });
     if (error) {
       setResetError(error.message);
       setResetLoading(false);
@@ -72,12 +71,12 @@ const { error } = await supabase.auth.resetPasswordForEmail(email, {
           <main className="flex-1 px-5 flex flex-col gap-6 pt-4">
             <div>
               <h1 className="text-2xl font-bold text-white">Reset password</h1>
-              <p className="text-zinc-500 text-sm mt-1">We'll send a reset link to your email.</p>
+              <p className="text-zinc-500 text-sm mt-1">We&apos;ll send a reset link to your email.</p>
             </div>
 
             {resetSent ? (
               <div className="bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-4 text-zinc-300 text-sm leading-relaxed">
-                If an account exists with that email, you'll receive a reset link shortly.
+                If an account exists with that email, you&apos;ll receive a reset link shortly.
               </div>
             ) : (
               <div className="flex flex-col gap-4">
@@ -170,15 +169,26 @@ const { error } = await supabase.auth.resetPasswordForEmail(email, {
                         <path d="M2.5 2.5l15 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                         <path
                           d="M6.37 6.43A7.5 7.5 0 001.5 10s3.5 7 8.5 7a7.6 7.6 0 004.15-1.23M8.59 4.1A7.4 7.4 0 0110 4c5 0 8.5 6 8.5 6a9.2 9.2 0 01-2.15 2.72"
-                          stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
                         />
-                        <path d="M7.76 7.84a2.5 2.5 0 003.38 3.43" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                        <path
+                          d="M7.76 7.84a2.5 2.5 0 003.38 3.43"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                        />
                       </svg>
                     ) : (
                       <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5" aria-hidden="true">
                         <path
                           d="M1.5 10S5 3.5 10 3.5 18.5 10 18.5 10 15 16.5 10 16.5 1.5 10 1.5 10z"
-                          stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
                         />
                         <circle cx="10" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.5" />
                       </svg>
@@ -203,7 +213,7 @@ const { error } = await supabase.auth.resetPasswordForEmail(email, {
               )}
             </div>
 
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-zinc-500 -mt-12.5">
               No account?{" "}
               <Link href="/signup" className="text-amber-500 hover:text-amber-400 transition-colors">
                 Sign up
