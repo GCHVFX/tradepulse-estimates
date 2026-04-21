@@ -35,10 +35,13 @@ export default function ResetPasswordPage() {
       setPageState("expired");
     }
 
-    const code = new URLSearchParams(window.location.search).get("code");
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const accessToken = hash.get("access_token");
+    const refreshToken = hash.get("refresh_token") ?? "";
+    const type = hash.get("type");
 
-    if (code) {
-      supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+    if (type === "recovery" && accessToken) {
+      supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken }).then(({ error }) => {
         if (error) {
           markExpired();
         } else {
@@ -54,14 +57,10 @@ export default function ResetPasswordPage() {
       }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "PASSWORD_RECOVERY") {
-        markReady();
-      }
-    });
+    const timer = setTimeout(markExpired, 5000);
 
     return () => {
-      subscription.unsubscribe();
+      clearTimeout(timer);
     };
   }, []);
 
