@@ -27,24 +27,34 @@ useEffect(() => {
       const url = new URL(window.location.href)
       const code = url.searchParams.get("code")
 
+      console.log("RESET URL:", window.location.href)
+      console.log("RESET CODE:", code)
+
       if (code) {
         const { error } = await supabase.auth.exchangeCodeForSession(code)
+        console.log("exchangeCodeForSession error:", error)
 
         if (error) {
+          setError(`exchange failed: ${error.message}`)
           setPageState("expired")
           return
         }
       }
 
       const { data, error } = await supabase.auth.getSession()
+      console.log("getSession error:", error)
+      console.log("session exists:", !!data.session)
 
       if (error || !data.session) {
+        setError(error?.message || "No session was created after code exchange.")
         setPageState("expired")
         return
       }
 
       setPageState("ready")
-    } catch {
+    } catch (err) {
+      console.error("reset init crash:", err)
+      setError(err instanceof Error ? err.message : "Unknown reset error")
       setPageState("expired")
     }
   }
@@ -91,7 +101,7 @@ useEffect(() => {
         </header>
         <main className="flex-1 px-5 flex flex-col gap-6 pt-4">
           <div className="bg-red-950 border border-red-800 rounded-xl px-4 py-4 text-red-300 text-sm leading-relaxed">
-            This reset link has expired or is invalid. Please{" "}
+           {error || "This reset link has expired or is invalid."} Please{" "}
             <Link href="/login" className="text-amber-500 hover:text-amber-400 transition-colors underline">
               request a new one
             </Link>
