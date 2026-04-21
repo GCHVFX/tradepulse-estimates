@@ -19,63 +19,63 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-useEffect(() => {
-  const init = async () => {
-    const supabase = createSupabaseBrowserClient()
+  useEffect(() => {
+    let cancelled = false;
 
-    try {
-      const url = new URL(window.location.href)
-      const code = url.searchParams.get("code")
+    const checkSession = async () => {
+      const supabase = createSupabaseBrowserClient();
 
-      console.log("RESET URL:", window.location.href)
-      console.log("RESET CODE:", code)
+      try {
+        const { data, error } = await supabase.auth.getSession();
 
-      if (code) {
-        const { error } = await supabase.auth.exchangeCodeForSession(code)
-        console.log("exchangeCodeForSession error:", error)
+        if (cancelled) return;
 
-        if (error) {
-          setError(`exchange failed: ${error.message}`)
-          setPageState("expired")
-          return
+        if (error || !data.session) {
+          setPageState("expired");
+          return;
+        }
+
+        setPageState("ready");
+      } catch {
+        if (!cancelled) {
+          setPageState("expired");
         }
       }
+    };
 
-      const { data, error } = await supabase.auth.getSession()
-      console.log("getSession error:", error)
-      console.log("session exists:", !!data.session)
+    void checkSession();
 
-      if (error || !data.session) {
-        setError(error?.message || "No session was created after code exchange.")
-        setPageState("expired")
-        return
-      }
-
-      setPageState("ready")
-    } catch (err) {
-      console.error("reset init crash:", err)
-      setError(err instanceof Error ? err.message : "Unknown reset error")
-      setPageState("expired")
-    }
-  }
-
-  init()
-}, [])
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function handleUpdate() {
     setError("");
+
+    if (!password.trim() || !confirmPassword.trim()) {
+      setError("Please enter and confirm your new password.");
+      return;
+    }
+
     if (password !== confirmPassword) {
       setError("Passwords do not match.");
       return;
     }
+
     setLoading(true);
+
     const supabase = createSupabaseBrowserClient();
-    const { error: updateError } = await supabase.auth.updateUser({ password });
+    const { error: updateError } = await supabase.auth.updateUser({
+      password,
+    });
+
     if (updateError) {
       setError(updateError.message);
       setLoading(false);
       return;
     }
+
     router.push("/new");
     router.refresh();
   }
@@ -101,8 +101,11 @@ useEffect(() => {
         </header>
         <main className="flex-1 px-5 flex flex-col gap-6 pt-4">
           <div className="bg-red-950 border border-red-800 rounded-xl px-4 py-4 text-red-300 text-sm leading-relaxed">
-           {error || "This reset link has expired or is invalid."} Please{" "}
-            <Link href="/login" className="text-amber-500 hover:text-amber-400 transition-colors underline">
+            This reset link has expired or is invalid. Please{" "}
+            <Link
+              href="/login"
+              className="text-amber-500 hover:text-amber-400 transition-colors underline"
+            >
               request a new one
             </Link>
             .
@@ -121,12 +124,16 @@ useEffect(() => {
       <main className="flex-1 px-5 flex flex-col gap-6 pt-4">
         <div>
           <h1 className="text-2xl font-bold text-white">Set new password</h1>
-          <p className="text-zinc-500 text-sm mt-1">Choose a new password for your account.</p>
+          <p className="text-zinc-500 text-sm mt-1">
+            Choose a new password for your account.
+          </p>
         </div>
 
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-zinc-400">New password</label>
+            <label className="text-sm font-medium text-zinc-400">
+              New password
+            </label>
             <input
               type="password"
               className={inputClass}
@@ -139,7 +146,9 @@ useEffect(() => {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-zinc-400">Confirm password</label>
+            <label className="text-sm font-medium text-zinc-400">
+              Confirm password
+            </label>
             <input
               type="password"
               className={inputClass}
@@ -147,7 +156,11 @@ useEffect(() => {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               autoComplete="new-password"
-              onKeyDown={(e) => e.key === "Enter" && handleUpdate()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  void handleUpdate();
+                }
+              }}
             />
           </div>
 
@@ -162,7 +175,7 @@ useEffect(() => {
       <div className="fixed bottom-0 left-0 right-0 px-5 pb-10 pt-4 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent">
         <button
           type="button"
-          onClick={handleUpdate}
+          onClick={() => void handleUpdate()}
           disabled={!password.trim() || !confirmPassword.trim() || loading}
           className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
         >
