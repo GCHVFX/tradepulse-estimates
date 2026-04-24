@@ -44,15 +44,16 @@ export default function LoginPage() {
   }
 
   async function handleResetPassword() {
-    setResetError("");
+    setResetError('');
     setResetLoading(true);
-    const supabase = createSupabaseBrowserClient();
-    const redirectTo = "https://www.trytradepulse.com/reset-password";
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo,
+    const res = await fetch('/api/send-reset-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
     });
-    if (error) {
-      setResetError(error.message);
+    const data = await res.json();
+    if (data.error) {
+      setResetError(data.error);
       setResetLoading(false);
       return;
     }

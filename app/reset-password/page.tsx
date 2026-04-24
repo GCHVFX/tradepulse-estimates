@@ -17,26 +17,13 @@ export default function ResetPasswordPage() {
   const [sessionReady, setSessionReady] = useState(false);
 
   useEffect(() => {
-    const code = new URLSearchParams(window.location.search).get("code");
-    if (!code) return;
-
-    fetch("/api/exchange-recovery", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code }),
-      credentials: "include",
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.error) {
-          setError("Reset link is invalid or has expired. Please request a new one.");
-        } else {
-          setSessionReady(true);
-        }
-      })
-      .catch(() => {
-        setError("Something went wrong. Please try again.");
-      });
+    const supabase = createSupabaseBrowserClient();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY" || (event === "SIGNED_IN" && session)) {
+        setSessionReady(true);
+      }
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
   async function handleUpdate() {
