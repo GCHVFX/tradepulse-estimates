@@ -1,68 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-
-// ── Markdown renderer ─────────────────────────────────────────────────────────
-
-const markdownComponents = {
-  h1: ({ children }: { children?: React.ReactNode }) => (
-    <h1 className="text-xl font-bold text-zinc-900 mt-6 mb-2 first:mt-0">{children}</h1>
-  ),
-  h2: ({ children }: { children?: React.ReactNode }) => (
-    <h2 className="text-base font-bold text-zinc-900 mt-6 mb-2 uppercase tracking-wide">{children}</h2>
-  ),
-  h3: ({ children }: { children?: React.ReactNode }) => (
-    <h3 className="text-base font-semibold text-zinc-700 mt-4 mb-1.5">{children}</h3>
-  ),
-  p: ({ children }: { children?: React.ReactNode }) => (
-    <p className="text-zinc-700 text-sm leading-relaxed mb-3">{children}</p>
-  ),
-  ul: ({ children }: { children?: React.ReactNode }) => (
-    <ul className="mb-3 space-y-1 pl-1">{children}</ul>
-  ),
-  ol: ({ children }: { children?: React.ReactNode }) => (
-    <ol className="mb-3 space-y-1 pl-1 list-decimal list-inside">{children}</ol>
-  ),
-  li: ({ children }: { children?: React.ReactNode }) => (
-    <li className="text-zinc-700 text-sm leading-relaxed flex gap-2">
-      <span className="text-amber-500 mt-0.5 shrink-0">•</span>
-      <span>{children}</span>
-    </li>
-  ),
-  strong: ({ children }: { children?: React.ReactNode }) => (
-    <strong className="font-semibold text-zinc-900">{children}</strong>
-  ),
-  table: ({ children }: { children?: React.ReactNode }) => (
-    <div className="mb-4 overflow-x-auto rounded-lg border border-zinc-200">
-      <table className="w-full text-sm">{children}</table>
-    </div>
-  ),
-  thead: ({ children }: { children?: React.ReactNode }) => (
-    <thead className="bg-zinc-100">{children}</thead>
-  ),
-  th: ({ children, style }: { children?: React.ReactNode; style?: React.CSSProperties }) => (
-    <th
-      className="px-3 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide"
-      style={{ textAlign: style?.textAlign ?? 'left' }}
-    >
-      {children}
-    </th>
-  ),
-  td: ({ children, style }: { children?: React.ReactNode; style?: React.CSSProperties }) => (
-    <td
-      className="px-3 py-2.5 text-zinc-700 border-t border-zinc-200"
-      style={{ textAlign: style?.textAlign ?? 'left' }}
-    >
-      {children}
-    </td>
-  ),
-  hr: () => <hr className="border-zinc-200 my-4" />,
-  blockquote: ({ children }: { children?: React.ReactNode }) => (
-    <blockquote className="text-zinc-400 text-xs leading-relaxed mb-4 not-italic">{children}</blockquote>
-  ),
-};
+import { EstimateMarkdown } from '@/app/components/estimate-markdown';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -139,7 +78,7 @@ function parseSummary(rawSummary: string): ParsedSummary {
   const preamble = rawSections[0].lines.join('\n').trim();
   let scopeItems: ScopeItem[] = [];
   let lineItems: LineItem[] = [];
-  let depositPercent = 25;
+  let depositPercent = 0;
   const beforePricingSections: BeforeSection[] = [];
   const afterPricingSections: Array<{ heading: string; content: string }> = [];
   let seenPricing = false;
@@ -175,6 +114,8 @@ function parseSummary(rawSummary: string): ParsedSummary {
           break;
         }
       }
+      const noDepositLine = sec.lines.find(l => /no deposit required/i.test(l));
+      if (noDepositLine) { depositPercent = 0; }
     } else {
       if (seenPricing) {
         afterPricingSections.push({ heading: h, content: sec.lines.join('\n').trim() });
@@ -234,8 +175,15 @@ function serializeSummary(
     `| Subtotal | ${formatDollars(subtotal)} |`,
     `| Tax (GST 5%) | ${formatDollars(tax)} |`,
     `| **Total** | **${formatDollars(total)}** |`,
-    `| Deposit required (${depositPercent}%) | ${formatDollars(deposit)} |`,
-    `| Balance on completion | ${formatDollars(balance)} |`,
+    ...(depositPercent === 0
+      ? [
+          `| No deposit required | |`,
+          `| Balance on completion | ${formatDollars(total)} |`,
+        ]
+      : [
+          `| Deposit required (${depositPercent}%) | ${formatDollars(deposit)} |`,
+          `| Balance on completion | ${formatDollars(balance)} |`,
+        ]),
   ].join('\n');
   parts.push(`## Pricing Summary\n${prTable}`);
 
@@ -411,9 +359,7 @@ export function EditableEstimateBody({
     <>
       {/* Preamble */}
       {preamble && (
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-          {preamble}
-        </ReactMarkdown>
+        <EstimateMarkdown content={preamble} />
       )}
 
       {/* Scope of Work */}
@@ -515,9 +461,7 @@ export function EditableEstimateBody({
         <div key={s.heading}>
           <SectionHeading>{s.heading}</SectionHeading>
           {s.nonBullets && (
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-              {s.nonBullets}
-            </ReactMarkdown>
+            <EstimateMarkdown content={s.nonBullets} />
           )}
           {s.bullets.length > 0 && (
             <ul className="mb-3 space-y-1">
@@ -546,8 +490,15 @@ export function EditableEstimateBody({
                 ['Subtotal', formatDollars(subtotal), false],
                 ['Tax (GST 5%)', formatDollars(tax), false],
                 ['Total', formatDollars(total), true],
-                [`Deposit required (${depositPercent}%)`, formatDollars(deposit), false],
-                ['Balance on completion', formatDollars(balance), false],
+                ...(depositPercent === 0
+                  ? [
+                      ['No deposit required', '', false] as [string, string, boolean],
+                      ['Balance on completion', formatDollars(total), false] as [string, string, boolean],
+                    ]
+                  : [
+                      [`Deposit required (${depositPercent}%)`, formatDollars(deposit), false] as [string, string, boolean],
+                      ['Balance on completion', formatDollars(balance), false] as [string, string, boolean],
+                    ]),
               ] as [string, string, boolean][]
             ).map(([label, amount, bold]) => (
               <tr key={label}>
@@ -575,9 +526,7 @@ export function EditableEstimateBody({
       {afterPricingSections.map(s => (
         <div key={s.heading}>
           <SectionHeading>{s.heading}</SectionHeading>
-          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-            {s.content}
-          </ReactMarkdown>
+          <EstimateMarkdown content={s.content} />
         </div>
       ))}
 

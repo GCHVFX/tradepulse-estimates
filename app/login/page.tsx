@@ -134,8 +134,9 @@ export default function LoginPage() {
 
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-zinc-400">Email</label>
+                <label htmlFor="email" className="text-sm font-medium text-zinc-400">Email</label>
                 <input
+                  id="email"
                   type="email"
                   className={inputClass}
                   placeholder="you@example.com"
@@ -147,9 +148,10 @@ export default function LoginPage() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-zinc-400">Password</label>
+                <label htmlFor="password" className="text-sm font-medium text-zinc-400">Password</label>
                 <div className="relative">
                   <input
+                    id="password"
                     type={showPassword ? "text" : "password"}
                     className={inputClass + " pr-11"}
                     placeholder="••••••••"

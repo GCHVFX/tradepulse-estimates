@@ -4,15 +4,15 @@ import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
-import ReactMarkdown from "react-markdown";
 import { EditableEstimateBody } from "@/app/components/editable-estimate-body";
+import { EstimateMarkdown } from "@/app/components/estimate-markdown";
 import { formatPhoneInput } from "@/lib/format-phone";
-import remarkGfm from "remark-gfm";
 import { Logo } from "@/app/components/logo";
 import { BottomNav } from "@/app/components/bottom-nav";
 import { SendEstimateSheet } from "@/app/components/send-estimate-sheet";
 import { CustomerDetailsBlock } from "@/app/components/customer-details-block";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { useBusinessProfile } from "@/lib/hooks/use-business-profile";
 
 function Spinner({ className = "w-5 h-5" }: { className?: string }) {
   return (
@@ -65,11 +65,8 @@ function NewPageInner() {
   const [saved, setSaved] = useState(false);
   const [savedEstimateId, setSavedEstimateId] = useState<string | null>(null);
   const [showSendSheet, setShowSendSheet] = useState(false);
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [preparedBy, setPreparedBy] = useState("");
-  const [businessName, setBusinessName] = useState("");
-  const [businessEmail, setBusinessEmail] = useState("");
   const [customerDetailsSaved, setCustomerDetailsSaved] = useState(false);
+  const { logoUrl, businessName, businessEmail, preparedBy, isLoading: profileLoading } = useBusinessProfile();
   const [jobTitle, setJobTitle] = useState("");
   const [isFirstTime, setIsFirstTime] = useState(false);
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
@@ -107,7 +104,7 @@ function NewPageInner() {
       .catch(() => {});
   }, []);
 
-  const needsProfileSetup = !logoUrl && !businessName && !preparedBy && !businessEmail;
+  const needsProfileSetup = !profileLoading && !logoUrl && !businessName && !preparedBy && !businessEmail;
 
   async function handleSignOut() {
     const supabase = createSupabaseBrowserClient();
@@ -124,25 +121,6 @@ function NewPageInner() {
     setSaved(false);
     setSavedEstimateId(null);
     setJobTitle("");
-
-    fetch("/api/profile")
-      .then((r) => r.json())
-      .then(
-        (d: {
-          profile?: {
-            logo_url?: string;
-            prepared_by?: string;
-            name?: string;
-            email?: string;
-          };
-        }) => {
-          if (d?.profile?.logo_url) setLogoUrl(d.profile.logo_url);
-          if (d?.profile?.prepared_by) setPreparedBy(d.profile.prepared_by);
-          if (d?.profile?.name) setBusinessName(d.profile.name);
-          if (d?.profile?.email) setBusinessEmail(d.profile.email);
-        }
-      )
-      .catch(() => {});
 
     try {
       const res = await fetch("/api/generate-estimate", {
@@ -319,75 +297,7 @@ function NewPageInner() {
                     estimateId={savedEstimateId}
                   />
                 ) : (
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      h1: ({ children }) => (
-                        <h1 className="text-xl font-bold text-zinc-900 mt-6 mb-2 first:mt-0">
-                          {children}
-                        </h1>
-                      ),
-                      h2: ({ children }) => (
-                        <h2 className="text-base font-bold text-zinc-900 mt-6 mb-2 uppercase tracking-wide">
-                          {children}
-                        </h2>
-                      ),
-                      h3: ({ children }) => (
-                        <h3 className="text-base font-semibold text-zinc-700 mt-4 mb-1.5">
-                          {children}
-                        </h3>
-                      ),
-                      p: ({ children }) => (
-                        <p className="text-zinc-700 text-sm leading-relaxed mb-3">{children}</p>
-                      ),
-                      ul: ({ children }) => <ul className="mb-3 space-y-1 pl-1">{children}</ul>,
-                      ol: ({ children }) => (
-                        <ol className="mb-3 space-y-1 pl-1 list-decimal list-inside">{children}</ol>
-                      ),
-                      li: ({ children }) => (
-                        <li className="text-zinc-700 text-sm leading-relaxed flex gap-2">
-                          <span className="text-amber-500 mt-0.5 shrink-0">•</span>
-                          <span>{children}</span>
-                        </li>
-                      ),
-                      strong: ({ children }) => (
-                        <strong className="font-semibold text-zinc-900">{children}</strong>
-                      ),
-                      table: ({ children }) => (
-                        <div className="mb-4 overflow-x-auto rounded-lg border border-zinc-200">
-                          <table className="w-full text-sm">{children}</table>
-                        </div>
-                      ),
-                      thead: ({ children }) => <thead className="bg-zinc-100">{children}</thead>,
-                      th: ({ children, style }) => (
-                        <th
-                          className="px-3 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide"
-                          style={{ textAlign: style?.textAlign ?? "left" }}
-                        >
-                          {children}
-                        </th>
-                      ),
-                      td: ({ children, style }) => (
-                        <td
-                          className="px-3 py-2.5 text-zinc-700 border-t border-zinc-200"
-                          style={{ textAlign: style?.textAlign ?? "left" }}
-                        >
-                          {children}
-                        </td>
-                      ),
-                      hr: () => <hr className="border-zinc-200 my-4" />,
-                      blockquote: ({ children }) => (
-                        <blockquote className="text-zinc-400 text-xs leading-relaxed mb-4 not-italic">
-                          {children}
-                        </blockquote>
-                      ),
-                    }}
-                  >
-                    {estimate
-                      .split("\n")
-                      .filter((l) => !l.startsWith("# "))
-                      .join("\n")}
-                  </ReactMarkdown>
+                  <EstimateMarkdown content={estimate} />
                 )}
                 {saved && !generating && !error && (
                   <p className="mt-4 text-xs text-zinc-400 flex items-center gap-1.5">

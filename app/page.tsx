@@ -6,6 +6,7 @@ import { EstimateDemo } from "@/app/components/EstimateDemo";
 export const metadata: Metadata = {
   title: "TradePulse Estimates, Professional Quotes in Seconds",
   description: "Turn a job description into a professional estimate in seconds. Send it from your phone before you leave the driveway. Built for contractors. $39/month.",
+  alternates: { canonical: "https://www.trytradepulse.com" },
   openGraph: {
     title: "TradePulse Estimates, Professional Quotes in Seconds",
     description: "Turn a job description into a professional estimate in seconds. Built for contractors and home service businesses. $39/month, 14-day free trial.",
@@ -279,7 +280,7 @@ export default async function LandingPage() {
         <section id="how-it-works" className="py-12 sm:py-16 bg-white">
           <div className="mx-auto max-w-5xl px-6 sm:px-10">
             <div className="text-center mb-8">
-              <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: "#0D1B2E", opacity: 0.4 }}>How it works</p>
+              <p className="text-xs font-semibold uppercase tracking-widest mb-3 text-zinc-500">How it works</p>
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Three steps. Done before you drive away.</h2>
               <p className="mt-4 text-lg text-slate-500 max-w-xl mx-auto">
                 No complicated setup. Works on your phone. Same routine after every job.
