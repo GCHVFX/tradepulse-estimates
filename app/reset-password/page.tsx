@@ -115,7 +115,7 @@ export default function ResetPasswordPage() {
         <button
           type="button"
           onClick={handleUpdate}
-          disabled={!sessionReady || !password.trim() || !confirmPassword.trim() || loading}
+          disabled={!sessionReady || !password.trim() || !confirmPassword.trim() || password !== confirmPassword || loading}
           className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
         >
           {loading ? "Updating..." : "Update Password"}
