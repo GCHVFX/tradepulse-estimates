@@ -195,15 +195,6 @@ export default function LoginPage() {
                     )}
                   </button>
                 </div>
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => setShowForgot(true)}
-                    className="text-xs text-amber-500 hover:text-amber-400 transition-colors min-h-[44px] flex items-center"
-                  >
-                    Forgot password?
-                  </button>
-                </div>
               </div>
 
               {error && (
@@ -211,14 +202,23 @@ export default function LoginPage() {
                   {error}
                 </div>
               )}
-            </div>
 
-            <p className="text-sm text-zinc-500 -mt-12.5">
-              No account?{" "}
-              <Link href="/signup" className="text-amber-500 hover:text-amber-400 transition-colors">
-                Sign up
-              </Link>
-            </p>
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-zinc-500">
+                  No account?{" "}
+                  <Link href="/signup" className="text-amber-500 hover:text-amber-400 transition-colors">
+                    Sign up
+                  </Link>
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowForgot(true)}
+                  className="text-sm text-amber-500 hover:text-amber-400 transition-colors py-2"
+                >
+                  Forgot password?
+                </button>
+              </div>
+            </div>
           </main>
 
           <div className="fixed bottom-0 left-0 right-0 px-5 pb-10 pt-4 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent">
