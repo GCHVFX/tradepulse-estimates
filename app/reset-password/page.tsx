@@ -17,24 +17,26 @@ export default function ResetPasswordPage() {
   const [sessionReady, setSessionReady] = useState(false);
 
   useEffect(() => {
-    const supabase = createSupabaseBrowserClient();
+    const code = new URLSearchParams(window.location.search).get("code");
+    if (!code) return;
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'PASSWORD_RECOVERY' || (event === 'SIGNED_IN' && session)) {
-        setSessionReady(true);
-      }
-    });
-
-    const code = new URLSearchParams(window.location.search).get('code');
-    if (code) {
-      supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
-        if (error) {
-          setError('Reset link is invalid or has expired. Please request a new one.');
+    fetch("/api/exchange-recovery", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code }),
+      credentials: "include",
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) {
+          setError("Reset link is invalid or has expired. Please request a new one.");
+        } else {
+          setSessionReady(true);
         }
+      })
+      .catch(() => {
+        setError("Something went wrong. Please try again.");
       });
-    }
-
-    return () => subscription.unsubscribe();
   }, []);
 
   async function handleUpdate() {
@@ -67,7 +69,7 @@ export default function ResetPasswordPage() {
           <p className="text-zinc-500 text-sm mt-1">Choose a new password for your account.</p>
         </div>
 
-        {!sessionReady && (
+        {!sessionReady && !error && (
           <p className="text-sm text-zinc-500 text-center">Setting up secure session...</p>
         )}
 
