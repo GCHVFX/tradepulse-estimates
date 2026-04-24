@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import Stripe from "stripe";
+import type Stripe from "stripe";
 import { supabaseAdmin } from "@/lib/supabase-server";
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2026-03-25.dahlia",
-});
+import { stripe } from "@/lib/stripe";
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const body = await request.text();
@@ -70,15 +67,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       const invoice = event.data.object as Stripe.Invoice & { amount_paid?: number };
       const amountPaid = invoice.amount_paid ?? 0;
 
-      console.log("invoice.payment_succeeded fired", { customerId, amountPaid });
-
       if (amountPaid > 0) {
         const { error } = await supabaseAdmin
           .from("tpe_businesses")
           .update({ subscription_status: "active" })
           .eq("stripe_customer_id", customerId);
-
-        console.log("tpe_businesses update result", { error });
       }
     }
   }

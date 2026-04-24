@@ -1,6 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
 
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  const { supabase, applyTo } = createApiClient(request);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return applyTo(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
+
+  const { data } = await supabaseAdmin
+    .from("tpe_estimates")
+    .select("id, title, status, customer_name, created_at")
+    .eq("business_id", user.id)
+    .order("created_at", { ascending: false });
+
+  return applyTo(NextResponse.json({ estimates: data ?? [] }));
+}
+
 export async function PATCH(request: NextRequest): Promise<NextResponse> {
   const { supabase, applyTo } = createApiClient(request);
   const { data: { user } } = await supabase.auth.getUser();

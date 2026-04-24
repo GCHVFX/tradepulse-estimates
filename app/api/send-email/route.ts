@@ -60,7 +60,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const origin =
     request.headers.get("origin") ??
     process.env.NEXT_PUBLIC_APP_URL ??
-    "https://tradepulse.app";
+    "https://www.trytradepulse.com";
 
   const shareUrl = `${origin}/share/${estimateId}`;
   const businessName = business?.name || "Your contractor";
@@ -110,7 +110,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         sent_via: "email",
         sent_at: new Date().toISOString(),
       })
-      .eq("id", estimateId);
+      .eq("id", estimateId)
+      .eq("business_id", user.id);
 
     return applyTo(NextResponse.json({ success: true }));
   } catch (err) {

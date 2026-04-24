@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import Stripe from "stripe";
 import { supabaseAdmin } from "@/lib/supabase-server";
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2026-03-25.dahlia",
-});
+import { stripe } from "@/lib/stripe";
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   let body: { email?: unknown; password?: unknown; signup_source?: unknown };

@@ -1,8 +1,12 @@
+export const maxDuration = 60;
+
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
 
 const client = new Anthropic();
+
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 
 const SYSTEM_PROMPT = `You are a professional contractor writing a job estimate for a customer. Turn the job description into a complete, professional estimate. Write it the way an experienced contractor would. Clear, specific, and direct. Ready to send with minimal editing.
 
@@ -51,6 +55,17 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return applyTo(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
 
+  const now = Date.now();
+  const rl = rateLimitMap.get(user.id);
+  if (rl && now < rl.resetAt) {
+    if (rl.count >= 10) {
+      return applyTo(new NextResponse("Too many requests. Please wait a moment.", { status: 429 }));
+    }
+    rl.count++;
+  } else {
+    rateLimitMap.set(user.id, { count: 1, resetAt: now + 60_000 });
+  }
+
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
     .select("name, prepared_by")
@@ -87,6 +102,9 @@ export async function POST(request: NextRequest) {
 
   if (typeof jobDescription !== "string" || !jobDescription.trim()) {
     return new Response("jobDescription is required", { status: 400 });
+  }
+  if (jobDescription.length > 2000) {
+    return new Response("Job description too long. Please keep it under 2000 characters.", { status: 400 });
   }
 
   // Pass customer details to Claude for context only, not output in the estimate
@@ -189,8 +207,6 @@ export async function POST(request: NextRequest) {
             deposit_amount: null,
           })
           .select();
-
-        console.log("[supabase] response:", { data, error });
 
         if (data?.[0]?.id) {
           controller.enqueue(new TextEncoder().encode(`\n__ID__:${data[0].id}`));
