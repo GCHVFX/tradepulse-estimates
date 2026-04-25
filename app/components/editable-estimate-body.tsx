@@ -108,14 +108,16 @@ function parseSummary(rawSummary: string): ParsedSummary {
     } else if (h.toLowerCase() === 'pricing summary') {
       seenPricing = true;
       for (const line of sec.lines) {
+        if (/no deposit required/i.test(line)) {
+          depositPercent = 0;
+          break;
+        }
         const m = line.match(/Deposit.*?\((\d+)%\)/i);
         if (m) {
           depositPercent = parseInt(m[1]);
           break;
         }
       }
-      const noDepositLine = sec.lines.find(l => /no deposit required/i.test(l));
-      if (noDepositLine) { depositPercent = 0; }
     } else {
       if (seenPricing) {
         afterPricingSections.push({ heading: h, content: sec.lines.join('\n').trim() });
@@ -175,15 +177,10 @@ function serializeSummary(
     `| Subtotal | ${formatDollars(subtotal)} |`,
     `| Tax (GST 5%) | ${formatDollars(tax)} |`,
     `| **Total** | **${formatDollars(total)}** |`,
-    ...(depositPercent === 0
-      ? [
-          `| No deposit required | |`,
-          `| Balance on completion | ${formatDollars(total)} |`,
-        ]
-      : [
-          `| Deposit required (${depositPercent}%) | ${formatDollars(deposit)} |`,
-          `| Balance on completion | ${formatDollars(balance)} |`,
-        ]),
+    depositPercent === 0
+      ? '| No deposit required | |'
+      : `| Deposit required (${depositPercent}%) | ${formatDollars(deposit)} |`,
+    `| Balance on completion | ${depositPercent === 0 ? formatDollars(total) : formatDollars(balance)} |`,
   ].join('\n');
   parts.push(`## Pricing Summary\n${prTable}`);
 

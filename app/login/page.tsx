@@ -144,6 +144,7 @@ export default function LoginPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   autoFocus
                   autoComplete="email"
+                  onKeyDown={(e) => e.key === "Enter" && handleSignIn()}
                 />
               </div>
 

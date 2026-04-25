@@ -19,6 +19,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (typeof password !== "string" || !password.trim()) {
     return NextResponse.json({ error: "Password is required" }, { status: 400 });
   }
+  if (password.trim().length < 8) {
+    return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 });
+  }
 
   // Build the response early so session cookies from signUp can be written onto it
   const response = NextResponse.json({ success: true });
