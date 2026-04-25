@@ -37,7 +37,7 @@ export default async function ShareEstimatePage({
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
     .select("logo_url, name, email, phone")
-    .eq("user_id", estimate.business_id)
+    .eq("user_id", estimate.business_id ?? "")
     .maybeSingle();
 
   const logoUrl = business?.logo_url ?? null;
@@ -101,7 +101,7 @@ export default async function ShareEstimatePage({
             )}
             <span className="block">
               Date:{" "}
-              {new Date(estimate.created_at).toLocaleDateString("en-CA", {
+              {new Date(estimate.created_at ?? "").toLocaleDateString("en-CA", {
                 month: "long",
                 day: "numeric",
                 year: "numeric",
@@ -110,7 +110,7 @@ export default async function ShareEstimatePage({
           </div>
 
           <EstimateMarkdown
-            content={estimate.summary
+            content={(estimate.summary ?? "")
               .split("\n")
               .filter((l: string) => !l.startsWith("# "))
               .join("\n")}
@@ -119,8 +119,8 @@ export default async function ShareEstimatePage({
 
         <div className="mt-4">
           <DownloadPdfButton
-            title={estimate.title}
-            summary={estimate.summary}
+            title={estimate.title ?? ""}
+            summary={estimate.summary ?? ""}
             businessName={businessName}
             logoUrl={logoUrl}
           />
