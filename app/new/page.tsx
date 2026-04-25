@@ -155,16 +155,17 @@ function EstimateView({
               />
               {savedEstimateId ? (
                 <EditableEstimateBody
+                  key={savedEstimateId ?? "default"}
                   summary={estimate}
                   estimateId={savedEstimateId}
                 />
               ) : (
-                <EstimateMarkdown>
-                  {estimate
+                <EstimateMarkdown
+                  content={estimate
                     .split("\n")
                     .filter((l) => !l.startsWith("# "))
                     .join("\n")}
-                </EstimateMarkdown>
+                />
               )}
               {saved && !generating && !error && (
                 <p className="mt-4 text-xs text-zinc-400 flex items-center gap-1.5">

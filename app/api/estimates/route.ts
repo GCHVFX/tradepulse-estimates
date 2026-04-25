@@ -6,12 +6,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return applyTo(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
 
-  const { data } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from("tpe_estimates")
     .select("id, title, status, customer_name, created_at")
     .eq("business_id", user.id)
     .order("created_at", { ascending: false });
 
+  if (error) return applyTo(NextResponse.json({ error: error.message }, { status: 500 }));
   return applyTo(NextResponse.json({ estimates: data ?? [] }));
 }
 

@@ -357,7 +357,7 @@ export function EditableEstimateBody({
     <>
       {/* Preamble */}
       {preamble && (
-        <EstimateMarkdown>{preamble}</EstimateMarkdown>
+        <EstimateMarkdown content={preamble} />
       )}
 
       {/* Scope of Work */}
@@ -459,7 +459,7 @@ export function EditableEstimateBody({
         <div key={s.heading}>
           <SectionHeading>{s.heading}</SectionHeading>
           {s.nonBullets && (
-            <EstimateMarkdown>{s.nonBullets}</EstimateMarkdown>
+            <EstimateMarkdown content={s.nonBullets} />
           )}
           {s.bullets.length > 0 && (
             <ul className="mb-3 space-y-1">
@@ -519,7 +519,7 @@ export function EditableEstimateBody({
       {afterPricingSections.map(s => (
         <div key={s.heading}>
           <SectionHeading>{s.heading}</SectionHeading>
-          <EstimateMarkdown>{s.content}</EstimateMarkdown>
+          <EstimateMarkdown content={s.content} />
         </div>
       ))}
 

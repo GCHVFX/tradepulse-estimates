@@ -1,13 +1,12 @@
-'use client';
+﻿'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-// ─── Assets ───────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Assets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-const TP_LOGO =
-  'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQMEBAUEBQkFBQkUDQsNFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBT/wAARCABEADwDASIAAhEBAxEB/8QAHgAAAQMFAQEAAAAAAAAAAAAABwAFCQEDBAYIAgr/xABJEAABAwIEAwMEDQYPAAAAAAABAgMEBREABgcSCCExE0FRFRZV0iIyQlJhcYGRkpOys9EJFzNFRpUUIyQlNUNEVGJjcpShweH/xAAcAQABBQADAAAAAAAAAAAAAAAGAAMEBQcBAgj/xAAxEQABAgUCBAQEBwEAAAAAAAABAgMABAURIQYxEjJBURMUYbEVIoHBBxZCUnGhovH/2gAMAwEAAhEDEQA/AIqgL4uNR3H3UNNILji1BKUI5qUT0AA6nE3PDbwbaV8LekGX6znbK0DNef6rHQ/MkVOKiSI7ikhRZZQ4CltLYISVAblG5vYgAwUHNWl3luCafp1R4k4PoLD7VMjIU2vcLKSoN3BB53HPlijmq3TpJ4S0w8ErxjN87bRZsU2cmW/GabJT3iLrha/Ji6m6k6jZed1FynVMpafrBlzpclxtmS62kXSwloq7RClmybqSNo3HqADKNCzbkHQ5leT8j5DgxqNTx2L6YTaGWyRyVc7VFw35FazzN+Z64btV9a8y5b1Aq9Lp9SESJFWhCG0sNq6oSokkgkkk40HK2rUzKrVcSyzGlLqzZQ85IRcpJ3XULf6jyPLpgBrWrj43k5NSmilSgpZSFct7BIvm56m1hBdTdNrLXmX0hYUAUpCiN7bm3QQNONrgLy/xD6fs6kaLZZYg53S8lMyjQg1FRUUFW1zcglLaXkE7twI3p3XuduItNWNDs+aGVxmkZ8yvPyzOfQXGEzEDY+kGxLbiSULAJAO0m1+eJk8t6u17KMAwaRUTEiqcLhb7JC/ZEAE3UCe4YNdWzvQKrp1lKpZ0y9BzMuY0txJlRGnUoWDtKglaSASLdLYuKNq6WnWD5sFCkJBWSPl3ANrEnc9oralp2YlHB4NlJUohIvnYnOANh3j5ydp+D58Ux9ByqfofqSPN6saY5eMOb/FEvUmOAknkCFJQFJP+JJBGIr+NPgVqmiGuMyj5HgSqtlSdFbqUAKc3uRULWtCmFKPNRSptVieZSU3ubnBhI1GUqSC5KOBYGDaByZk35NQRMIKSYlt4jl2oeVk+KV/8JbwFKTP8mVOLL27+xcS5t8bG+DLxKKtT8oJ8UPfZbwHKVFhy31pmyzDbCbpWEbrm/THnnWRX+YV8BAI4bXsP0jviNa09b4Sji2+b3Mbnmip6Y50r8utVXLFVdqEopU8tuqOtpJCQkWSlQA5AdBhq8l6Qj9lKz++H/Xximj0H04r6g4Xkeg+m1fUHDa6zUnFFSgySd8Nw8iSl0JCUqcAHquMvyZpGP2TrH74f9fF/Omb6PVcvUOh0Knv0+nUptTbaJDxdVYkH2xuT07z3416rQadFS0YM8zSoneC3t2juwZ9ItEGlR0VjMsQOdom8enPJ5AEe3cHj4J7up59HpRyr11xdNZSgBQHEpKUgAXBypI7jYbmGZnyVNQmbeWskcoKlEk7YB94DGW17K/TlH+8N/aGHzjBQVal00gD+iW+o/wA9/Fc4U6jUPUb+C0KQuRAaltD2Rulte8bkJV7oA8r/ACc7XxXi/CvzlU2xt/NLfdf+vfweaAYVLJnGFEEpWBcG4xfYwK6qcDxl3UggKSTnfpG9cTTmxnJYPe3I+w1gNQIUmpuqbiMLfWlO4pQOYHjgucVDvZ+Y/wALUr7LWAvSswzKFPZmQ3yw+0tK0nqDYggKHeLjocAmsW0Kr7hcvw2Te2/KNoLtOBZpKC3v81r7bmCtRdAK/VcrSKk6RDn23Rqe6LKdSOu4+5J7h89r4GMhp2LIcYfbWy+2ooW2tJCkqHIgjuOOuNLdUqfqVSC43tj1RgASod77T75Pig+Pd0Pwuc/TqgVPNMfMMiAhypMDkv3KiPaqUnopSe4n/oWKX9DyVQlGHqQ7jFyc8Q6n0UO2B0wRkeb1LMycw61UG89AOh6D1B7575gZaM6MGJ2FfzAx/KOS4sF0fo/Bax77wT3dTz6Oms+pciClzLOXt71YdbvKdY5mM2e4HuWQfkB8SMPGsmqrOnNGDUZSHK3LSRGaVzDY6F1Q8B3DvPxHHJXnBOEp+Smc8JD6it50OEKcUTclR7+ZxzWZ6U03Kii024UedQ5s+v7j/kbdLd6ZJTFaeNSnOUcoO3/B/Z36xms74tViNOJLbiJbKVIPUHtUi2Nv4vG1L1JppBAHklv79/A/bmOPVCI44suLXMYKlKNyT2qeZwR+LZpbmo9OKU3HkpH37+Jf4dJCWJm23EPYxH1iCHGL9j9ofeLV7slZCHi1L+wzgK0TMb9CkLfYbZcWtGwh9G8WvfkPkwV+KqRKzXkTT3OuXYy6xQgwp5b8ZJcAakNNKaX7G52kD23QEi/XHNfnTIP6pl/QV6uKfVMs98XW8gHZNj9AIItNvMGlobcI3Nx9TBOZ1EqsSvw6zCUzAqEbkl2MjaFp96tN7KB6W8Pkx0bD4ncuu5Jcqcg9lXG0bTSRfc453bVWtsPW56C/f14kGaJA/VMv6tXq4XnTI9Ey/oK9XEGm1Kp0vj8HIXuDkX7j19+t4nT9NptQ4PFwU9u3Y+nt0gmy9QanUMzSq9MLMyoSCbl9JUhsdAEpvyAHIfB8eMr859RP9lp/+3/9wKBmiR6Jl/QV6uK+dEj0RL+gr1cU4TOgk3Nybn1J3MWfDJEAWGBYfxG5v1Nc2rx5Dm1K3ZzC1BAsAS8joMGDirfQ3qHTwo2PktH3z2AHk5mt54zZRqRSqNLU+7NZWtSm1bUIS4lSlKNgEpABJJxtXHpxAZO021kptHrNRDU7yIy8ptA3FIU+/YG3Q2F7eBHjjUtEMOMtPqWLXI+8Zxq91tx1lLZ2B+0c3fkxOMDUSlZhh6Uvy4lWyk2yt6IioNKW/CG65bacStNkEknarcB3WxLLBzZLkoSVNsgkX5BX44WFjTIz+PbuaZaFWDbPzK/HHpvM8pdrts/Mr8cLCwoUJ/M8ptNw2z17wr8cWTm2YB+jZ+ZX44WFhQoDfFrxF5m0P0XreacvxaY9U4rJLQnsuONg26lKVpvb48QH6jai5i1XzrVc2ZrqjtYr9Ud7aVLetdRsAAAOSUpACQkAAAAAWGFhYUKP/9k=';
+const TP_LOGO = '/estimates-logo.png';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 type Screen = 'form' | 'loading' | 'estimate';
 
@@ -20,7 +19,7 @@ interface StreamItem {
   delay: number;
 }
 
-// ─── Data ─────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const TYPING_TEXT = 'Replace hot water tank in basement';
 
@@ -62,14 +61,14 @@ const ITEMS: StreamItem[] = [
   { t: 'pr',      cells: ['Balance on completion', '$1,585.50'], delay: 220 },
 ];
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 const todayStr = () =>
   new Date().toLocaleDateString('en-CA', { month: 'long', day: 'numeric', year: 'numeric' });
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function EstimateDemo() {
   const [screen, setScreen]           = useState<Screen>('form');
@@ -87,7 +86,7 @@ export function EstimateDemo() {
   const cancelRef   = useRef(false);
   const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── Stream renderer ────────────────────────────────────────────────────────
+  // â”€â”€ Stream renderer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const showItem = useCallback((item: StreamItem): HTMLElement | null => {
     const stream = streamRef.current;
@@ -198,7 +197,7 @@ export function EstimateDemo() {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, []);
 
-  // ── Stream runner — triggered when estimate screen mounts ──────────────────
+  // â”€â”€ Stream runner â€” triggered when estimate screen mounts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   useEffect(() => {
     if (screen !== 'estimate') return;
@@ -230,7 +229,7 @@ export function EstimateDemo() {
     return () => { cancelRef.current = true; };
   }, [screen, showItem, scrollBottom]);
 
-  // ── Auto-type ──────────────────────────────────────────────────────────────
+  // â”€â”€ Auto-type â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   useEffect(() => {
     cancelRef.current = false;
@@ -248,7 +247,7 @@ export function EstimateDemo() {
     return () => { cancelRef.current = true; };
   }, []);
 
-  // ── Handlers ───────────────────────────────────────────────────────────────
+  // â”€â”€ Handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const handleGenerate = useCallback(() => {
     if (autoTimerRef.current) {
@@ -266,7 +265,7 @@ export function EstimateDemo() {
     }, 280);
   }, []);
 
-  // ── Auto-trigger after typing finishes ────────────────────────────────────
+  // â”€â”€ Auto-trigger after typing finishes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   useEffect(() => {
     if (!btnReady) return;
@@ -283,7 +282,7 @@ export function EstimateDemo() {
     setTimeout(() => window.open('https://trytradepulse.com/signup', '_blank'), 250);
   }, []);
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   return (
     <>
@@ -335,7 +334,7 @@ export function EstimateDemo() {
           {/* Screens */}
           <div style={{ position:'relative', flex:1, minHeight:0, overflow:'hidden' }}>
 
-            {/* ── Form ── */}
+            {/* â”€â”€ Form â”€â”€ */}
             {screen === 'form' && (
               <div style={{ position:'absolute', inset:0, overflowY:'auto', padding:'4px 14px 14px', background:'#09090b' }}>
                 {/* Job description box */}
@@ -393,7 +392,7 @@ export function EstimateDemo() {
               </div>
             )}
 
-            {/* ── Loading ── */}
+            {/* â”€â”€ Loading â”€â”€ */}
             {screen === 'loading' && (
               <div style={{ position:'absolute', inset:0, background:'#09090b', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:12 }}>
                 <div className="tp-spin tp-spin-lg" />
@@ -401,7 +400,7 @@ export function EstimateDemo() {
               </div>
             )}
 
-            {/* ── Estimate ── */}
+            {/* â”€â”€ Estimate â”€â”€ */}
             {screen === 'estimate' && (
               <div ref={scrollRef} style={{ position:'absolute', inset:0, overflowY:'auto', background:'#09090b' }}>
                 <div style={{ padding:'6px 12px 16px' }}>
@@ -471,7 +470,7 @@ export function EstimateDemo() {
   );
 }
 
-// ─── NavItem ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ NavItem â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function NavItem({ icon, label, active = false }: { icon: React.ReactNode; label: string; active?: boolean }) {
   return (

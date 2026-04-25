@@ -52,8 +52,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const userId = data.user.id;
 
+  let customer: { id: string } | undefined;
+
   try {
-    const customer = await stripe.customers.create({
+    customer = await stripe.customers.create({
       email,
       metadata: { user_id: userId },
     });
@@ -95,6 +97,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } catch (err) {
     // Stripe or DB failed — remove the auth user so they can try again cleanly
     await supabaseAdmin.auth.admin.deleteUser(userId);
+    try { if (customer?.id) await stripe.customers.del(customer.id); } catch {}
     const message = err instanceof Error ? err.message : "Account setup failed";
     return NextResponse.json({ error: message }, { status: 500 });
   }

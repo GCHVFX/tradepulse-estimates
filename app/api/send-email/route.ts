@@ -50,6 +50,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
+  const { data: sub } = await supabaseAdmin
+    .from("tpe_businesses")
+    .select("subscription_status, trial_ends_at")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const isActive = sub?.subscription_status === "active";
+  const isTrialing = sub?.subscription_status === "trial" && sub?.trial_ends_at && new Date(sub.trial_ends_at) > new Date();
+  const hasAccess = isActive || isTrialing || sub?.subscription_status === "complimentary";
+  if (!hasAccess) return applyTo(NextResponse.json({ error: "Subscription required" }, { status: 403 }));
+
   // Get business info
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
