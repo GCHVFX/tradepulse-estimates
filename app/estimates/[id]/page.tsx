@@ -77,7 +77,7 @@ export default async function EstimatePage({
           />
 
           <EditableEstimateBody
-            summary={estimate.summary}
+            summary={estimate.summary ?? ""}
             estimateId={estimate.id}
           />
         </div>
@@ -86,8 +86,8 @@ export default async function EstimatePage({
 
       <EstimateActions
         estimateId={estimate.id}
-        title={estimate.title}
-        summary={estimate.summary}
+        title={estimate.title ?? ""}
+        summary={estimate.summary ?? ""}
         customerPhone={estimate.customer_phone ?? ""}
         customerEmail={estimate.customer_email ?? ""}
         businessName={businessName}
