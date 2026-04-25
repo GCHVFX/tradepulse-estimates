@@ -73,7 +73,7 @@ export default async function EstimatePage({
             preparedBy={estimate.prepared_by ?? ""}
             companyName={businessName || undefined}
             businessEmail={businessEmail || undefined}
-            dateStr={estimate.created_at}
+            dateStr={estimate.created_at ?? ""}
           />
 
           <EditableEstimateBody
