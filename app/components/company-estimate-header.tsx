@@ -12,27 +12,22 @@ export function CompanyEstimateHeader({
   if (!logoUrl && !businessName) return null;
 
   return (
-    <div className="mb-5 flex items-center gap-3">
-      {logoUrl ? (
+    <div className="flex items-center gap-4 mb-5">
+      {logoUrl && (
         <Image
           src={logoUrl}
           alt={businessName || "Company logo"}
-          width={64}
-          height={64}
-          className="object-contain max-h-16 max-w-16 rounded-lg bg-white/5 p-1"
+          width={72}
+          height={72}
+          className="object-contain rounded-lg shrink-0"
           unoptimized
         />
-      ) : null}
-      <div className="min-w-0">
-        {businessName ? (
-          <p className="text-white text-lg font-semibold leading-tight truncate">
-            {businessName}
-          </p>
-        ) : (
-          <p className="text-zinc-400 text-sm">Estimate</p>
-        )}
-        <p className="text-zinc-500 text-sm">Estimate</p>
-      </div>
+      )}
+      {businessName && (
+        <p className="text-xl font-bold text-zinc-800 leading-tight">
+          {businessName}
+        </p>
+      )}
     </div>
   );
 }

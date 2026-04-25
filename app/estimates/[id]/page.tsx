@@ -1,5 +1,5 @@
-import Image from "next/image";
 import { redirect } from "next/navigation";
+import { CompanyEstimateHeader } from "@/app/components/company-estimate-header";
 import { EstimateActions } from "@/app/components/estimate-actions";
 import { DeleteEstimateLink } from "@/app/components/delete-estimate-link";
 import { CustomerDetailsBlock } from "@/app/components/customer-details-block";
@@ -56,21 +56,7 @@ export default async function EstimatePage({
 
       <main className="flex-1 px-4 sm:px-5 overflow-auto pb-[18.5rem]">
         <div className="bg-white rounded-2xl p-5 mt-2">
-          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mb-3">
-            {logoUrl && (
-              <Image
-                src={logoUrl}
-                alt={business?.name ?? "Company logo"}
-                width={160}
-                height={60}
-                className="object-contain"
-                unoptimized
-              />
-            )}
-            {businessName && (
-              <span className="text-lg font-semibold text-zinc-700">{businessName}</span>
-            )}
-          </div>
+          <CompanyEstimateHeader logoUrl={logoUrl} businessName={businessName} />
           <span className="mt-3 inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-500">
             Estimate
           </span>
