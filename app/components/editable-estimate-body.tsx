@@ -122,13 +122,22 @@ function parseSummary(rawSummary: string): ParsedSummary {
       if (seenPricing) {
         afterPricingSections.push({ heading: h, content: sec.lines.join('\n').trim() });
       } else {
-        const bullets = sec.lines
+        const stripBoldLabel = (text: string) => text.replace(/^\*\*[^*]+:\*\*\s*/, '').trim();
+        let bullets = sec.lines
           .filter(l => /^[-*] /.test(l))
-          .map(l => ({ id: newId(), text: l.replace(/^[-*] /, '') }));
-        const nonBullets = sec.lines
+          .map(l => ({ id: newId(), text: stripBoldLabel(l.replace(/^[-*] /, '')) }));
+        let nonBullets = sec.lines
           .filter(l => !/^[-*] /.test(l))
           .join('\n')
           .trim();
+        if (bullets.length === 0 && nonBullets.trim()) {
+          const sentences = nonBullets
+            .split(/(?<=[.!?])\s+/)
+            .map(s => s.trim())
+            .filter(Boolean);
+          bullets = sentences.map(text => ({ id: newId(), text: stripBoldLabel(text) }));
+          nonBullets = '';
+        }
         beforePricingSections.push({ heading: h, bullets, nonBullets });
       }
     }
@@ -308,6 +317,9 @@ export function EditableEstimateBody({
   function removeAssumption(sectionHeading: string, id: string) {
     const nextBefore = beforeSections.map(s => {
       if (s.heading !== sectionHeading) return s;
+      if (id === '__nonbullets__') {
+        return { ...s, nonBullets: '' };
+      }
       const idx = s.bullets.findIndex(b => b.id === id);
       const item = s.bullets[idx];
       setUndo({ item, index: idx, type: 'assumption', sectionHeading });
@@ -459,7 +471,13 @@ export function EditableEstimateBody({
         <div key={s.heading}>
           <SectionHeading>{s.heading}</SectionHeading>
           {s.nonBullets && (
-            <EstimateMarkdown content={s.nonBullets} />
+            <ul className="mb-3 space-y-1">
+              <li className="flex items-start gap-2 text-sm text-zinc-700 leading-relaxed">
+                <span className="text-amber-500 mt-0.5 shrink-0">•</span>
+                <span className="flex-1">{s.nonBullets}</span>
+                <XBtn onClick={() => removeAssumption(s.heading, '__nonbullets__')} />
+              </li>
+            </ul>
           )}
           {s.bullets.length > 0 && (
             <ul className="mb-3 space-y-1">

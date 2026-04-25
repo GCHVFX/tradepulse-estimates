@@ -51,14 +51,14 @@ export default async function ShareEstimatePage({
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
 
           {/* Letterhead header */}
-          <div className="flex items-start gap-4 pb-5 mb-5 border-b border-slate-200">
+          <div className="flex items-center gap-4 pb-5 mb-5 border-b border-slate-200">
             {logoUrl && (
               <Image
                 src={logoUrl}
                 alt={businessName || "Company logo"}
-                width={120}
-                height={48}
-                className="object-contain shrink-0"
+                width={64}
+                height={64}
+                className="rounded object-contain"
                 unoptimized
               />
             )}
