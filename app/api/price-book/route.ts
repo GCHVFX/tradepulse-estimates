@@ -1,10 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
 
+const subSelect = "subscription_status, trial_ends_at";
+function checkAccess(sub: { subscription_status?: string; trial_ends_at?: string | null } | null) {
+  const isActive = sub?.subscription_status === "active";
+  const isTrialing = sub?.subscription_status === "trial" && sub?.trial_ends_at && new Date(sub.trial_ends_at) > new Date();
+  return isActive || isTrialing || sub?.subscription_status === "complimentary";
+}
+
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const { supabase, applyTo } = createApiClient(request);
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return applyTo(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
+
+  const { data: sub } = await supabaseAdmin.from("tpe_businesses").select(subSelect).eq("user_id", user.id).maybeSingle();
+  if (!checkAccess(sub)) return applyTo(NextResponse.json({ error: "Subscription required" }, { status: 403 }));
 
   const [ratesResult, itemsResult] = await Promise.all([
     supabaseAdmin
@@ -29,6 +39,9 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   const { supabase, applyTo } = createApiClient(request);
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return applyTo(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
+
+  const { data: sub } = await supabaseAdmin.from("tpe_businesses").select(subSelect).eq("user_id", user.id).maybeSingle();
+  if (!checkAccess(sub)) return applyTo(NextResponse.json({ error: "Subscription required" }, { status: 403 }));
 
   let body: { labour_rate?: unknown; markup_percent?: unknown; deposit_percent?: unknown; deposit_threshold?: unknown };
   try {

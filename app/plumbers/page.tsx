@@ -2,15 +2,47 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { EstimateDemo } from "@/app/components/EstimateDemo";
+import { JsonLd } from "@/app/components/json-ld";
 
 export const metadata: Metadata = {
   title: "Plumbing Estimates in 30 Seconds | TradePulse",
   description: "Type what the job is. Get a ready-to-send plumbing estimate. Works from your phone. 14-day free trial, no card required.",
+  alternates: { canonical: "https://www.trytradepulse.com/plumbers" },
+  openGraph: {
+    title: "Plumbing Estimates in 30 Seconds | TradePulse",
+    description: "Type what the job is. Get a ready-to-send plumbing estimate. Works from your phone. 14-day free trial, no card required.",
+    url: "https://www.trytradepulse.com/plumbers",
+    siteName: "TradePulse",
+    images: [{ url: "https://www.trytradepulse.com/opengraph-image.png", width: 1200, height: 630, alt: "TradePulse Estimates" }],
+    locale: "en_CA",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Plumbing Estimates in 30 Seconds | TradePulse",
+    description: "Type what the job is. Get a ready-to-send plumbing estimate. Works from your phone.",
+    images: ["https://www.trytradepulse.com/opengraph-image.png"],
+  },
 };
 
 export default function PlumbersPage() {
   return (
     <div className="min-h-dvh bg-white flex flex-col font-[family-name:var(--font-dm-sans)]">
+      <JsonLd data={{
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "TradePulse Estimates",
+        "applicationCategory": "BusinessApplication",
+        "description": "Create and send professional trade estimates in seconds from your phone.",
+        "url": "https://www.trytradepulse.com",
+        "operatingSystem": "Web, iOS, Android",
+        "offers": {
+          "@type": "Offer",
+          "price": "39.00",
+          "priceCurrency": "CAD",
+          "priceValidUntil": "2027-01-01"
+        }
+      }} />
 
       {/* Header */}
       <header className="flex items-center justify-between px-6 pt-6 pb-2 max-w-lg mx-auto w-full">

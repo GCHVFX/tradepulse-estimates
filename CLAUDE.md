@@ -122,6 +122,9 @@ All tables: uuid primary keys, RLS enabled.
 - `tpe_estimates` uses `business_id` not `user_id` as the ownership FK
 - Estimate content column is `summary` not `content`
 
+`lib/database.types.ts` is generated from the live schema. Do not edit manually.
+To regenerate: `npx supabase gen types typescript --project-id hmkkuyznyumhajjqbxpu > lib/database.types.ts`
+
 ---
 
 ## Supabase Clients

@@ -1,14 +1,77 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { JsonLd } from "@/app/components/json-ld";
 
 export const metadata: Metadata = {
   title: "How Much Does a Plumber Cost in 2026? Real Pricing Guide",
   description: "Real plumbing costs for common jobs in Canada. Water heaters, drain repairs, fixture installs, and more. Prices include labour and materials.",
+  alternates: { canonical: "https://www.trytradepulse.com/plumbing-cost" },
+  openGraph: {
+    title: "How Much Does a Plumber Cost in 2026? Real Pricing Guide",
+    description: "Real plumbing costs for common jobs in Canada. Water heaters, drain repairs, fixture installs, and more. Prices include labour and materials.",
+    url: "https://www.trytradepulse.com/plumbing-cost",
+    siteName: "TradePulse",
+    images: [{ url: "https://www.trytradepulse.com/opengraph-image.png", width: 1200, height: 630, alt: "TradePulse Estimates" }],
+    locale: "en_CA",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "How Much Does a Plumber Cost in 2026? Real Pricing Guide",
+    description: "Real plumbing costs for common jobs in Canada. Water heaters, drain repairs, fixture installs, and more. Prices include labour and materials.",
+    images: ["https://www.trytradepulse.com/opengraph-image.png"],
+  },
 };
 
 export default function PlumbingCostPage() {
   return (
     <div className="min-h-dvh bg-white flex flex-col font-[family-name:var(--font-dm-sans)]">
+      <JsonLd data={{
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "How much does a water heater replacement cost in Canada?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "A water heater replacement (40–50 gallon) costs between $900 and $2,100 in Canada. This includes removal of the old unit, new tank, connections, and testing. Higher end reflects power-vent or tankless units."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How much does it cost to replace a toilet in Canada?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Toilet replacement costs between $300 and $900 in Canada. This includes removal of the old toilet, a new standard two-piece unit, wax ring, and supply line. Higher end is for wall-mounted or comfort-height models."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How much does drain cleaning cost in Canada?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Drain cleaning (snaking) costs between $150 and $450 in Canada. This covers kitchen or bathroom drains. The higher end reflects main line work or camera inspection."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How much do plumbers charge per hour in Canada?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Most plumbers in Canada charge $85 to $120 per hour. Emergency and after-hours calls typically add 50% or more to the standard rate."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How much does a sump pump replacement cost in Canada?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Sump pump replacement costs between $500 and $1,300 in Canada. This includes a new pump, check valve, and discharge line connection. Adding a battery backup adds $200 to $400."
+            }
+          }
+        ]
+      }} />
       <main className="flex-1 flex flex-col items-center px-6 pt-16 pb-36">
         <div className="w-full max-w-lg">
 

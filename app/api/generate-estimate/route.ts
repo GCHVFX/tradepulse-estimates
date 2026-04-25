@@ -219,10 +219,13 @@ export async function POST(request: NextRequest) {
           })
           .select();
 
-        if (data?.[0]?.id) {
-          controller.enqueue(new TextEncoder().encode(`\n__ID__:${data[0].id}`));
+        if (error || !data?.[0]?.id) {
+          console.error("[generate-estimate] DB insert failed", error?.message ?? "no id returned");
+          controller.enqueue(new TextEncoder().encode(`\n__ERROR__:Failed to save estimate. Please try again.`));
+          controller.close();
+          return;
         }
-
+        controller.enqueue(new TextEncoder().encode(`\n__ID__:${data[0].id}`));
         controller.close();
       } catch (err) {
         console.error("[generate-estimate] stream error:", err);

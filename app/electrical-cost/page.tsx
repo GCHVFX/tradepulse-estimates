@@ -1,14 +1,77 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { JsonLd } from "@/app/components/json-ld";
 
 export const metadata: Metadata = {
   title: "How Much Does an Electrician Cost in 2026? Real Pricing Guide",
   description: "Real electrical costs for common jobs in Canada. Panel upgrades, outlet installs, EV chargers, and more. Prices include labour and materials.",
+  alternates: { canonical: "https://www.trytradepulse.com/electrical-cost" },
+  openGraph: {
+    title: "How Much Does an Electrician Cost in 2026? Real Pricing Guide",
+    description: "Real electrical costs for common jobs in Canada. Panel upgrades, outlet installs, EV chargers, and more. Prices include labour and materials.",
+    url: "https://www.trytradepulse.com/electrical-cost",
+    siteName: "TradePulse",
+    images: [{ url: "https://www.trytradepulse.com/opengraph-image.png", width: 1200, height: 630, alt: "TradePulse Estimates" }],
+    locale: "en_CA",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "How Much Does an Electrician Cost in 2026? Real Pricing Guide",
+    description: "Real electrical costs for common jobs in Canada. Panel upgrades, outlet installs, EV chargers, and more. Prices include labour and materials.",
+    images: ["https://www.trytradepulse.com/opengraph-image.png"],
+  },
 };
 
 export default function ElectricalCostPage() {
   return (
     <div className="min-h-dvh bg-white flex flex-col font-[family-name:var(--font-dm-sans)]">
+      <JsonLd data={{
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "How much does a 200A electrical panel upgrade cost in Canada?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "A panel upgrade from 100A to 200A costs between $1,200 and $2,800 in Canada. This includes the permit, new panel, main breaker, and reconnecting all circuits. Higher end reflects older homes with more complex wiring."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How much does EV charger installation cost in Canada?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Level 2 EV charger installation costs between $500 and $1,600 in Canada. This includes a dedicated 240V circuit, breaker, and charger mount. Higher end reflects long runs or a panel upgrade required."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How much do electricians charge per hour in Canada?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Most electricians in Canada charge $90 to $130 per hour. Emergency and after-hours rates are typically 1.5x to 2x the standard rate."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How much does outlet installation cost in Canada?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "A single outlet installation costs between $150 and $450 in Canada on an existing circuit. Higher end is for GFCI, AFCI, or when a new circuit is required."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How much does a light fixture installation cost in Canada?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Light fixture installation costs between $100 and $400 in Canada to swap an existing fixture. Higher end is for new wiring, pot lights, or a ceiling fan with switch."
+            }
+          }
+        ]
+      }} />
       <main className="flex-1 flex flex-col items-center px-6 pt-16 pb-36">
         <div className="w-full max-w-lg">
 
