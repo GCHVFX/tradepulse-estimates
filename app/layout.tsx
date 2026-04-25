@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   description: "Create and send professional estimates in seconds.",
   icons: {
     icon: "/favicon.png",
-    apple: "/favicon.png",
+    apple: "/apple-touch-icon.png",
   },
 };
 

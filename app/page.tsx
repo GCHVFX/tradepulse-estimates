@@ -8,9 +8,26 @@ export const metadata: Metadata = {
   description: "Turn a job description into a professional estimate in seconds. Send it from your phone before you leave the driveway. Built for contractors. $39/month.",
   alternates: { canonical: "https://www.trytradepulse.com" },
   openGraph: {
-    title: "TradePulse Estimates, Professional Quotes in Seconds",
-    description: "Turn a job description into a professional estimate in seconds. Built for contractors and home service businesses. $39/month, 14-day free trial.",
+    title: "TradePulse Estimates — Professional Quotes in Seconds",
+    description: "Create and send professional estimates from the job site in seconds. Built for Canadian contractors.",
+    url: "https://www.trytradepulse.com",
+    siteName: "TradePulse",
+    images: [
+      {
+        url: "https://www.trytradepulse.com/social-card.png",
+        width: 1200,
+        height: 630,
+        alt: "TradePulse Estimates",
+      },
+    ],
+    locale: "en_CA",
     type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "TradePulse Estimates — Professional Quotes in Seconds",
+    description: "Create and send professional estimates from the job site in seconds.",
+    images: ["https://www.trytradepulse.com/social-card.png"],
   },
 };
 
