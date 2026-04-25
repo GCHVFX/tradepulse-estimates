@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { EstimateMarkdown } from '@/app/components/estimate-markdown';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -226,14 +226,13 @@ export function EditableEstimateBody({
   summary: string;
   estimateId: string;
 }) {
-  const parsedRef = useRef<ParsedSummary | null>(null);
-  if (!parsedRef.current) parsedRef.current = parseSummary(summary);
-  const { preamble, depositPercent, afterPricingSections } = parsedRef.current;
+  const parsed = useMemo(() => parseSummary(summary), [summary]);
+  const { preamble, depositPercent, afterPricingSections } = parsed;
 
-  const [scopeItems, setScopeItems] = useState<ScopeItem[]>(parsedRef.current.scopeItems);
-  const [lineItems, setLineItems] = useState<LineItem[]>(parsedRef.current.lineItems);
+  const [scopeItems, setScopeItems] = useState<ScopeItem[]>(() => parsed.scopeItems);
+  const [lineItems, setLineItems] = useState<LineItem[]>(() => parsed.lineItems);
   const [beforeSections, setBeforeSections] = useState<BeforeSection[]>(
-    parsedRef.current.beforePricingSections,
+    () => parsed.beforePricingSections,
   );
   const [undo, setUndo] = useState<UndoEntry | null>(null);
   const [toastVisible, setToastVisible] = useState(false);
@@ -295,7 +294,9 @@ export function EditableEstimateBody({
 
   function handleAddItem() {
     if (!newLabel.trim() || !newCost.trim()) return;
-    const item: LineItem = { id: newId(), label: newLabel.trim(), cost: newCost.trim() };
+    const rawCost = parseFloat(newCost.replace(/[^0-9.]/g, ''));
+    const formattedCost = isNaN(rawCost) ? newCost.trim() : '$' + rawCost.toFixed(2);
+    const item: LineItem = { id: newId(), label: newLabel.trim(), cost: formattedCost };
     const nextLine = [...lineItems, item];
     setLineItems(nextLine);
     setNewLabel('');
@@ -356,7 +357,7 @@ export function EditableEstimateBody({
     <>
       {/* Preamble */}
       {preamble && (
-        <EstimateMarkdown content={preamble} />
+        <EstimateMarkdown>{preamble}</EstimateMarkdown>
       )}
 
       {/* Scope of Work */}
@@ -458,7 +459,7 @@ export function EditableEstimateBody({
         <div key={s.heading}>
           <SectionHeading>{s.heading}</SectionHeading>
           {s.nonBullets && (
-            <EstimateMarkdown content={s.nonBullets} />
+            <EstimateMarkdown>{s.nonBullets}</EstimateMarkdown>
           )}
           {s.bullets.length > 0 && (
             <ul className="mb-3 space-y-1">
@@ -487,15 +488,10 @@ export function EditableEstimateBody({
                 ['Subtotal', formatDollars(subtotal), false],
                 ['Tax (GST 5%)', formatDollars(tax), false],
                 ['Total', formatDollars(total), true],
-                ...(depositPercent === 0
-                  ? [
-                      ['No deposit required', '', false] as [string, string, boolean],
-                      ['Balance on completion', formatDollars(total), false] as [string, string, boolean],
-                    ]
-                  : [
-                      [`Deposit required (${depositPercent}%)`, formatDollars(deposit), false] as [string, string, boolean],
-                      ['Balance on completion', formatDollars(balance), false] as [string, string, boolean],
-                    ]),
+                depositPercent === 0
+                  ? ['No deposit required', '', false]
+                  : [`Deposit required (${depositPercent}%)`, formatDollars(deposit), false],
+                ['Balance on completion', depositPercent === 0 ? formatDollars(total) : formatDollars(balance), false],
               ] as [string, string, boolean][]
             ).map(([label, amount, bold]) => (
               <tr key={label}>
@@ -523,7 +519,7 @@ export function EditableEstimateBody({
       {afterPricingSections.map(s => (
         <div key={s.heading}>
           <SectionHeading>{s.heading}</SectionHeading>
-          <EstimateMarkdown content={s.content} />
+          <EstimateMarkdown>{s.content}</EstimateMarkdown>
         </div>
       ))}
 

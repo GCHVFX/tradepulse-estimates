@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { formatPhoneInput } from "@/lib/format-phone";
+import { Spinner } from "@/app/components/spinner";
 import { generateEstimatePDF } from "@/lib/generate-pdf";
 
 type Panel = "menu" | "sms" | "email";
-type SMSStatus = "idle" | "sending" | "sent" | "error";
-type EmailStatus = "idle" | "sending" | "sent" | "error";
+type SendStatus = "idle" | "sending" | "sent" | "error";
 
 interface SendEstimateSheetProps {
   isOpen: boolean;
@@ -37,15 +37,12 @@ export function SendEstimateSheet({
 
   useEffect(() => {
     setEmail(customerEmail ?? "");
-  }, [customerEmail]);
-
-  useEffect(() => {
     setPhone(formatPhoneInput(customerPhone ?? ""));
-  }, [customerPhone]);
+  }, [customerEmail, customerPhone]);
   const [copied, setCopied] = useState(false);
-  const [smsStatus, setSmsStatus] = useState<SMSStatus>("idle");
+  const [smsStatus, setSmsStatus] = useState<SendStatus>("idle");
   const [smsError, setSmsError] = useState("");
-  const [emailStatus, setEmailStatus] = useState<EmailStatus>("idle");
+  const [emailStatus, setEmailStatus] = useState<SendStatus>("idle");
   const [emailError, setEmailError] = useState("");
 
   useEffect(() => {
@@ -310,10 +307,7 @@ export function SendEstimateSheet({
                 >
                   {smsStatus === "sending" ? (
                     <>
-                      <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                      </svg>
+                      <Spinner className="w-5 h-5" />
                       Sending...
                     </>
                   ) : (
@@ -375,10 +369,7 @@ export function SendEstimateSheet({
                 >
                   {emailStatus === "sending" ? (
                     <>
-                      <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                      </svg>
+                      <Spinner className="w-5 h-5" />
                       Sending...
                     </>
                   ) : (

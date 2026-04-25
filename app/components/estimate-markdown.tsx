@@ -1,7 +1,3 @@
-// Single source of truth for estimate markdown rendering.
-// Do not duplicate this config in other files. Import this component.
-"use client";
-
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -63,15 +59,10 @@ const markdownComponents = {
   ),
 };
 
-export function EstimateMarkdown({ content }: { content: string }) {
-  const filtered = content
-    .split("\n")
-    .filter((line) => !line.startsWith("# "))
-    .join("\n");
-
+export function EstimateMarkdown({ children }: { children: string }) {
   return (
     <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-      {filtered}
+      {children}
     </ReactMarkdown>
   );
 }
