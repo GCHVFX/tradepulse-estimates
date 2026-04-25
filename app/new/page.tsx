@@ -72,6 +72,7 @@ interface FormViewProps {
   jobPlaceholders: string[];
   placeholderIndex: number;
   isFirstTime: boolean;
+  error: string;
   onGenerate: () => void;
   onViewEstimate: () => void;
 }
@@ -252,6 +253,7 @@ function FormView({
   jobPlaceholders: placeholders,
   placeholderIndex,
   isFirstTime,
+  error,
   onGenerate,
   onViewEstimate,
 }: FormViewProps) {
@@ -389,6 +391,9 @@ function FormView({
             >
               Back to Estimate
             </button>
+          )}
+          {error && (
+            <p className="text-red-400 text-sm text-center pointer-events-auto">{error}</p>
           )}
           <button
             type="button"
@@ -539,6 +544,7 @@ function NewPageInner() {
       setSaved(true);
     } catch (err) {
       setSaved(false);
+      setView("form");
       setError(
         err instanceof Error
           ? err.message
@@ -612,6 +618,7 @@ function NewPageInner() {
       jobPlaceholders={jobPlaceholders}
       placeholderIndex={placeholderIndex}
       isFirstTime={isFirstTime}
+      error={error}
       onGenerate={handleGenerate}
       onViewEstimate={() => setView("estimate")}
     />

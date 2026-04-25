@@ -154,6 +154,8 @@ export async function POST(request: NextRequest) {
 
   const userMessage = lines.join("\n");
 
+  const baseUrl = request.nextUrl.origin;
+
   let stream;
   try {
     stream = client.messages.stream({
@@ -164,9 +166,21 @@ export async function POST(request: NextRequest) {
     });
   } catch (err) {
     console.error("[generate-estimate] failed to create stream:", err);
+    const errStatus = (err as { status?: number }).status;
+    if (typeof errStatus === "number") {
+      void fetch(`${baseUrl}/api/notify-error`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          error: err instanceof Error ? err.message : "Failed to start estimate generation",
+          status: errStatus,
+          context: "generate-estimate",
+        }),
+      });
+    }
     return applyTo(
       new NextResponse(
-        err instanceof Error ? err.message : "Failed to start estimate generation",
+        "Something went wrong generating your estimate. Our support team has been notified.",
         { status: 500 }
       )
     );
@@ -229,9 +243,20 @@ export async function POST(request: NextRequest) {
         controller.close();
       } catch (err) {
         console.error("[generate-estimate] stream error:", err);
-        const message =
-          err instanceof Error ? err.message : "Estimate generation failed";
-        controller.enqueue(new TextEncoder().encode(`\n__ERROR__:${message}`));
+        const message = err instanceof Error ? err.message : "Estimate generation failed";
+        const errStatus = (err as { status?: number }).status;
+        if (typeof errStatus === "number") {
+          void fetch(`${baseUrl}/api/notify-error`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ error: message, status: errStatus, context: "generate-estimate" }),
+          });
+        }
+        controller.enqueue(
+          new TextEncoder().encode(
+            `\n__ERROR__:Something went wrong generating your estimate. Our support team has been notified.`
+          )
+        );
         controller.close();
       }
     },
