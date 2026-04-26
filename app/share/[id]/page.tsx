@@ -86,7 +86,7 @@ export default async function ShareEstimatePage({
           </h1>
 
           {/* Customer details */}
-          <div className="text-slate-500 text-xs leading-relaxed mb-5 border-t border-slate-100 pt-4">
+          <div className="text-slate-600 text-xs leading-relaxed mb-5 border-t border-slate-100 pt-4">
             {estimate.customer_name && (
               <span className="block">Prepared for: {estimate.customer_name}</span>
             )}
