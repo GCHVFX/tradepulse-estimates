@@ -17,9 +17,9 @@ export function CompanyEstimateHeader({
         <Image
           src={logoUrl}
           alt={businessName || "Company logo"}
-          width={72}
-          height={72}
-          className="object-contain rounded-lg shrink-0"
+          width={160}
+          height={48}
+          className="object-contain rounded shrink-0"
           unoptimized
         />
       )}

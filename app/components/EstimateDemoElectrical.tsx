@@ -1,12 +1,12 @@
-﻿'use client';
+'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-// â”€â”€â”€ Assets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Assets ───────────────────────────────────────────────────────────────────
 
 const TP_LOGO = '/estimates-logo.png';
 
-// â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type Screen = 'form' | 'loading' | 'estimate';
 
@@ -19,56 +19,50 @@ interface StreamItem {
   delay: number;
 }
 
-// â”€â”€â”€ Data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Data ─────────────────────────────────────────────────────────────────────
 
-const TYPING_TEXT = 'Replace hot water tank in basement';
+const TYPING_TEXT = 'Replace bathroom exhaust fan, install GFCI outlet in kitchen, add dimmer switch in living room. House is a 1990s build.';
 
 const ITEMS: StreamItem[] = [
   { t: 'logo',    delay: 500 },
   { t: 'badge',   delay: 300 },
-  { t: 'title',   text: 'Replace Hot Water Tank', delay: 400 },
-  { t: 'meta',    text: 'Prepared for: Alex Johnson', delay: 220 },
+  { t: 'title',   text: 'Bathroom Fan, Kitchen GFCI Outlet, and Living Room Dimmer', delay: 400 },
+  { t: 'meta',    text: 'Prepared for: Mark Thiessen', delay: 220 },
   { t: 'meta',    text: 'Date: ', date: true, delay: 180 },
   { t: 'divider', delay: 300 },
-  { t: 'p',       text: 'We will remove your existing hot water tank and install a new 40-gallon natural gas tank with all necessary connections and fittings. The old tank will be disposed of, and the new unit will be tested and ready to use when we finish.', delay: 700 },
+  { t: 'p',       text: 'We will replace your existing bathroom exhaust fan, install a GFCI-protected outlet in your kitchen, and add a dimmer switch to your living room. All work meets current electrical code.', delay: 700 },
   { t: 'h',       text: 'SCOPE OF WORK', delay: 400 },
-  { t: 'b',       text: 'Turn off gas and water supply to existing tank', delay: 240 },
-  { t: 'b',       text: 'Drain existing hot water tank completely', delay: 220 },
-  { t: 'b',       text: 'Disconnect gas line, water inlet, and outlet connections', delay: 240 },
-  { t: 'b',       text: 'Remove old tank from basement', delay: 200 },
-  { t: 'b',       text: 'Haul away and dispose of old tank', delay: 200 },
-  { t: 'b',       text: 'Position new 40-gallon natural gas hot water tank', delay: 240 },
-  { t: 'b',       text: 'Connect cold water inlet with shut-off valve', delay: 220 },
-  { t: 'b',       text: 'Connect hot water outlet line to house plumbing', delay: 220 },
-  { t: 'b',       text: 'Connect gas line with new gas union fitting', delay: 220 },
-  { t: 'b',       text: 'Install new temperature and pressure relief valve', delay: 240 },
-  { t: 'b',       text: 'Bleed air from lines and test system', delay: 200 },
-  { t: 'b',       text: 'Verify proper heating and water flow', delay: 300 },
+  { t: 'b',       text: 'Remove existing bathroom exhaust fan and disconnect from ductwork', delay: 240 },
+  { t: 'b',       text: 'Install new bathroom exhaust fan (6-inch, 80 CFM) with damper and mounting hardware', delay: 240 },
+  { t: 'b',       text: 'Reconnect and seal ductwork to new fan', delay: 220 },
+  { t: 'b',       text: 'Install new GFCI outlet in kitchen (includes new outlet box and cover plate if needed)', delay: 240 },
+  { t: 'b',       text: 'Install new dimmer switch in living room (includes switch box and cover plate if needed)', delay: 240 },
+  { t: 'b',       text: 'Test all new fixtures and switches for proper operation', delay: 220 },
+  { t: 'b',       text: 'Clean up work area and remove old materials', delay: 200 },
   { t: 'h',       text: 'LINE ITEMS', delay: 400 },
   { t: 'thead',   delay: 180 },
-  { t: 'tr',      cells: ['Labour (5 hours @ $65/hr)', '$325'], delay: 240 },
-  { t: 'tr',      cells: ['40-gallon natural gas hot water tank', '$895'], delay: 240 },
-  { t: 'tr',      cells: ['Gas union fitting and brass fittings', '$68'], delay: 220 },
-  { t: 'tr',      cells: ['Temperature and pressure relief valve', '$45'], delay: 220 },
-  { t: 'tr',      cells: ['Copper and PEX tubing (as needed)', '$82'], delay: 220 },
-  { t: 'tr',      cells: ['Disposal fee for old tank', '$95'], delay: 300 },
+  { t: 'tr',      cells: ['Labour (4 hours @ $65/hr)', '$260'], delay: 240 },
+  { t: 'tr',      cells: ['Bathroom exhaust fan (6-inch, 80 CFM with damper)', '$185'], delay: 240 },
+  { t: 'tr',      cells: ['GFCI outlet and cover plate', '$35'], delay: 220 },
+  { t: 'tr',      cells: ['Dimmer switch (LED-compatible) and cover plate', '$42'], delay: 220 },
+  { t: 'tr',      cells: ['Ductwork sealant and miscellaneous fasteners', '$18'], delay: 300 },
   { t: 'h',       text: 'PRICING SUMMARY', delay: 400 },
-  { t: 'pr',      cells: ['Subtotal', '$1,510'], delay: 240 },
-  { t: 'pr',      cells: ['Tax (GST 5%)', '$75.50'], delay: 220 },
-  { t: 'pr',      cells: ['Total', '$1,585.50'], bold: true, delay: 260 },
-  { t: 'pr',      cells: ['Balance on completion', '$1,585.50'], delay: 220 },
+  { t: 'pr',      cells: ['Subtotal', '$540'], delay: 240 },
+  { t: 'pr',      cells: ['Tax (GST 5%)', '$27'], delay: 220 },
+  { t: 'pr',      cells: ['Total', '$567'], bold: true, delay: 260 },
+  { t: 'pr',      cells: ['Balance on completion', '$567'], delay: 220 },
 ];
 
-// â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 const todayStr = () =>
   new Date().toLocaleDateString('en-CA', { month: 'long', day: 'numeric', year: 'numeric' });
 
-// â”€â”€â”€ Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Component ────────────────────────────────────────────────────────────────
 
-export function EstimateDemo() {
+export function EstimateDemoElectrical() {
   const [screen, setScreen]           = useState<Screen>('form');
   const [tboxActive, setTboxActive]   = useState(false);
   const [btnReady, setBtnReady]       = useState(false);
@@ -84,7 +78,7 @@ export function EstimateDemo() {
   const cancelRef   = useRef(false);
   const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // â”€â”€ Stream renderer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Stream renderer ────────────────────────────────────────────────────────
 
   const showItem = useCallback((item: StreamItem): HTMLElement | null => {
     const stream = streamRef.current;
@@ -96,7 +90,7 @@ export function EstimateDemo() {
       case 'logo': {
         el = document.createElement('div');
         el.style.cssText = 'text-align:center;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #f3f4f6';
-        el.innerHTML = `<img src="/clearwater-plumbing.png" alt="Clearwater Plumbing" style="width:190px;height:auto"/>`;
+        el.innerHTML = `<img src="/circuit-and-co-electrical.png" alt="Circuit & Co. Electrical" style="width:190px;height:auto"/>`;
         break;
       }
       case 'badge': {
@@ -195,7 +189,7 @@ export function EstimateDemo() {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, []);
 
-  // â”€â”€ Stream runner â€” triggered when estimate screen mounts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Stream runner – triggered when estimate screen mounts ──────────────────
 
   useEffect(() => {
     if (screen !== 'estimate') return;
@@ -227,7 +221,7 @@ export function EstimateDemo() {
     return () => { cancelRef.current = true; };
   }, [screen, showItem, scrollBottom]);
 
-  // â”€â”€ Auto-type â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Auto-type ──────────────────────────────────────────────────────────────
 
   useEffect(() => {
     cancelRef.current = false;
@@ -245,7 +239,7 @@ export function EstimateDemo() {
     return () => { cancelRef.current = true; };
   }, []);
 
-  // â”€â”€ Handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Handlers ───────────────────────────────────────────────────────────────
 
   const handleGenerate = useCallback(() => {
     if (autoTimerRef.current) {
@@ -263,7 +257,7 @@ export function EstimateDemo() {
     }, 280);
   }, []);
 
-  // â”€â”€ Auto-trigger after typing finishes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Auto-trigger after typing finishes ─────────────────────────────────────
 
   useEffect(() => {
     if (!btnReady) return;
@@ -280,7 +274,7 @@ export function EstimateDemo() {
     setTimeout(() => window.open('https://trytradepulse.com/signup', '_blank'), 250);
   }, []);
 
-  // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <>
@@ -332,7 +326,7 @@ export function EstimateDemo() {
           {/* Screens */}
           <div style={{ position:'relative', flex:1, minHeight:0, overflow:'hidden' }}>
 
-            {/* â”€â”€ Form â”€â”€ */}
+            {/* ── Form ── */}
             {screen === 'form' && (
               <div style={{ position:'absolute', inset:0, overflowY:'auto', padding:'4px 14px 14px', background:'#09090b' }}>
                 {/* Job description box */}
@@ -355,9 +349,9 @@ export function EstimateDemo() {
 
                 {/* Fields */}
                 {[
-                  ['Customer name', 'Alex Johnson'],
-                  ['Phone', '306-555-0134'],
-                  ['Job address', '58 Lakeview Terrace'],
+                  ['Customer name', 'Mark Thiessen'],
+                  ['Phone', '902-555-0219'],
+                  ['Job address', '141 Birchwood Lane'],
                 ].map(([label, value]) => (
                   <div key={label}>
                     <div style={{ color:'#a1a1aa', fontSize:11, marginBottom:4 }}>{label}</div>
@@ -390,7 +384,7 @@ export function EstimateDemo() {
               </div>
             )}
 
-            {/* â”€â”€ Loading â”€â”€ */}
+            {/* ── Loading ── */}
             {screen === 'loading' && (
               <div style={{ position:'absolute', inset:0, background:'#09090b', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:12 }}>
                 <div className="tp-spin tp-spin-lg" />
@@ -398,7 +392,7 @@ export function EstimateDemo() {
               </div>
             )}
 
-            {/* â”€â”€ Estimate â”€â”€ */}
+            {/* ── Estimate ── */}
             {screen === 'estimate' && (
               <div ref={scrollRef} style={{ position:'absolute', inset:0, overflowY:'auto', background:'#09090b' }}>
                 <div style={{ padding:'6px 12px 16px' }}>
@@ -468,7 +462,7 @@ export function EstimateDemo() {
   );
 }
 
-// â”€â”€â”€ NavItem â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── NavItem ──────────────────────────────────────────────────────────────────
 
 function NavItem({ icon, label, active = false }: { icon: React.ReactNode; label: string; active?: boolean }) {
   return (

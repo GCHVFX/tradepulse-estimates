@@ -12,6 +12,7 @@ const PUBLIC_PATHS = [
   "/api/billing/webhook",
   "/electricians",
   "/plumbers",
+  "/trades",
   "/plumbing-cost",
   "/electrical-cost",
 ];

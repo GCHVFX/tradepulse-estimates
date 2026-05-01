@@ -1,17 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-import { EstimateDemoElectrical } from "@/app/components/EstimateDemoElectrical";
+import { EstimateDemoTrades } from "@/app/components/EstimateDemoTrades";
 import { JsonLd } from "@/app/components/json-ld";
 
 export const metadata: Metadata = {
-  title: "Estimating Software for Electricians | TradePulse",
-  description: "Send professional electrical estimates in seconds. Built for solo electricians and small electrical contractors in Canada.",
-  alternates: { canonical: "https://www.trytradepulse.com/electricians" },
+  title: "Estimating Software for Trades | TradePulse",
+  description: "Send professional estimates in seconds. Built for plumbers, electricians, and contractors in Canada.",
+  alternates: { canonical: "https://www.trytradepulse.com/trades" },
   openGraph: {
-    title: "Estimating Software for Electricians | TradePulse",
-    description: "Send professional electrical estimates in seconds. Built for solo electricians and small electrical contractors in Canada.",
-    url: "https://www.trytradepulse.com/electricians",
+    title: "Estimating Software for Trades | TradePulse",
+    description: "Send professional estimates in seconds. Built for plumbers, electricians, and contractors in Canada.",
+    url: "https://www.trytradepulse.com/trades",
     siteName: "TradePulse",
     images: [{ url: "https://www.trytradepulse.com/opengraph-image.png", width: 1200, height: 630, alt: "TradePulse Estimates" }],
     locale: "en_CA",
@@ -19,13 +19,13 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Estimating Software for Electricians | TradePulse",
-    description: "Send professional electrical estimates in seconds. Built for solo electricians and small electrical contractors in Canada.",
+    title: "Estimating Software for Trades | TradePulse",
+    description: "Send professional estimates in seconds. Built for plumbers, electricians, and contractors in Canada.",
     images: ["https://www.trytradepulse.com/opengraph-image.png"],
   },
 };
 
-export default function ElectriciansPage() {
+export default function TradesPage() {
   return (
     <div className="min-h-dvh bg-white flex flex-col font-[family-name:var(--font-dm-sans)]">
       <JsonLd data={{
@@ -67,10 +67,13 @@ export default function ElectriciansPage() {
         {/* Headline */}
         <div className="w-full max-w-sm text-center mb-8">
           <h1 className="text-3xl sm:text-4xl font-bold leading-tight tracking-tight" style={{ color: "#0D1B2E" }}>
-            Most electricians spend 45 minutes writing up a quote by hand. TradePulse does it in seconds.
+            Send a professional estimate in 30 seconds
           </h1>
-          <p className="mt-3 text-base text-slate-500 leading-relaxed">
-            Quotes done before you&apos;re back in the truck.
+          <p className="mt-2 text-sm font-semibold text-slate-500">
+            Built for plumbers, electricians, and contractors.
+          </p>
+          <p className="mt-2 text-base text-slate-500 leading-relaxed">
+            Type the job. Get a quote ready to send. Works from your phone.
           </p>
         </div>
 
@@ -80,7 +83,7 @@ export default function ElectriciansPage() {
             See it in action
           </h2>
           <div className="mt-6">
-            <EstimateDemoElectrical />
+            <EstimateDemoTrades />
           </div>
         </div>
 
@@ -91,39 +94,40 @@ export default function ElectriciansPage() {
             className="flex items-center justify-center w-full rounded-2xl py-4 text-base font-bold transition-opacity hover:opacity-90"
             style={{ backgroundColor: "#f59e0b", color: "#0D1B2E" }}
           >
-            Try it free
+            Try Free for 14 Days
           </Link>
-          <p className="text-xs text-slate-400">14-day free trial. No card required.</p>
+          <p className="text-xs text-slate-400">No card required.</p>
         </div>
 
         {/* How it works */}
         <div className="mt-14 w-full max-w-sm">
           <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-6 text-center">How it works</p>
-          <ol className="flex flex-col gap-5">
+          <ul className="flex flex-col gap-4">
             {[
-              ["1", "Describe the job", "A sentence or two from the truck is enough."],
-              ["2", "Get a clean estimate", "Labour, materials, taxes, payment terms. All filled in."],
-              ["3", "Send it to the customer", "Text, email, or copy a link. Done."],
-            ].map(([num, title, desc]) => (
-              <li key={num} className="flex gap-4 items-start">
+              "Describe the job in plain English. Get a quote ready to send in 30 seconds.",
+              "Send by text, email, or share a link. No printing, no templates.",
+              "Win more jobs with quotes that look professional.",
+              "Works on your phone from the truck.",
+            ].map((item) => (
+              <li key={item} className="flex gap-3 items-start">
                 <span
-                  className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
-                  style={{ backgroundColor: "#fef3c7", color: "#b45309" }}
+                  className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center mt-0.5"
+                  style={{ backgroundColor: "#fef3c7" }}
+                  aria-hidden="true"
                 >
-                  {num}
+                  <svg viewBox="0 0 12 12" fill="none" className="w-3 h-3" aria-hidden="true">
+                    <path d="M2 6l3 3 5-5" stroke="#b45309" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
                 </span>
-                <div>
-                  <p className="text-sm font-semibold" style={{ color: "#0D1B2E" }}>{title}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">{desc}</p>
-                </div>
+                <p className="text-sm leading-relaxed" style={{ color: "#0D1B2E" }}>{item}</p>
               </li>
             ))}
-          </ol>
+          </ul>
         </div>
 
         {/* Trust line */}
         <p className="mt-12 text-sm text-slate-400 text-center max-w-xs leading-relaxed">
-          Built for solo electricians and small electrical contractors who quote jobs in the truck, not at a desk.
+          Built for contractors who quote jobs in the truck, not at a desk.
         </p>
 
         {/* Secondary desktop CTA */}
@@ -143,9 +147,9 @@ export default function ElectriciansPage() {
           className="flex items-center justify-center w-full rounded-2xl py-4 text-base font-bold transition-opacity hover:opacity-90"
           style={{ backgroundColor: "#f59e0b", color: "#0D1B2E" }}
         >
-          Try it free
+          Try Free for 14 Days
         </Link>
-        <p className="text-center text-xs text-slate-400 mt-2">14-day free trial. No card required.</p>
+        <p className="text-center text-xs text-slate-400 mt-2">No card required.</p>
       </div>
 
       <footer className="hidden sm:block text-center py-8 text-sm text-slate-400">
