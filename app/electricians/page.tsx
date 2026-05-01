@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
+import { EstimateDemo } from "@/app/components/EstimateDemo";
 import { EstimateDemoElectrical } from "@/app/components/EstimateDemoElectrical";
 import { JsonLd } from "@/app/components/json-ld";
 
