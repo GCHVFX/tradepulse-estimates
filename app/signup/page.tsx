@@ -78,7 +78,7 @@ export default function SignupPage() {
       <main className="flex-1 px-5 flex flex-col gap-6 pt-4">
         <div>
           <h1 className="text-2xl font-bold text-white">Create account</h1>
-          <p className="text-zinc-500 text-sm mt-1">Get started in seconds.</p>
+          <p className="text-zinc-500 text-sm mt-1">14-day free trial. No card required.</p>
         </div>
 
         <div className="flex flex-col gap-4">
@@ -170,6 +170,7 @@ export default function SignupPage() {
       </main>
 
       <div className="fixed bottom-0 left-0 right-0 px-5 pb-10 pt-4 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent">
+        <p className="text-zinc-500 text-xs text-center mb-3">14-day free trial. No card required.</p>
         <button
           type="button"
           onClick={handleSignUp}
