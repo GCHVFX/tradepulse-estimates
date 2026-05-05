@@ -35,6 +35,7 @@ const jobPlaceholders = [
 
 interface EstimateViewProps {
   generating: boolean;
+  estimateStarted: boolean;
   estimate: string;
   error: string;
   saved: boolean;
@@ -79,6 +80,7 @@ interface FormViewProps {
 
 function EstimateView({
   generating,
+  estimateStarted,
   estimate,
   error,
   saved,
@@ -103,13 +105,6 @@ function EstimateView({
       <header className="px-5 pt-10 pb-4 shrink-0" />
 
       <main className="flex-1 px-5 pb-52 overflow-auto">
-        {generating && !estimate && (
-          <div className="flex items-center gap-3 text-zinc-500 mt-4">
-            <Spinner className="w-5 h-5 text-amber-500" />
-            <span className="text-sm">Writing your estimate...</span>
-          </div>
-        )}
-
         {error && (
           <div className="mt-4 bg-red-950 border border-red-800 rounded-xl px-4 py-3.5 text-red-300 text-sm">
             {error}
@@ -194,7 +189,7 @@ function EstimateView({
 
       <div className="fixed bottom-0 left-0 right-0">
         <div className="px-5 pb-3 pt-4 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent pointer-events-none flex flex-col gap-3">
-          {generating && !estimate && (
+          {generating && !estimateStarted && (
             <div className="flex items-center justify-center gap-2 text-zinc-400 text-sm pointer-events-none">
               <Spinner className="w-4 h-4 text-amber-500" />
               <span>Writing estimate...</span>
@@ -422,6 +417,7 @@ function NewPageInner() {
   const [view, setView] = useState<"form" | "estimate">("form");
   const [generating, setGenerating] = useState(false);
   const [estimate, setEstimate] = useState("");
+  const [estimateStarted, setEstimateStarted] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [savedEstimateId, setSavedEstimateId] = useState<string | null>(null);
@@ -538,6 +534,7 @@ function NewPageInner() {
 
         const h1Line = buffer.split("\n").find((l) => l.startsWith("# "));
         if (h1Line) setJobTitle(h1Line.replace(/^# /, ""));
+        setEstimateStarted(true);
         setEstimate(buffer);
       }
 
@@ -552,6 +549,7 @@ function NewPageInner() {
       );
     } finally {
       setGenerating(false);
+      setEstimateStarted(false);
     }
   }
 
@@ -578,6 +576,7 @@ function NewPageInner() {
     return (
       <EstimateView
         generating={generating}
+        estimateStarted={estimateStarted}
         estimate={estimate}
         error={error}
         saved={saved}
