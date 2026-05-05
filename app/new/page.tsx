@@ -194,7 +194,7 @@ function EstimateView({
 
       <div className="fixed bottom-0 left-0 right-0">
         <div className="px-5 pb-3 pt-4 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent pointer-events-none flex flex-col gap-3">
-          {generating && (
+          {generating && !estimate && (
             <div className="flex items-center justify-center gap-2 text-zinc-400 text-sm pointer-events-none">
               <Spinner className="w-4 h-4 text-amber-500" />
               <span>Writing estimate...</span>
