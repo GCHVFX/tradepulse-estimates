@@ -13,7 +13,7 @@ export default async function ShareEstimatePage({
   const { data: estimate } = await supabaseAdmin
     .from("tpe_estimates")
     .select(
-      "title, summary, business_id, customer_name, customer_phone, customer_email, customer_address, prepared_by, created_at"
+      "title, summary, customer_name, customer_phone, customer_email, customer_address, prepared_by, created_at"
     )
     .eq("id", id)
     .maybeSingle();
@@ -34,48 +34,17 @@ export default async function ShareEstimatePage({
     );
   }
 
-  const { data: business } = await supabaseAdmin
-    .from("tpe_businesses")
-    .select("logo_url, name, email, phone")
-    .eq("user_id", estimate.business_id ?? "")
-    .maybeSingle();
-
-  const logoUrl = business?.logo_url ?? null;
-  const businessName = business?.name ?? "";
-  const businessEmail = business?.email ?? "";
-  const businessPhone = business?.phone ?? "";
-
   return (
     <div className="min-h-dvh bg-slate-50 flex flex-col">
       <main className="flex-1 px-5 pt-6 pb-20 max-w-2xl mx-auto w-full">
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
 
-          {/* Letterhead header */}
-          <div className="flex items-center gap-4 pb-5 mb-5 border-b border-slate-200">
-            {logoUrl && (
-              <Image
-                src={logoUrl}
-                alt={businessName || "Company logo"}
-                width={64}
-                height={64}
-                className="rounded object-contain"
-                unoptimized
-              />
-            )}
-            <div className="min-w-0">
-              {businessName && (
-                <p className="text-xl font-bold text-zinc-900 leading-tight">{businessName}</p>
-              )}
-              {estimate.prepared_by && (
-                <p className="text-sm text-zinc-500 mt-0.5">{estimate.prepared_by}</p>
-              )}
-              {(businessEmail || businessPhone) && (
-                <p className="text-xs text-zinc-400 mt-1">
-                  {[businessPhone, businessEmail].filter(Boolean).join("  ·  ")}
-                </p>
-              )}
+          {/* Letterhead header - only show prepared_by since we don't have business_id */}
+          {estimate.prepared_by && (
+            <div className="pb-5 mb-5 border-b border-slate-200">
+              <p className="text-sm text-zinc-600">{estimate.prepared_by}</p>
             </div>
-          </div>
+          )}
 
           {/* Badge + title */}
           <span className="inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-600">
@@ -86,7 +55,7 @@ export default async function ShareEstimatePage({
           </h1>
 
           {/* Customer details */}
-          <div className="text-slate-600 text-xs leading-relaxed mb-5 border-t border-slate-100 pt-4">
+          <div className="text-slate-700 text-xs leading-relaxed mb-5 border-t border-slate-100 pt-4">
             {estimate.customer_name && (
               <span className="block">Prepared for: {estimate.customer_name}</span>
             )}
@@ -121,8 +90,8 @@ export default async function ShareEstimatePage({
           <DownloadPdfButton
             title={estimate.title ?? ""}
             summary={estimate.summary ?? ""}
-            businessName={businessName}
-            logoUrl={logoUrl}
+            businessName=""
+            logoUrl={null}
           />
         </div>
       </main>

@@ -2,21 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { stripe } from "@/lib/stripe";
-
-const signupRateLimit = new Map<string, { count: number; resetAt: number }>();
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-  const now = Date.now();
-  const rl = signupRateLimit.get(ip);
-  if (rl && now < rl.resetAt) {
-    if (rl.count >= 5) {
-      return NextResponse.json({ error: "Too many attempts. Please try again later." }, { status: 429 });
-    }
-    rl.count++;
-  } else {
-    signupRateLimit.set(ip, { count: 1, resetAt: now + 60_000 });
-  }
 
   let body: { email?: unknown; password?: unknown; signup_source?: unknown };
   try {

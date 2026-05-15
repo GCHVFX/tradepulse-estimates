@@ -15,6 +15,8 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
@@ -78,9 +80,19 @@ export default function ResetPasswordPage() {
 
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-zinc-400">New password</label>
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-zinc-400">New password</label>
+              <button
+                type="button"
+                tabIndex={0}
+                onClick={() => setShowPassword(!showPassword)}
+                className="text-xs text-amber-500 hover:text-amber-400"
+              >
+                {showPassword ? "Hide" : "Show"}
+              </button>
+            </div>
             <input
-              type="password"
+              type={showPassword ? "text" : "password"}
               className={inputClass}
               placeholder="••••••••"
               value={password}
@@ -91,9 +103,19 @@ export default function ResetPasswordPage() {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-zinc-400">Confirm password</label>
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-zinc-400">Confirm password</label>
+              <button
+                type="button"
+                tabIndex={0}
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="text-xs text-amber-500 hover:text-amber-400"
+              >
+                {showConfirmPassword ? "Hide" : "Show"}
+              </button>
+            </div>
             <input
-              type="password"
+              type={showConfirmPassword ? "text" : "password"}
               className={inputClass}
               placeholder="••••••••"
               value={confirmPassword}

@@ -1,3 +1,6 @@
+import { checkUserSubscriptionAccess } from "@/lib/auth";
+import { logEstimateChange } from "@/lib/audit-log";
+import { validateContentType } from "@/lib/api-utils";
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
@@ -14,6 +17,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     );
   }
+
+  const contentTypeError = validateContentType(request);
+  if (contentTypeError) return applyTo(contentTypeError);
 
   let body: unknown;
   try {
@@ -50,16 +56,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const { data: sub } = await supabaseAdmin
-    .from("tpe_businesses")
-    .select("subscription_status, trial_ends_at")
-    .eq("user_id", user.id)
+  const { hasAccess } = await checkUserSubscriptionAccess(user.id, supabaseAdmin);
+  if (!hasAccess) return applyTo(NextResponse.json({ error: "Subscription required" }, { status: 403 }));
+
+  // Verify ownership of estimate
+  const { data: estimate } = await supabaseAdmin
+    .from("tpe_estimates")
+    .select("id")
+    .eq("id", estimateId)
+    .eq("business_id", user.id)
     .maybeSingle();
 
-  const isActive = sub?.subscription_status === "active";
-  const isTrialing = sub?.subscription_status === "trial" && sub?.trial_ends_at && new Date(sub.trial_ends_at) > new Date();
-  const hasAccess = isActive || isTrialing || sub?.subscription_status === "complimentary";
-  if (!hasAccess) return applyTo(NextResponse.json({ error: "Subscription required" }, { status: 403 }));
+  if (!estimate) {
+    return applyTo(NextResponse.json({ error: "Estimate not found" }, { status: 404 }));
+  }
 
   // Get business info
   const { data: business } = await supabaseAdmin
@@ -113,8 +123,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Update estimate status
-    await supabaseAdmin
+    // Update estimate status with double ownership check
+    const { error: updateError } = await supabaseAdmin
       .from("tpe_estimates")
       .update({
         status: "sent",
@@ -123,6 +133,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       })
       .eq("id", estimateId)
       .eq("business_id", user.id);
+
+    if (updateError) {
+      console.error("[send-email] update failed:", updateError.message);
+      return applyTo(NextResponse.json({ error: "Failed to update estimate" }, { status: 500 }));
+    }
+
+    // Log email send
+    await logEstimateChange(
+      supabaseAdmin,
+      estimateId,
+      user.id,
+      "sent",
+      undefined,
+      { sent_via: "email", sent_at: new Date().toISOString() }
+    );
 
     return applyTo(NextResponse.json({ success: true }));
   } catch (err) {

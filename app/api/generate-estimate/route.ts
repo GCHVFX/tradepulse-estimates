@@ -1,12 +1,14 @@
 export const maxDuration = 60;
 
+import { checkUserSubscriptionAccess } from "@/lib/auth";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { logEstimateChange } from "@/lib/audit-log";
+import { validateContentType } from "@/lib/api-utils";
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
 
 const client = new Anthropic();
-
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 
 const SYSTEM_PROMPT = `You are a professional contractor writing a job estimate for a customer. Turn the job description into a complete, professional estimate. Write it the way an experienced contractor would. Clear, specific, and direct. Ready to send with minimal editing.
 
@@ -56,27 +58,16 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return applyTo(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
 
-  const now = Date.now();
-  const rl = rateLimitMap.get(user.id);
-  if (rl && now < rl.resetAt) {
-    if (rl.count >= 10) {
-      return applyTo(new NextResponse("Too many requests. Please wait a moment.", { status: 429 }));
-    }
-    rl.count++;
-  } else {
-    rateLimitMap.set(user.id, { count: 1, resetAt: now + 60_000 });
+  const { allowed } = await checkRateLimit(supabaseAdmin, user.id, "generate-estimate", 10, 60);
+  if (!allowed) {
+    return applyTo(new NextResponse("Too many requests. Please wait a moment.", { status: 429 }));
   }
 
-  const { data: sub } = await supabaseAdmin
-    .from("tpe_businesses")
-    .select("subscription_status, trial_ends_at")
-    .eq("user_id", user.id)
-    .maybeSingle();
+const { hasAccess } = await checkUserSubscriptionAccess(user.id, supabaseAdmin);
+if (!hasAccess) return applyTo(NextResponse.json({ error: "Subscription required" }, { status: 403 }));
 
-  const isActive = sub?.subscription_status === "active";
-  const isTrialing = sub?.subscription_status === "trial" && sub?.trial_ends_at && new Date(sub.trial_ends_at) > new Date();
-  const hasAccess = isActive || isTrialing || sub?.subscription_status === "complimentary";
-  if (!hasAccess) return applyTo(NextResponse.json({ error: "Subscription required" }, { status: 403 }));
+  const contentTypeError = validateContentType(request);
+  if (contentTypeError) return applyTo(contentTypeError);
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
@@ -241,6 +232,17 @@ export async function POST(request: NextRequest) {
           return;
         }
         controller.enqueue(new TextEncoder().encode(`\n__ID__:${data[0].id}`));
+
+        // Log estimate creation
+        await logEstimateChange(
+          supabaseAdmin,
+          data[0].id,
+          user.id,
+          "created",
+          undefined,
+          { title: data[0].title, summary: fullText.substring(0, 500) }
+        );
+
         controller.close();
       } catch (err) {
         console.error("[generate-estimate] stream error:", err);
