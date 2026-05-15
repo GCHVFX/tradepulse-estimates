@@ -29,6 +29,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     // Get or create Stripe customer
     let customerId = business.stripe_customer_id;
+
+    // If customer ID exists, verify it's still valid in Stripe
+    if (customerId) {
+      try {
+        await stripe.customers.retrieve(customerId);
+      } catch (err) {
+        console.warn("[checkout] customer not found in Stripe, recreating:", customerId);
+        customerId = null; // Force recreation
+      }
+    }
+
     if (!customerId) {
       const customerData: {
         email?: string;
