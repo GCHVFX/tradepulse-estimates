@@ -438,12 +438,12 @@ export function ProfileForm({
       {modalOpen && (
         <>
           <div
-            className="fixed inset-0 bg-black/60 z-40"
+            className={`fixed inset-0 z-40 bg-black/60 transition-opacity duration-300 ${modalOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
             onClick={() => setModalOpen(false)}
             aria-hidden="true"
           />
           <div
-            className="fixed bottom-0 left-0 right-0 z-50 max-w-lg mx-auto bg-zinc-900 rounded-t-2xl p-6"
+            className={`fixed bottom-0 left-0 right-0 z-50 bg-zinc-900 rounded-t-2xl p-6 transition-transform duration-300 ease-out ${modalOpen ? 'translate-y-0' : 'translate-y-full'}`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="share-modal-heading"
