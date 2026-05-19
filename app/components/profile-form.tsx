@@ -435,10 +435,9 @@ export function ProfileForm({
         </form>
       </div>
 
-      {modalOpen && (
-        <>
+      <>
           <div
-            className={`fixed inset-0 z-40 bg-black/60 transition-opacity duration-300 ${modalOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+            className={`fixed inset-0 z-40 bg-black/60 transition-opacity duration-300 ease-out ${modalOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
             onClick={() => setModalOpen(false)}
             aria-hidden="true"
           />
@@ -499,8 +498,7 @@ export function ProfileForm({
               Share
             </button>
           </div>
-        </>
-      )}
+      </>
     </>
   );
 }
