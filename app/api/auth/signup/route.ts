@@ -15,7 +15,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const { email, password, signup_source } = body;
-  const signupSource = typeof signup_source === "string" && signup_source.trim() ? signup_source.trim() : undefined;
+  const url = new URL(request.url);
+  const refParam = url.searchParams.get("ref")?.trim() || undefined;
+  const signupSource =
+    (typeof signup_source === "string" && signup_source.trim() ? signup_source.trim() : undefined) ?? refParam;
   if (typeof email !== "string" || !email.trim()) {
     return NextResponse.json({ error: "Email is required" }, { status: 400 });
   }

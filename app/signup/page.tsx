@@ -20,8 +20,10 @@ export default function SignupPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const ref = params.get("ref");
     const utm = params.get("utm_source");
-    if (utm) setSignupSource(utm);
+    if (ref) setSignupSource(ref);
+    else if (utm) setSignupSource(utm);
   }, []);
 
   async function handleSignUp() {
@@ -29,10 +31,13 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/auth/signup", {
+      const apiUrl = signupSource
+        ? `/api/auth/signup?ref=${encodeURIComponent(signupSource)}`
+        : "/api/auth/signup";
+      const res = await fetch(apiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, signup_source: signupSource || undefined }),
+        body: JSON.stringify({ email, password }),
       });
 
       const data = await res.json();
