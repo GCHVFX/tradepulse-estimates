@@ -6,6 +6,7 @@ import { Analytics } from "@vercel/analytics/next";
 import { PostHogProvider } from "@/app/components/posthog-provider";
 import { PostHogPageView } from "@/app/components/posthog-pageview";
 import { Suspense } from "react";
+import { GoogleAnalytics } from "@next/third-parties/google";
 
 const dmSans = DM_Sans({
   subsets: ["latin"],
@@ -42,6 +43,7 @@ export default function RootLayout({
           <Analytics />
         </PostHogProvider>
       </body>
+      <GoogleAnalytics gaId="G-BYZEBWLC56" />
     </html>
   );
 }
