@@ -42,22 +42,22 @@ const DELETE_SEQUENCE = ["demo", "paint"] as const;
 // Reveal steps: 1=job summary, 2-5=scope bullets, 6-11=line item rows, 12-14=pricing rows,
 // 15=payment terms, 16=estimate saved
 const REVEAL_DELAYS: Record<number, number> = {
-  1:  700,  // job summary — pause so viewer reads it
-  2:  420,  // scope bullet 1
-  3:  380,  // scope bullet 2
-  4:  380,  // scope bullet 3
-  5:  750,  // scope bullet 4 — section break before line items
-  6:  380,  // line item row 1 (table appears here)
-  7:  340,  // row 2
-  8:  340,  // row 3
-  9:  340,  // row 4
-  10: 340,  // row 5
-  11: 700,  // row 6 (labour) — section break before pricing
-  12: 350,  // subtotal
-  13: 310,  // tax
-  14: 380,  // total — section break before payment
-  15: 400,  // payment terms
-  16: 300,  // estimate saved
+  1:  550,  // job summary — pause so viewer reads it
+  2:  340,  // scope bullet 1
+  3:  300,  // scope bullet 2
+  4:  300,  // scope bullet 3
+  5:  580,  // scope bullet 4 — section break before line items
+  6:  300,  // line item row 1 (table appears here)
+  7:  270,  // row 2
+  8:  270,  // row 3
+  9:  270,  // row 4
+  10: 270,  // row 5
+  11: 550,  // row 6 (labour) — section break before pricing
+  12: 280,  // subtotal
+  13: 250,  // tax
+  14: 320,  // total — section break before payment
+  15: 320,  // payment terms
+  16: 250,  // estimate saved
 };
 
 const TOTAL_STEPS = 16;
@@ -241,9 +241,9 @@ function DemoInner() {
     setCursorPos({ left: x, top: y });
     if (instant) {
       setCursorVisible(true);
-      await sleep(200);
+      await sleep(150);
     } else {
-      await sleep(680);
+      await sleep(500);
     }
   }, []);
 
@@ -274,21 +274,21 @@ function DemoInner() {
     for (const char of DEMO_PROMPT) {
       if (cancelRef.current) return;
       setTypedPrompt((p) => p + char);
-      await sleep(24 + Math.random() * 14);
+      await sleep(15 + Math.random() * 8);
     }
-    await sleep(550);
+    await sleep(230);
 
     // Tap Generate Estimate
     if (generateBtnRef.current) {
       const pos = getCenter(generateBtnRef.current);
       await moveCursor(pos.left, pos.top, true);
-      await sleep(280);
+      await sleep(130);
       await tapCursor();
     }
     hideCursor();
     setView("estimate");
     setPhase("generating");
-    await sleep(300);
+    await sleep(150);
 
     // Phase 2: reveal each row/bullet one at a time with consistent pacing
     for (let step = 1; step <= TOTAL_STEPS; step++) {
@@ -300,11 +300,11 @@ function DemoInner() {
 
     // Full estimate visible — pause so viewer can read it
     setPhase("ready");
-    await sleep(700);
+    await sleep(550);
 
     // Scroll back up to show line items for editing
     if (lineItemsRef.current) scrollToElement(lineItemsRef.current);
-    await sleep(1200);
+    await sleep(950);
 
     // Phase 3: delete two items with visible cursor travel between them
     setPhase("deleting");
@@ -317,27 +317,27 @@ function DemoInner() {
       // the second button's position
       const pos = getCenter(btn);
       await moveCursor(pos.left, pos.top, di === 0);
-      await sleep(320);
+      await sleep(200);
       await tapCursor();
       setLineItems((prev) => prev.filter((it) => it.id !== itemId));
-      await sleep(600);
+      await sleep(460);
     }
 
     // Scroll to updated pricing summary
     if (pricingRef.current) scrollToElement(pricingRef.current);
-    await sleep(800);
+    await sleep(620);
 
     // Tap Send Estimate
     if (sendBtnRef.current) {
       const pos = getCenter(sendBtnRef.current);
       await moveCursor(pos.left, pos.top);
-      await sleep(280);
+      await sleep(180);
       await tapCursor();
     }
     hideCursor();
     setShowSheet(true);
     setPhase("sheet");
-    await sleep(3000);
+    await sleep(3700);
 
     setShowSheet(false);
     setPhase("done");
@@ -403,7 +403,7 @@ function DemoInner() {
             background: "rgba(0,0,0,0.45)",
             boxShadow:  "0 1px 6px rgba(0,0,0,0.35)",
             transform:  `translate(-50%, -50%) scale(${cursorClick ? 0.68 : 1})`,
-            transition: "left 550ms cubic-bezier(0.4,0,0.2,1), top 550ms cubic-bezier(0.4,0,0.2,1), transform 100ms ease-out",
+            transition: "left 420ms cubic-bezier(0.25,0,0.35,1), top 420ms cubic-bezier(0.25,0,0.35,1), transform 100ms ease-out",
           }}
         />
       )}
@@ -411,7 +411,7 @@ function DemoInner() {
       {/* ── Form view ──────────────────────────────────────────────────────── */}
       {view === "form" && (
         <div className="h-full flex flex-col">
-          <header className="px-5 pt-10 pb-6 shrink-0">
+          <header className="px-5 pt-6 pb-4 shrink-0">
             <Logo />
           </header>
 
@@ -464,7 +464,7 @@ function DemoInner() {
       {/* ── Estimate view ──────────────────────────────────────────────────── */}
       {view === "estimate" && (
         <div className="h-full flex flex-col">
-          <header className="px-5 pt-10 pb-4 shrink-0" />
+          <header className="px-5 pt-5 pb-2 shrink-0" />
 
           <main ref={scrollRef} className="flex-1 min-h-0 px-5 pb-52 overflow-y-auto">
             <div className="mt-2 pb-2">
