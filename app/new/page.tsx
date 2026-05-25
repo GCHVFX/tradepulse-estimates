@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { EditableEstimateBody } from "@/app/components/editable-estimate-body";
@@ -100,11 +100,28 @@ function EstimateView({
   onBack,
   onNewEstimate,
 }: EstimateViewProps) {
+  const estimateScrollRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!generating) return;
+
+    const frame = requestAnimationFrame(() => {
+      const el = estimateScrollRef.current;
+      if (el && el.scrollHeight > el.clientHeight) {
+        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+      } else {
+        window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" });
+      }
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [estimate, generating]);
+
   return (
-    <div className="min-h-dvh bg-zinc-950 text-white flex flex-col">
+    <div className="h-dvh bg-zinc-950 text-white flex flex-col">
       <header className="px-5 pt-10 pb-4 shrink-0" />
 
-      <main className="flex-1 px-5 pb-52 overflow-auto">
+      <main ref={estimateScrollRef} className="flex-1 min-h-0 px-5 pb-52 overflow-y-auto">
         {error && (
           <div className="mt-4 bg-red-950 border border-red-800 rounded-xl px-4 py-3.5 text-red-300 text-sm">
             {error}
@@ -188,9 +205,9 @@ function EstimateView({
       </main>
 
       <div className="fixed bottom-0 left-0 right-0">
-        <div className="px-5 pb-3 pt-4 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent pointer-events-none flex flex-col gap-3">
+        <div className="px-5 pb-3 pt-4 bg-zinc-950 border-t border-zinc-800 flex flex-col gap-3">
           {generating && !estimateStarted && (
-            <div className="flex items-center justify-center gap-2 text-zinc-400 text-sm pointer-events-none">
+            <div className="flex items-center justify-center gap-2 text-zinc-400 text-sm">
               <Spinner className="w-4 h-4 text-amber-500" />
               <span>Writing estimate...</span>
             </div>
@@ -199,7 +216,7 @@ function EstimateView({
             <button
               type="button"
               onClick={onBack}
-              className="w-full pointer-events-auto bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+              className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px]"
             >
               Edit job
             </button>
@@ -208,7 +225,7 @@ function EstimateView({
             type="button"
             onClick={() => setShowSendSheet(true)}
             disabled={generating || !saved}
-            className="w-full pointer-events-auto bg-amber-500 hover:bg-amber-400 active:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+            className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
           >
             Send Estimate
           </button>
@@ -377,24 +394,24 @@ function FormView({
       </main>
 
       <div className="fixed bottom-0 left-0 right-0">
-        <div className="px-5 pt-8 pb-3 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent pointer-events-none flex flex-col gap-3">
+        <div className="px-5 pt-4 pb-3 bg-zinc-950 border-t border-zinc-800 flex flex-col gap-3">
           {saved && (
             <button
               type="button"
               onClick={onViewEstimate}
-              className="w-full pointer-events-auto bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+              className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px]"
             >
               Back to Estimate
             </button>
           )}
           {error && (
-            <p className="text-red-400 text-sm text-center pointer-events-auto">{error}</p>
+            <p className="text-red-400 text-sm text-center">{error}</p>
           )}
           <button
             type="button"
             disabled={!jobDescription.trim()}
             onClick={onGenerate}
-            className="w-full pointer-events-auto bg-amber-500 hover:bg-amber-400 active:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+            className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
           >
             {saved ? "Regenerate Estimate" : "Generate Estimate"}
           </button>

@@ -15,6 +15,7 @@ const PUBLIC_PATHS = [
   "/trades",
   "/plumbing-cost",
   "/electrical-cost",
+  "/demo",
 ];
 
 function isPublic(pathname: string): boolean {
