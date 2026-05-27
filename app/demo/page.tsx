@@ -79,8 +79,8 @@ const SCENARIOS: Record<string, Scenario> = {
       { id: "utility",    label: "Utility disconnect and reconnect", amount: 400 },
       { id: "inspection", label: "Inspection and final testing",   amount: 300  },
     ],
-    // permit, panel, labour, grounding, utility are core — only inspection is optional/removable
-    deleteSequence: ["inspection"],
+    // permit (row 0) and inspection (row 5) — maximises cursor travel; panel, labour, grounding, utility never deleted
+    deleteSequence: ["permit", "inspection"],
     paymentTerms:
       "Deposit due before work begins. Balance due on completion. E-transfer accepted.",
   },
