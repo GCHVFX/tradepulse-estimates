@@ -79,7 +79,8 @@ const SCENARIOS: Record<string, Scenario> = {
       { id: "utility",    label: "Utility disconnect and reconnect", amount: 400 },
       { id: "inspection", label: "Inspection and final testing",   amount: 300  },
     ],
-    deleteSequence: ["permit", "inspection"],
+    // permit, panel, labour, grounding, utility are core — only inspection is optional/removable
+    deleteSequence: ["inspection"],
     paymentTerms:
       "Deposit due before work begins. Balance due on completion. E-transfer accepted.",
   },
@@ -324,7 +325,7 @@ function DemoInner() {
     for (const char of scenario.prompt) {
       if (cancelRef.current) return;
       setTypedPrompt((p) => p + char);
-      await sleep(15 + Math.random() * 8);
+      await sleep(17 + Math.random() * 9);
     }
     await sleep(230);
 
