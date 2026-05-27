@@ -4,40 +4,88 @@ import { useCallback, useEffect, useRef, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Logo } from "@/app/components/logo";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const DEMO_PROMPT =
-  "Main floor bathroom renovation with new vanity, tile flooring, toilet, paint, and fixture replacement.";
-
-const DEMO_TITLE   = "Main Floor Bathroom Renovation";
-const DEMO_NAME    = "Sarah Mitchell";
-const DEMO_PHONE   = "604-555-0182";
-const DEMO_ADDRESS = "1846 Maple Street";
-const DEMO_DATE    = "May 24, 2026";
-
-const JOB_SUMMARY =
-  "A complete main floor bathroom renovation including new vanity, porcelain tile, toilet replacement, fresh paint, and updated fixtures.";
-
-const SCOPE_BULLETS = [
-  "Demo and dispose of existing vanity, toilet, and all fixtures",
-  'Install new 24" vanity with undermount sink and chrome faucet',
-  "Remove flooring and install 12×24 porcelain tile",
-  "Paint walls and ceiling, replace towel bar, mirror, and vanity light",
-] as const;
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type LineItem = { id: string; label: string; amount: number };
 
-// demo at row 0, paint at row 4 — maximises visible cursor travel; labour at row 5, never deleted
-const LINE_ITEMS_INITIAL: LineItem[] = [
-  { id: "demo",    label: "Demo and disposal",          amount: 320  },
-  { id: "vanity",  label: "Vanity and faucet",          amount: 650  },
-  { id: "tile",    label: "Tile and flooring materials", amount: 760  },
-  { id: "toilet",  label: "Toilet supply and install",  amount: 480  },
-  { id: "paint",   label: "Paint and supplies",         amount: 110  },
-  { id: "labour",  label: "Labour (12 hours @ $100/hr)", amount: 1200 },
-];
+type Scenario = {
+  prompt: string;
+  title: string;
+  customerName: string;
+  phone: string;
+  address: string;
+  date: string;
+  jobSummary: string;
+  scopeBullets: string[];
+  lineItemsInitial: LineItem[];
+  deleteSequence: string[];
+  paymentTerms: string;
+};
 
-const DELETE_SEQUENCE = ["demo", "paint"] as const;
+// ─── Scenarios ────────────────────────────────────────────────────────────────
+
+const SCENARIOS: Record<string, Scenario> = {
+  plumbing: {
+    prompt:
+      "Main floor bathroom renovation with new vanity, tile flooring, toilet, paint, and fixture replacement.",
+    title:       "Main Floor Bathroom Renovation",
+    customerName: "Sarah Mitchell",
+    phone:       "604-555-0182",
+    address:     "1846 Maple Street",
+    date:        "May 24, 2026",
+    jobSummary:
+      "A complete main floor bathroom renovation including new vanity, porcelain tile, toilet replacement, fresh paint, and updated fixtures.",
+    scopeBullets: [
+      "Demo and dispose of existing vanity, toilet, and all fixtures",
+      'Install new 24" vanity with undermount sink and chrome faucet',
+      "Remove flooring and install 12×24 porcelain tile",
+      "Paint walls and ceiling, replace towel bar, mirror, and vanity light",
+    ],
+    // demo at row 0, paint at row 4 — maximises visible cursor travel; labour at row 5, never deleted
+    lineItemsInitial: [
+      { id: "demo",   label: "Demo and disposal",           amount: 320  },
+      { id: "vanity", label: "Vanity and faucet",           amount: 650  },
+      { id: "tile",   label: "Tile and flooring materials", amount: 760  },
+      { id: "toilet", label: "Toilet supply and install",   amount: 480  },
+      { id: "paint",  label: "Paint and supplies",          amount: 110  },
+      { id: "labour", label: "Labour (12 hours @ $100/hr)", amount: 1200 },
+    ],
+    deleteSequence: ["demo", "paint"],
+    paymentTerms:
+      "Deposit due before work begins. Balance due on completion. E-transfer accepted.",
+  },
+
+  "electrical-panel": {
+    prompt:
+      "Upgrade older 100 amp electrical panel to 200 amp service. Homeowner wants room for a future heat pump and EV charger. Include permit, panel replacement, grounding, inspection, and cleanup.",
+    title:       "200 Amp Panel Upgrade",
+    customerName: "Mark Jensen",
+    phone:       "604-555-0148",
+    address:     "7218 Cedar Avenue",
+    date:        "May 26, 2026",
+    jobSummary:
+      "Upgrade the existing 100 amp electrical panel to a 200 amp service panel. Work includes permit coordination, panel replacement, grounding and bonding updates, inspection, testing, and cleanup.",
+    scopeBullets: [
+      "Coordinate permit and utility disconnect for panel replacement",
+      "Remove existing 100 amp panel and install new 200 amp panel",
+      "Update grounding and bonding as required for inspection",
+      "Label circuits, test panel, and complete final cleanup",
+    ],
+    lineItemsInitial: [
+      { id: "permit",     label: "Permit and coordination",        amount: 350  },
+      { id: "panel",      label: "200 amp panel and breakers",     amount: 1450 },
+      { id: "labour",     label: "Labour for panel upgrade",       amount: 2400 },
+      { id: "grounding",  label: "Grounding and bonding updates",  amount: 650  },
+      { id: "utility",    label: "Utility disconnect and reconnect", amount: 400 },
+      { id: "inspection", label: "Inspection and final testing",   amount: 300  },
+    ],
+    deleteSequence: ["permit", "inspection"],
+    paymentTerms:
+      "Deposit due before work begins. Balance due on completion. E-transfer accepted.",
+  },
+};
+
+// ─── Reveal timing ────────────────────────────────────────────────────────────
 
 // Reveal steps: 1=job summary, 2-5=scope bullets, 6-11=line item rows, 12-14=pricing rows,
 // 15=payment terms, 16=estimate saved
@@ -195,15 +243,17 @@ function PricingTable({ pricing, visibleRows }: PricingTableProps) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 function DemoInner() {
-  const params   = useSearchParams();
-  const autoplay = params.get("autoplay") === "1";
-  const loop     = params.get("loop") === "1";
+  const params        = useSearchParams();
+  const autoplay      = params.get("autoplay") === "1";
+  const loop          = params.get("loop") === "1";
+  const scenarioParam = params.get("scenario") ?? "plumbing";
+  const scenario: Scenario = SCENARIOS[scenarioParam] ?? SCENARIOS.plumbing;
 
   const [phase, setPhase]               = useState<Phase>("idle");
   const [view, setView]                 = useState<"form" | "estimate">("form");
   const [typedPrompt, setTypedPrompt]   = useState("");
   const [revealStep, setRevealStep]     = useState(0);
-  const [lineItems, setLineItems]       = useState<LineItem[]>(LINE_ITEMS_INITIAL);
+  const [lineItems, setLineItems]       = useState<LineItem[]>(scenario.lineItemsInitial);
   const [showSheet, setShowSheet]       = useState(false);
   const [cursorPos, setCursorPos]       = useState<{ left: number; top: number } | null>(null);
   const [cursorVisible, setCursorVisible] = useState(false);
@@ -265,13 +315,13 @@ function DemoInner() {
     setView("form");
     setTypedPrompt("");
     setRevealStep(0);
-    setLineItems(LINE_ITEMS_INITIAL);
+    setLineItems(scenario.lineItemsInitial);
     setShowSheet(false);
     hideCursor();
     setPhase("typing");
 
     // Phase 1: type prompt
-    for (const char of DEMO_PROMPT) {
+    for (const char of scenario.prompt) {
       if (cancelRef.current) return;
       setTypedPrompt((p) => p + char);
       await sleep(15 + Math.random() * 8);
@@ -308,9 +358,9 @@ function DemoInner() {
 
     // Phase 3: delete two items with visible cursor travel between them
     setPhase("deleting");
-    for (let di = 0; di < DELETE_SEQUENCE.length; di++) {
+    for (let di = 0; di < scenario.deleteSequence.length; di++) {
       if (cancelRef.current) return;
-      const itemId = DELETE_SEQUENCE[di];
+      const itemId = scenario.deleteSequence[di];
       const btn    = deleteRefs.current.get(itemId);
       if (!btn) continue;
       // 600ms sleep after first delete lets React re-render before we read
@@ -349,7 +399,7 @@ function DemoInner() {
     } else {
       setPhase("idle");
     }
-  }, [loop, scrollBottom, scrollToElement, moveCursor, tapCursor, hideCursor]);
+  }, [scenario, loop, scrollBottom, scrollToElement, moveCursor, tapCursor, hideCursor]);
 
   runRef.current = runSequence;
 
@@ -373,7 +423,7 @@ function DemoInner() {
     setView("form");
     setTypedPrompt("");
     setRevealStep(0);
-    setLineItems(LINE_ITEMS_INITIAL);
+    setLineItems(scenario.lineItemsInitial);
     setShowSheet(false);
     hideCursor();
     setPhase("idle");
@@ -383,7 +433,7 @@ function DemoInner() {
   const isGenerating = phase === "generating";
 
   // Compute what's visible from the single revealStep counter
-  const visibleBullets     = Math.max(0, Math.min(revealStep - 1, SCOPE_BULLETS.length));
+  const visibleBullets     = Math.max(0, Math.min(revealStep - 1, scenario.scopeBullets.length));
   const displayedItems     = lineItems.slice(0, Math.max(0, revealStep - 5));
   const visiblePricingRows = Math.max(0, Math.min(revealStep - 11, 3));
   const pricing            = calcPricing(lineItems);
@@ -431,9 +481,9 @@ function DemoInner() {
 
             {(
               [
-                { label: "Customer name", value: DEMO_NAME    },
-                { label: "Phone",         value: DEMO_PHONE   },
-                { label: "Job address",   value: DEMO_ADDRESS },
+                { label: "Customer name", value: scenario.customerName },
+                { label: "Phone",         value: scenario.phone        },
+                { label: "Job address",   value: scenario.address      },
               ] as { label: string; value: string }[]
             ).map(({ label, value }) => (
               <div key={label} className="flex flex-col gap-1">
@@ -475,20 +525,20 @@ function DemoInner() {
                   Estimate
                 </span>
                 <h1 className="mt-1 text-3xl font-bold tracking-tight leading-tight text-zinc-900 break-words">
-                  {DEMO_TITLE}
+                  {scenario.title}
                 </h1>
                 <div className="mt-3 mb-4 pb-4 border-b border-zinc-100 space-y-1.5">
                   <div className="grid grid-cols-[4.5rem_1fr] gap-x-2 text-sm">
                     <span className="text-zinc-400">Customer</span>
-                    <span className="font-semibold text-zinc-800">{DEMO_NAME}</span>
+                    <span className="font-semibold text-zinc-800">{scenario.customerName}</span>
                   </div>
                   <div className="grid grid-cols-[4.5rem_1fr] gap-x-2 text-sm">
                     <span className="text-zinc-400">Address</span>
-                    <span className="text-zinc-600">{DEMO_ADDRESS}</span>
+                    <span className="text-zinc-600">{scenario.address}</span>
                   </div>
                   <div className="grid grid-cols-[4.5rem_1fr] gap-x-2 text-sm">
                     <span className="text-zinc-400">Date</span>
-                    <span className="text-zinc-600">{DEMO_DATE}</span>
+                    <span className="text-zinc-600">{scenario.date}</span>
                   </div>
                 </div>
 
@@ -501,7 +551,7 @@ function DemoInner() {
                     >
                       Job Summary
                     </h2>
-                    <p className="text-sm leading-relaxed text-zinc-700 mb-0">{JOB_SUMMARY}</p>
+                    <p className="text-sm leading-relaxed text-zinc-700 mb-0">{scenario.jobSummary}</p>
                   </div>
                 )}
 
@@ -515,7 +565,7 @@ function DemoInner() {
                       Scope of Work
                     </h2>
                     <ul className="mb-3 space-y-1 pl-1">
-                      {SCOPE_BULLETS.slice(0, visibleBullets).map((bullet, i) => (
+                      {scenario.scopeBullets.slice(0, visibleBullets).map((bullet, i) => (
                         <li key={i} className="flex items-start gap-2 text-sm text-zinc-700 leading-relaxed">
                           <span className="shrink-0 text-amber-500 mt-0.5">•</span>
                           <span>{bullet}</span>
@@ -561,7 +611,7 @@ function DemoInner() {
                       Payment Terms
                     </h2>
                     <p className="text-sm text-zinc-700 leading-snug">
-                      Deposit due before work begins. Balance due on completion. E-transfer accepted.
+                      {scenario.paymentTerms}
                     </p>
                   </div>
                 )}
