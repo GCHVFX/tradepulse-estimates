@@ -74,16 +74,12 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     return applyTo(NextResponse.json({ error: "No fields to update" }, { status: 400 }));
   }
 
-  console.log("[PATCH /api/estimates] user:", user.id, "estimate:", body.id, "fields:", Object.keys(updateFields));
-
   const { data: updated, error } = await supabaseAdmin
     .from("tpe_estimates")
     .update(updateFields)
     .eq("id", body.id)
     .eq("business_id", user.id)
     .select("id");
-
-  console.log("[PATCH /api/estimates] result:", { rows: updated?.length ?? 0, error: error?.message });
 
   if (error) return applyTo(NextResponse.json({ error: error.message }, { status: 500 }));
 

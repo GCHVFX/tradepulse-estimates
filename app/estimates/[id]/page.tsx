@@ -93,10 +93,12 @@ export default async function EstimatePage({
         status={estimate.status}
         customerPhone={estimate.customer_phone ?? ""}
         customerEmail={estimate.customer_email ?? ""}
+        customerName={estimate.customer_name ?? ""}
         businessName={businessName}
         logoUrl={logoUrl}
         isPro={isPro}
         googleReviewLink={googleReviewLink}
+        reviewRequestedAt={estimate.review_requested_at ?? null}
       />
 
       <div className="fixed bottom-0 left-0 right-0 z-40">

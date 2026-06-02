@@ -12,6 +12,10 @@ interface MarkJobDoneSheetProps {
   estimateId: string;
   isPro: boolean;
   googleReviewLink: string | null;
+  customerPhone: string;
+  customerName: string;
+  businessName: string;
+  reviewRequestedAt: string | null;
 }
 
 export function MarkJobDoneSheet({
@@ -21,16 +25,29 @@ export function MarkJobDoneSheet({
   estimateId,
   isPro,
   googleReviewLink,
+  customerPhone,
+  customerName,
+  businessName,
+  reviewRequestedAt,
 }: MarkJobDoneSheetProps) {
   const [panel, setPanel] = useState<Panel>("confirm");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewError, setReviewError] = useState("");
+  const [reviewSent, setReviewSent] = useState(false);
+  const [reviewConfirming, setReviewConfirming] = useState(false);
+  const [messageBody, setMessageBody] = useState("");
 
   useEffect(() => {
     if (!isOpen) {
       const t = setTimeout(() => {
         setPanel("confirm");
         setError("");
+        setReviewError("");
+        setReviewSent(false);
+        setReviewConfirming(false);
+        setMessageBody("");
       }, 300);
       return () => clearTimeout(t);
     }
@@ -61,12 +78,39 @@ export function MarkJobDoneSheet({
       if (!isPro) {
         setPanel("upgrade");
       } else if (googleReviewLink) {
+        setMessageBody(
+          `Hi ${customerName || "there"}, thanks for choosing ${businessName || "us"}. If you have a moment, we'd appreciate a Google review: ${googleReviewLink}`
+        );
         setPanel("review-ready");
       } else {
         setPanel("needs-link");
       }
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function handleSendReview(force: boolean) {
+    setReviewLoading(true);
+    setReviewError("");
+    try {
+      const res = await fetch(`/api/estimates/${estimateId}/review-request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messageBody,
+          ...(force && { force: true }),
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setReviewError((data as { error?: string }).error ?? `Server error ${res.status}`);
+        return;
+      }
+      setReviewConfirming(false);
+      setReviewSent(true);
+    } finally {
+      setReviewLoading(false);
     }
   }
 
@@ -81,9 +125,7 @@ export function MarkJobDoneSheet({
     <>
       <div
         className={`fixed inset-0 z-40 bg-black/60 transition-opacity duration-300 ${
-          isOpen
-            ? "opacity-100 pointer-events-auto"
-            : "opacity-0 pointer-events-none"
+          isOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
         }`}
         onClick={onClose}
         aria-hidden="true"
@@ -112,7 +154,6 @@ export function MarkJobDoneSheet({
           </button>
         </div>
 
-        {/* Confirm */}
         {panel === "confirm" && (
           <div className="px-5 pb-10 pt-2 flex flex-col gap-4">
             <p className="text-zinc-400 text-sm leading-relaxed">
@@ -142,11 +183,10 @@ export function MarkJobDoneSheet({
           </div>
         )}
 
-        {/* Upgrade upsell (Starter users) */}
         {panel === "upgrade" && (
           <div className="px-5 pb-10 pt-2 flex flex-col gap-4">
             <p className="text-zinc-400 text-sm leading-relaxed">
-              Pro unlocks automated follow-ups that get you more reviews and paid faster.
+              Get more Google reviews and follow up with customers automatically.
             </p>
             <div className="flex flex-col gap-2">
               <div className="flex items-start gap-3 bg-zinc-800 rounded-xl px-4 py-3.5">
@@ -169,7 +209,7 @@ export function MarkJobDoneSheet({
                 </div>
                 <div>
                   <p className="text-white text-sm font-medium">Payment Reminders</p>
-                  <p className="text-zinc-500 text-xs mt-0.5">Follow up automatically until the invoice is paid.</p>
+                  <p className="text-zinc-500 text-xs mt-0.5">Follow up until the invoice is paid.</p>
                 </div>
               </div>
               <div className="flex items-start gap-3 bg-zinc-800 rounded-xl px-4 py-3.5">
@@ -182,7 +222,7 @@ export function MarkJobDoneSheet({
                 </div>
                 <div>
                   <p className="text-white text-sm font-medium">Follow-Up Reminders</p>
-                  <p className="text-zinc-500 text-xs mt-0.5">Schedule outreach for repeat work and maintenance.</p>
+                  <p className="text-zinc-500 text-xs mt-0.5">Remind past customers to book again.</p>
                 </div>
               </div>
             </div>
@@ -202,31 +242,134 @@ export function MarkJobDoneSheet({
           </div>
         )}
 
-        {/* Pro + has review link */}
         {panel === "review-ready" && (
           <div className="px-5 pb-10 pt-2 flex flex-col gap-4">
-            <p className="text-zinc-400 text-sm leading-relaxed">
-              Ready to send a Google review request to your customer.
-            </p>
-            {/* Phase 3: wire Send Review Request to SMS/email */}
-            <button
-              type="button"
-              onClick={onClose}
-              className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
-            >
-              Send Review Request
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px]"
-            >
-              Skip
-            </button>
+            {reviewSent ? (
+              <>
+                <div className="flex items-center gap-3 bg-green-950/40 border border-green-800/50 rounded-xl px-4 py-3.5">
+                  <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5 text-green-400 shrink-0" aria-hidden="true">
+                    <path d="M4 10l4.5 4.5L16 6" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  <div>
+                    <p className="text-white text-sm font-medium">Review request sent</p>
+                    {customerPhone && (
+                      <p className="text-zinc-500 text-xs mt-0.5">Text sent to {customerPhone}</p>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+                >
+                  Done
+                </button>
+              </>
+            ) : reviewConfirming ? (
+              <>
+                <p className="text-zinc-400 text-sm leading-relaxed">
+                  Send another review request to {customerPhone || "this customer"}?
+                </p>
+                <textarea
+                  value={messageBody}
+                  onChange={(e) => setMessageBody(e.target.value)}
+                  disabled={reviewLoading}
+                  rows={4}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-zinc-300 text-sm leading-relaxed resize-none focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 disabled:opacity-50 min-h-[96px]"
+                />
+                {reviewError && (
+                  <div className="bg-red-950 border border-red-800 rounded-xl px-4 py-3 text-red-300 text-sm">
+                    {reviewError}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  disabled={reviewLoading}
+                  onClick={() => handleSendReview(true)}
+                  className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px] flex items-center justify-center gap-2"
+                >
+                  {reviewLoading && <Spinner className="w-5 h-5 text-zinc-950" />}
+                  {reviewLoading ? "Sending..." : "Confirm Send"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReviewConfirming(false)}
+                  className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+                >
+                  Cancel
+                </button>
+              </>
+            ) : reviewRequestedAt ? (
+              <>
+                <div className="flex items-center gap-3 bg-green-950/40 border border-green-800/50 rounded-xl px-4 py-3.5">
+                  <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5 text-green-400 shrink-0" aria-hidden="true">
+                    <path d="M4 10l4.5 4.5L16 6" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  <div>
+                    <p className="text-white text-sm font-medium">Review request already sent</p>
+                    <p className="text-zinc-500 text-xs mt-0.5">
+                      Sent on{" "}
+                      {new Date(reviewRequestedAt).toLocaleDateString("en-CA", {
+                        month: "long",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReviewConfirming(true)}
+                  className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+                >
+                  Send Again
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+                >
+                  Done
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="bg-zinc-800 rounded-xl overflow-hidden">
+                  <p className="text-zinc-500 text-xs font-medium uppercase tracking-wide px-4 pt-3 pb-1.5">Message</p>
+                  <textarea
+                    value={messageBody}
+                    onChange={(e) => setMessageBody(e.target.value)}
+                    disabled={reviewLoading}
+                    rows={4}
+                    className="w-full bg-transparent px-4 pb-3 text-zinc-300 text-sm leading-relaxed resize-none focus:outline-none disabled:opacity-50 min-h-[80px]"
+                  />
+                </div>
+                {reviewError && (
+                  <div className="bg-red-950 border border-red-800 rounded-xl px-4 py-3 text-red-300 text-sm">
+                    {reviewError}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  disabled={reviewLoading}
+                  onClick={() => handleSendReview(false)}
+                  className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px] flex items-center justify-center gap-2"
+                >
+                  {reviewLoading && <Spinner className="w-5 h-5 text-zinc-950" />}
+                  {reviewLoading ? "Sending..." : "Send Review Request"}
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+                >
+                  Skip
+                </button>
+              </>
+            )}
           </div>
         )}
 
-        {/* Pro + no review link */}
         {panel === "needs-link" && (
           <div className="px-5 pb-10 pt-2 flex flex-col gap-4">
             <p className="text-zinc-400 text-sm leading-relaxed">

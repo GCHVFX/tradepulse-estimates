@@ -103,6 +103,7 @@ export type Database = {
           prepared_by: string
           pricing: Json | null
           scope: string | null
+          review_requested_at: string | null
           sent_at: string | null
           sent_via: string | null
           status: string | null
@@ -126,6 +127,7 @@ export type Database = {
           payment_terms?: string | null
           prepared_by?: string
           pricing?: Json | null
+          review_requested_at?: string | null
           scope?: string | null
           sent_at?: string | null
           sent_via?: string | null
@@ -150,6 +152,7 @@ export type Database = {
           payment_terms?: string | null
           prepared_by?: string
           pricing?: Json | null
+          review_requested_at?: string | null
           scope?: string | null
           sent_at?: string | null
           sent_via?: string | null

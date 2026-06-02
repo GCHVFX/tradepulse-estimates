@@ -11,10 +11,12 @@ interface EstimateActionsProps {
   status?: string | null;
   customerPhone?: string;
   customerEmail?: string;
+  customerName?: string;
   businessName?: string;
   logoUrl?: string | null;
   isPro: boolean;
   googleReviewLink: string | null;
+  reviewRequestedAt?: string | null;
 }
 
 export function EstimateActions({
@@ -24,10 +26,12 @@ export function EstimateActions({
   status,
   customerPhone,
   customerEmail,
+  customerName,
   businessName,
   logoUrl,
   isPro,
   googleReviewLink,
+  reviewRequestedAt,
 }: EstimateActionsProps) {
   const [showSendSheet, setShowSendSheet] = useState(false);
   const [showDoneSheet, setShowDoneSheet] = useState(false);
@@ -88,6 +92,10 @@ export function EstimateActions({
         estimateId={estimateId}
         isPro={isPro}
         googleReviewLink={googleReviewLink}
+        customerPhone={customerPhone ?? ""}
+        customerName={customerName ?? ""}
+        businessName={businessName ?? ""}
+        reviewRequestedAt={reviewRequestedAt ?? null}
       />
     </>
   );

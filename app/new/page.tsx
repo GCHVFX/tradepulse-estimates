@@ -10,6 +10,7 @@ import { formatPhoneInput } from "@/lib/format-phone";
 import { Logo } from "@/app/components/logo";
 import { BottomNav } from "@/app/components/bottom-nav";
 import { SendEstimateSheet } from "@/app/components/send-estimate-sheet";
+import { MarkJobDoneSheet } from "@/app/components/mark-job-done-sheet";
 import { CustomerDetailsBlock } from "@/app/components/customer-details-block";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { useBusinessProfile } from "@/lib/hooks/use-business-profile";
@@ -52,6 +53,8 @@ interface EstimateViewProps {
   jobTitle: string;
   showSendSheet: boolean;
   setShowSendSheet: (v: boolean) => void;
+  isPro: boolean;
+  googleReviewLink: string | null;
   onBack: () => void;
   onNewEstimate: () => void;
 }
@@ -97,10 +100,14 @@ function EstimateView({
   jobTitle,
   showSendSheet,
   setShowSendSheet,
+  isPro,
+  googleReviewLink,
   onBack,
   onNewEstimate,
 }: EstimateViewProps) {
   const estimateScrollRef = useRef<HTMLElement | null>(null);
+  const [isDone, setIsDone] = useState(false);
+  const [showDoneSheet, setShowDoneSheet] = useState(false);
 
   useEffect(() => {
     if (!generating) return;
@@ -221,6 +228,24 @@ function EstimateView({
               Edit job
             </button>
           )}
+          {!generating && savedEstimateId && (
+            isDone ? (
+              <div className="w-full flex items-center justify-center gap-2 min-h-[56px] rounded-xl border border-green-800/50 bg-green-950/40">
+                <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5 text-green-400 shrink-0" aria-hidden="true">
+                  <path d="M4 10l4.5 4.5L16 6" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span className="text-green-400 font-semibold text-base">Job Done</span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowDoneSheet(true)}
+                className="w-full bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+              >
+                Mark Job Done
+              </button>
+            )
+          )}
           <button
             type="button"
             onClick={() => setShowSendSheet(true)}
@@ -244,6 +269,21 @@ function EstimateView({
         businessName={businessName || undefined}
         logoUrl={logoUrl}
       />
+
+      {savedEstimateId && (
+        <MarkJobDoneSheet
+          isOpen={showDoneSheet}
+          onClose={() => setShowDoneSheet(false)}
+          onDone={() => setIsDone(true)}
+          estimateId={savedEstimateId}
+          isPro={isPro}
+          googleReviewLink={googleReviewLink}
+          customerPhone={customerPhone}
+          customerName={customerName}
+          businessName={businessName}
+          reviewRequestedAt={null}
+        />
+      )}
     </div>
   );
 }
@@ -440,7 +480,7 @@ function NewPageInner() {
   const [savedEstimateId, setSavedEstimateId] = useState<string | null>(null);
   const [showSendSheet, setShowSendSheet] = useState(false);
   const [customerDetailsSaved, setCustomerDetailsSaved] = useState(false);
-  const { logoUrl, businessName, businessEmail, preparedBy, isLoading: profileLoading } = useBusinessProfile();
+  const { logoUrl, businessName, businessEmail, preparedBy, isPro, googleReviewLink, isLoading: profileLoading } = useBusinessProfile();
   const [jobTitle, setJobTitle] = useState("");
   const [isFirstTime, setIsFirstTime] = useState(false);
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
@@ -610,6 +650,8 @@ function NewPageInner() {
         jobTitle={jobTitle}
         showSendSheet={showSendSheet}
         setShowSendSheet={setShowSendSheet}
+        isPro={isPro}
+        googleReviewLink={googleReviewLink}
         onBack={handleBack}
         onNewEstimate={handleNewEstimate}
       />
