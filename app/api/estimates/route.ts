@@ -42,36 +42,54 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     return applyTo(NextResponse.json({ error: "id is required" }, { status: 400 }));
   }
 
-  const updateFields: Record<string, unknown> = {
-    customer_name: typeof body.customer_name === "string" ? body.customer_name.trim() : "",
-    customer_phone: typeof body.customer_phone === "string" ? body.customer_phone.trim() : "",
-    customer_address: typeof body.customer_address === "string" ? body.customer_address.trim() : "",
-    customer_email: typeof body.customer_email === "string" ? body.customer_email.trim() : "",
-  };
+  // Only include fields present in the body — never overwrite with defaults
+  const updateFields: Record<string, unknown> = {};
 
+  if ("customer_name" in body) {
+    updateFields.customer_name = typeof body.customer_name === "string" ? body.customer_name.trim() : "";
+  }
+  if ("customer_phone" in body) {
+    updateFields.customer_phone = typeof body.customer_phone === "string" ? body.customer_phone.trim() : "";
+  }
+  if ("customer_address" in body) {
+    updateFields.customer_address = typeof body.customer_address === "string" ? body.customer_address.trim() : "";
+  }
+  if ("customer_email" in body) {
+    updateFields.customer_email = typeof body.customer_email === "string" ? body.customer_email.trim() : "";
+  }
   if ("deposit_amount" in body) {
     updateFields.deposit_amount = typeof body.deposit_amount === "string" ? body.deposit_amount.trim() || null : null;
   }
-
   if ("summary" in body) {
     updateFields.summary = typeof body.summary === "string" ? body.summary.trim() : undefined;
   }
-
   if ("status" in body && typeof body.status === "string") {
     updateFields.status = body.status;
   }
-
   if ("completed_at" in body) {
     updateFields.completed_at = typeof body.completed_at === "string" ? body.completed_at : null;
   }
 
-  const { error } = await supabaseAdmin
+  if (Object.keys(updateFields).length === 0) {
+    return applyTo(NextResponse.json({ error: "No fields to update" }, { status: 400 }));
+  }
+
+  console.log("[PATCH /api/estimates] user:", user.id, "estimate:", body.id, "fields:", Object.keys(updateFields));
+
+  const { data: updated, error } = await supabaseAdmin
     .from("tpe_estimates")
     .update(updateFields)
     .eq("id", body.id)
-    .eq("business_id", user.id);
+    .eq("business_id", user.id)
+    .select("id");
+
+  console.log("[PATCH /api/estimates] result:", { rows: updated?.length ?? 0, error: error?.message });
 
   if (error) return applyTo(NextResponse.json({ error: error.message }, { status: 500 }));
+
+  if (!updated || updated.length === 0) {
+    return applyTo(NextResponse.json({ error: "Estimate not found or access denied" }, { status: 404 }));
+  }
 
   return applyTo(NextResponse.json({ success: true }));
 }

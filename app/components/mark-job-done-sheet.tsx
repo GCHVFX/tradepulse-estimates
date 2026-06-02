@@ -24,16 +24,21 @@ export function MarkJobDoneSheet({
 }: MarkJobDoneSheetProps) {
   const [panel, setPanel] = useState<Panel>("confirm");
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!isOpen) {
-      const t = setTimeout(() => setPanel("confirm"), 300);
+      const t = setTimeout(() => {
+        setPanel("confirm");
+        setError("");
+      }, 300);
       return () => clearTimeout(t);
     }
   }, [isOpen]);
 
   async function handleMarkDone() {
     setIsLoading(true);
+    setError("");
     try {
       const res = await fetch("/api/estimates", {
         method: "PATCH",
@@ -45,7 +50,11 @@ export function MarkJobDoneSheet({
         }),
       });
 
-      if (!res.ok) return;
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError((data as { error?: string }).error ?? `Server error ${res.status}`);
+        return;
+      }
 
       onDone();
 
@@ -109,6 +118,11 @@ export function MarkJobDoneSheet({
             <p className="text-zinc-400 text-sm leading-relaxed">
               Mark this job as complete. The estimate stays on file and can still be shared.
             </p>
+            {error && (
+              <div className="bg-red-950 border border-red-800 rounded-xl px-4 py-3 text-red-300 text-sm">
+                {error}
+              </div>
+            )}
             <button
               type="button"
               disabled={isLoading}
