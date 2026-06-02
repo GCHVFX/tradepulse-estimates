@@ -93,7 +93,7 @@ export async function POST(
   const customerName = estimate.customer_name?.trim() ?? "";
   const businessName = business.name?.trim() || "us";
   const greeting = customerName ? `Hi ${customerName},` : "Hi,";
-  const defaultMessage = `${greeting}\n\nThanks for choosing ${businessName}.\n\nIf you have a moment, we'd appreciate a Google review.`;
+  const defaultMessage = `${greeting}\n\nThanks for choosing ${businessName}. If anything wasn't right, reply to this text and we'll make it right.\n\nIf you have a moment, we'd appreciate a Google review.`;
   const smsBody = `${requestMessageBody ?? defaultMessage}\n\n${business.google_review_link}`;
 
   try {

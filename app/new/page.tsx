@@ -308,7 +308,7 @@ function FormView({
             <input
               type="text"
               className={inputClass}
-              placeholder="Customer name"
+              placeholder="Sarah Thompson"
               value={customerName}
               onChange={(e) => {
                 setCustomerName(e.target.value);

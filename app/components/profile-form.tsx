@@ -45,6 +45,17 @@ export function ProfileForm({
   const [errorMsg, setErrorMsg] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [showReviewLinkHelp, setShowReviewLinkHelp] = useState(false);
+  const [showFindLinkSheet, setShowFindLinkSheet] = useState(false);
+  const [findBusinessName, setFindBusinessName] = useState("");
+  const [findCity, setFindCity] = useState("");
+  const [findLoading, setFindLoading] = useState(false);
+  const [findError, setFindError] = useState("");
+  const [findResult, setFindResult] = useState<{
+    placeName: string;
+    formattedAddress: string;
+    placeId: string;
+    reviewLink: string;
+  } | null>(null);
   const [copied, setCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -200,6 +211,40 @@ export function ProfileForm({
     }
   }
 
+  async function handleFindBusiness() {
+    setFindLoading(true);
+    setFindError("");
+    setFindResult(null);
+    try {
+      const res = await fetch("/api/profile/find-review-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ businessName: findBusinessName, city: findCity }),
+      });
+      const data = await res.json() as {
+        error?: string;
+        placeName?: string;
+        formattedAddress?: string;
+        placeId?: string;
+        reviewLink?: string;
+      };
+      if (!res.ok) {
+        setFindError(data.error ?? `Error ${res.status}`);
+        return;
+      }
+      setFindResult({
+        placeName: data.placeName ?? "",
+        formattedAddress: data.formattedAddress ?? "",
+        placeId: data.placeId ?? "",
+        reviewLink: data.reviewLink ?? "",
+      });
+    } catch {
+      setFindError("Something went wrong. Try again.");
+    } finally {
+      setFindLoading(false);
+    }
+  }
+
   return (
     <>
       <div className="flex flex-col gap-4">
@@ -340,8 +385,30 @@ export function ProfileForm({
             autoCapitalize="none"
             spellCheck={false}
           />
-          <p className="text-zinc-500 text-xs">Paste the review link from your Google Business Profile, not your profile URL.</p>
-          <div>
+          {googleReviewLink && googleReviewLink.includes("google.com/search") && (
+            <p className="text-amber-400 text-xs">This looks like a Google search URL, not a direct review link.</p>
+          )}
+          {googleReviewLink &&
+            !googleReviewLink.includes("google.com/search") &&
+            (googleReviewLink.includes("google.com/maps") ||
+              googleReviewLink.includes("maps.app.goo.gl") ||
+              googleReviewLink.includes("g.co/kgs")) && (
+            <p className="text-amber-400 text-xs">This looks like a Google Business Profile link. Use Find My Review Link to create the review link.</p>
+          )}
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => {
+                setFindBusinessName(name);
+                setFindCity("");
+                setFindError("");
+                setFindResult(null);
+                setShowFindLinkSheet(true);
+              }}
+              className="text-xs text-amber-400 hover:text-amber-300 transition-colors min-h-[32px] font-medium"
+            >
+              Find My Review Link
+            </button>
             <button
               type="button"
               onClick={() => setShowReviewLinkHelp(!showReviewLinkHelp)}
@@ -357,15 +424,19 @@ export function ProfileForm({
               </svg>
               How do I find it?
             </button>
-            {showReviewLinkHelp && (
-              <ol className="mt-1 ml-1 flex flex-col gap-1 text-xs text-zinc-500 list-decimal list-inside">
-                <li>Open your Google Business Profile</li>
-                <li>Click &ldquo;Ask for Reviews&rdquo;</li>
-                <li>Copy the review link</li>
-                <li>Paste it here</li>
-              </ol>
-            )}
           </div>
+          {showReviewLinkHelp && (
+            <div className="flex flex-col gap-2">
+              <ol className="ml-1 flex flex-col gap-1 text-xs text-zinc-500 list-decimal list-inside">
+                <li>Go to Google and search your business name.</li>
+                <li>Make sure you are logged into the Google account that manages the business.</li>
+                <li>In the Business Profile panel, look for &ldquo;Ask for reviews&rdquo; or &ldquo;Share review form&rdquo;.</li>
+                <li>Copy the review link.</li>
+                <li>Paste it here.</li>
+              </ol>
+              <p className="text-zinc-600 text-xs ml-1">If you don&apos;t see this option, open Google Business Profile Manager and select your business.</p>
+            </div>
+          )}
         </div>
 
         {status === "error" && errorMsg && (
@@ -479,6 +550,93 @@ export function ProfileForm({
           </button>
         </form>
       </div>
+
+      <>
+        <div
+          className={`fixed inset-0 z-40 bg-black/60 transition-opacity duration-300 ${showFindLinkSheet ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
+          onClick={() => setShowFindLinkSheet(false)}
+          aria-hidden="true"
+        />
+        <div
+          className={`fixed bottom-0 left-0 right-0 z-50 bg-zinc-900 rounded-t-2xl transition-transform duration-300 ease-out ${showFindLinkSheet ? "translate-y-0" : "translate-y-full"}`}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="flex justify-center pt-3">
+            <div className="w-10 h-1 rounded-full bg-zinc-700" />
+          </div>
+          <div className="flex items-center justify-between px-5 pt-3 pb-2 min-h-[52px]">
+            <span className="text-white font-semibold text-base">Find My Review Link</span>
+            <button
+              type="button"
+              onClick={() => setShowFindLinkSheet(false)}
+              className="text-zinc-500 hover:text-white transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+              aria-label="Close"
+            >
+              <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4" aria-hidden="true">
+                <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
+          <div className="px-5 pb-10 pt-2 flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-zinc-400">Business name</label>
+              <input
+                type="text"
+                className={inputClass}
+                placeholder="Smith Plumbing Co."
+                value={findBusinessName}
+                onChange={(e) => setFindBusinessName(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-zinc-400">City</label>
+              <input
+                type="text"
+                className={inputClass}
+                placeholder="Vancouver"
+                value={findCity}
+                onChange={(e) => setFindCity(e.target.value)}
+              />
+            </div>
+            {findError && (
+              <div className="bg-red-950 border border-red-800 rounded-xl px-4 py-3 text-red-300 text-sm">
+                {findError}
+              </div>
+            )}
+            {findResult && (
+              <div className="bg-zinc-800 rounded-xl px-4 py-3.5 flex flex-col gap-2">
+                <p className="text-white text-sm font-medium">{findResult.placeName}</p>
+                <p className="text-zinc-500 text-xs">{findResult.formattedAddress}</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGoogleReviewLink(findResult.reviewLink);
+                    setShowFindLinkSheet(false);
+                  }}
+                  className="mt-1 w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950 font-bold text-sm rounded-xl py-3 transition-colors min-h-[44px]"
+                >
+                  Use This Review Link
+                </button>
+              </div>
+            )}
+            <button
+              type="button"
+              disabled={findLoading || !findBusinessName.trim() || !findCity.trim()}
+              onClick={handleFindBusiness}
+              className="w-full bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px] flex items-center justify-center gap-2"
+            >
+              {findLoading && (
+                <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+              )}
+              {findLoading ? "Searching..." : "Find Business"}
+            </button>
+          </div>
+        </div>
+      </>
 
       <>
           <div

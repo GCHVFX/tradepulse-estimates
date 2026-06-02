@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Spinner } from "@/app/components/spinner";
 
 type Panel = "confirm" | "upgrade" | "review-ready" | "needs-link";
@@ -9,6 +9,7 @@ interface MarkJobDoneSheetProps {
   isOpen: boolean;
   onClose: () => void;
   onDone: () => void;
+  onReviewSent?: () => void;
   estimateId: string;
   isPro: boolean;
   googleReviewLink: string | null;
@@ -16,12 +17,14 @@ interface MarkJobDoneSheetProps {
   customerName: string;
   businessName: string;
   reviewRequestedAt: string | null;
+  initialPanel?: Panel;
 }
 
 export function MarkJobDoneSheet({
   isOpen,
   onClose,
   onDone,
+  onReviewSent,
   estimateId,
   isPro,
   googleReviewLink,
@@ -29,6 +32,7 @@ export function MarkJobDoneSheet({
   customerName,
   businessName,
   reviewRequestedAt,
+  initialPanel,
 }: MarkJobDoneSheetProps) {
   const [panel, setPanel] = useState<Panel>("confirm");
   const [isLoading, setIsLoading] = useState(false);
@@ -38,6 +42,11 @@ export function MarkJobDoneSheet({
   const [reviewSent, setReviewSent] = useState(false);
   const [reviewConfirming, setReviewConfirming] = useState(false);
   const [messageBody, setMessageBody] = useState("");
+
+  const defaultReviewMessage = useMemo(() => {
+    const greeting = customerName ? `Hi ${customerName},` : "Hi,";
+    return `${greeting}\n\nThanks for choosing ${businessName || "us"}. If anything wasn't right, reply to this text and we'll make it right.\n\nIf you have a moment, we'd appreciate a Google review.`;
+  }, [customerName, businessName]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -50,8 +59,11 @@ export function MarkJobDoneSheet({
         setMessageBody("");
       }, 300);
       return () => clearTimeout(t);
+    } else if (initialPanel === "review-ready") {
+      setPanel("review-ready");
+      setMessageBody(defaultReviewMessage);
     }
-  }, [isOpen]);
+  }, [isOpen, initialPanel, defaultReviewMessage]);
 
   async function handleMarkDone() {
     setIsLoading(true);
@@ -78,10 +90,7 @@ export function MarkJobDoneSheet({
       if (!isPro) {
         setPanel("upgrade");
       } else if (googleReviewLink) {
-        const greeting = customerName ? `Hi ${customerName},` : "Hi,";
-        setMessageBody(
-          `${greeting}\n\nThanks for choosing ${businessName || "us"}.\n\nIf you have a moment, we'd appreciate a Google review.`
-        );
+        setMessageBody(defaultReviewMessage);
         setPanel("review-ready");
       } else {
         setPanel("needs-link");
@@ -110,6 +119,7 @@ export function MarkJobDoneSheet({
       }
       setReviewConfirming(false);
       setReviewSent(true);
+      onReviewSent?.();
     } finally {
       setReviewLoading(false);
     }
@@ -281,6 +291,7 @@ export function MarkJobDoneSheet({
                   className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-zinc-300 text-sm leading-relaxed resize-none focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 disabled:opacity-50 min-h-[96px]"
                 />
                 <p className="text-zinc-600 text-xs px-1">Your Google review link will be attached automatically.</p>
+                <p className="text-zinc-600 text-xs px-1">Customers can reply to this text if there&apos;s an issue.</p>
                 {reviewError && (
                   <div className="bg-red-950 border border-red-800 rounded-xl px-4 py-3 text-red-300 text-sm">
                     {reviewError}
@@ -349,6 +360,7 @@ export function MarkJobDoneSheet({
                   />
                 </div>
                 <p className="text-zinc-600 text-xs px-1">Your Google review link will be attached automatically.</p>
+                <p className="text-zinc-600 text-xs px-1">Customers can reply to this text if there&apos;s an issue.</p>
                 {reviewError && (
                   <div className="bg-red-950 border border-red-800 rounded-xl px-4 py-3 text-red-300 text-sm">
                     {reviewError}

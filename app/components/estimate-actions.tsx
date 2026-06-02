@@ -35,9 +35,11 @@ export function EstimateActions({
 }: EstimateActionsProps) {
   const [showSendSheet, setShowSendSheet] = useState(false);
   const [showDoneSheet, setShowDoneSheet] = useState(false);
+  const [doneSheetInitialPanel, setDoneSheetInitialPanel] = useState<"confirm" | "review-ready">("confirm");
   const [localStatus, setLocalStatus] = useState(status ?? "");
   const [localCustomerPhone, setLocalCustomerPhone] = useState(customerPhone ?? "");
   const [isDone, setIsDone] = useState(status === "done");
+  const [localReviewRequestedAt, setLocalReviewRequestedAt] = useState(reviewRequestedAt ?? null);
 
   return (
     <>
@@ -50,12 +52,31 @@ export function EstimateActions({
         </a>
 
         {isDone ? (
-          <div className="w-full flex items-center justify-center gap-2 min-h-[56px] rounded-xl border border-green-800/50 bg-green-950/40">
-            <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5 text-green-400 shrink-0" aria-hidden="true">
-              <path d="M4 10l4.5 4.5L16 6" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <span className="text-green-400 font-semibold text-base">Job Done</span>
-          </div>
+          <>
+            <div className="w-full flex items-center justify-center gap-2 min-h-[56px] rounded-xl border border-green-800/50 bg-green-950/40">
+              <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5 text-green-400 shrink-0" aria-hidden="true">
+                <path d="M4 10l4.5 4.5L16 6" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span className="text-green-400 font-semibold text-base">Job Done</span>
+            </div>
+            {isPro && googleReviewLink && (
+              <div className="flex items-center justify-between px-1">
+                <span className="text-zinc-500 text-xs">
+                  {localReviewRequestedAt ? "Review request sent" : "No review request sent"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDoneSheetInitialPanel("review-ready");
+                    setShowDoneSheet(true);
+                  }}
+                  className="text-amber-400 text-xs font-semibold hover:text-amber-300 transition-colors min-h-[32px] px-1"
+                >
+                  {localReviewRequestedAt ? "Send again" : "Send review request"}
+                </button>
+              </div>
+            )}
+          </>
         ) : localStatus === "sent" ? (
           <>
             {isPro && googleReviewLink && (
@@ -100,15 +121,20 @@ export function EstimateActions({
 
       <MarkJobDoneSheet
         isOpen={showDoneSheet}
-        onClose={() => setShowDoneSheet(false)}
+        onClose={() => {
+          setShowDoneSheet(false);
+          setDoneSheetInitialPanel("confirm");
+        }}
         onDone={() => setIsDone(true)}
+        onReviewSent={() => setLocalReviewRequestedAt(new Date().toISOString())}
         estimateId={estimateId}
         isPro={isPro}
         googleReviewLink={googleReviewLink}
         customerPhone={localCustomerPhone}
         customerName={customerName ?? ""}
         businessName={businessName ?? ""}
-        reviewRequestedAt={reviewRequestedAt ?? null}
+        reviewRequestedAt={localReviewRequestedAt}
+        initialPanel={doneSheetInitialPanel}
       />
     </>
   );
