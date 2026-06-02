@@ -58,6 +58,7 @@ export function ProfileForm({
   }> | null>(null);
   const [findExtraDetails, setFindExtraDetails] = useState("");
   const [findWeakMatch, setFindWeakMatch] = useState(false);
+  const [reviewLinkApplied, setReviewLinkApplied] = useState(false);
   const [copied, setCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -381,7 +382,7 @@ export function ProfileForm({
             className={inputClass}
             placeholder="https://g.page/r/..."
             value={googleReviewLink}
-            onChange={(e) => setGoogleReviewLink(e.target.value)}
+            onChange={(e) => { setGoogleReviewLink(e.target.value); setReviewLinkApplied(false); }}
             autoComplete="url"
             autoCorrect="off"
             autoCapitalize="none"
@@ -397,6 +398,9 @@ export function ProfileForm({
               googleReviewLink.includes("g.co/kgs")) && (
             <p className="text-amber-400 text-xs">This looks like a Google Business Profile link. Use Find My Review Link to create the review link.</p>
           )}
+          {reviewLinkApplied && (
+            <p className="text-emerald-400 text-xs">Review link added. Save your profile to keep it.</p>
+          )}
           <div className="flex items-center justify-between">
             <button
               type="button"
@@ -407,6 +411,7 @@ export function ProfileForm({
                 setFindResults(null);
                 setFindExtraDetails("");
                 setFindWeakMatch(false);
+                setReviewLinkApplied(false);
                 setShowFindLinkSheet(true);
               }}
               className="text-xs text-amber-400 hover:text-amber-300 transition-colors min-h-[32px] font-medium"
@@ -635,7 +640,9 @@ export function ProfileForm({
                     <button
                       type="button"
                       onClick={() => {
-                        setGoogleReviewLink(match.reviewLink);
+                        const rl = match.reviewLink || `https://search.google.com/local/writereview?placeid=${match.placeId}`;
+                        setGoogleReviewLink(rl);
+                        setReviewLinkApplied(true);
                         setShowFindLinkSheet(false);
                       }}
                       className="mt-1 w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950 font-bold text-sm rounded-xl py-3 transition-colors min-h-[44px]"
