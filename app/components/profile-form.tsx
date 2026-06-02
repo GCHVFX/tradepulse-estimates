@@ -58,7 +58,9 @@ export function ProfileForm({
   }> | null>(null);
   const [findExtraDetails, setFindExtraDetails] = useState("");
   const [findWeakMatch, setFindWeakMatch] = useState(false);
-  const [reviewLinkApplied, setReviewLinkApplied] = useState(false);
+  const [connectedBusinessName, setConnectedBusinessName] = useState("");
+  const [showManualEntry, setShowManualEntry] = useState(false);
+  const [reviewLinkSaveError, setReviewLinkSaveError] = useState("");
   const [copied, setCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -181,15 +183,47 @@ export function ProfileForm({
     }
   }
 
+  function tryConvertToReviewLink(url: string): string | null {
+    try {
+      const u = new URL(url);
+      const placeId = u.searchParams.get("placeid") || u.searchParams.get("place_id");
+      if (placeId) return `https://search.google.com/local/writereview?placeid=${placeId}`;
+    } catch {}
+    return null;
+  }
+
+  function openFinder() {
+    setFindBusinessName(name);
+    setFindCity("");
+    setFindError("");
+    setFindResults(null);
+    setFindExtraDetails("");
+    setFindWeakMatch(false);
+    setShowFindLinkSheet(true);
+  }
+
   async function handleSave() {
     setStatus("saving");
     setErrorMsg("");
+    setReviewLinkSaveError("");
+
+    let linkToSave = googleReviewLink.trim();
+    if (linkToSave && !linkToSave.includes("writereview")) {
+      const converted = tryConvertToReviewLink(linkToSave);
+      if (converted) {
+        linkToSave = converted;
+        setGoogleReviewLink(converted);
+      } else {
+        setReviewLinkSaveError("This doesn't look like a review link. Use Find My Review Link for best results.");
+        setShowManualEntry(true);
+      }
+    }
 
     try {
       const res = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phone, email, logo_url: logoUrl, prepared_by: preparedBy, google_review_link: googleReviewLink }),
+        body: JSON.stringify({ name, phone, email, logo_url: logoUrl, prepared_by: preparedBy, google_review_link: linkToSave }),
       });
 
       if (!res.ok) {
@@ -374,76 +408,93 @@ export function ProfileForm({
           />
         </div>
 
-        {/* Google Review Link */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-zinc-400">Google Review Link</label>
-          <input
-            type="url"
-            className={inputClass}
-            placeholder="https://g.page/r/..."
-            value={googleReviewLink}
-            onChange={(e) => { setGoogleReviewLink(e.target.value); setReviewLinkApplied(false); }}
-            autoComplete="url"
-            autoCorrect="off"
-            autoCapitalize="none"
-            spellCheck={false}
-          />
-          {googleReviewLink && googleReviewLink.includes("google.com/search") && (
-            <p className="text-amber-400 text-xs">This looks like a Google search URL, not a direct review link.</p>
-          )}
-          {googleReviewLink &&
-            !googleReviewLink.includes("google.com/search") &&
-            (googleReviewLink.includes("google.com/maps") ||
-              googleReviewLink.includes("maps.app.goo.gl") ||
-              googleReviewLink.includes("g.co/kgs")) && (
-            <p className="text-amber-400 text-xs">This looks like a Google Business Profile link. Use Find My Review Link to create the review link.</p>
-          )}
-          {reviewLinkApplied && (
-            <p className="text-emerald-400 text-xs">Review link added. Save your profile to keep it.</p>
-          )}
-          <div className="flex items-center justify-between">
+        {/* Google Reviews */}
+        <div className="flex flex-col gap-2">
+          <label className="text-sm font-medium text-zinc-400">Google Reviews</label>
+
+          {googleReviewLink.trim() ? (
+            <>
+              <div className="bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3.5 flex items-center gap-3">
+                <svg viewBox="0 0 20 20" fill="none" className="w-4 h-4 text-emerald-400 shrink-0" aria-hidden="true">
+                  <path d="M4 10l4.5 4.5L16 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <div>
+                  <p className="text-emerald-400 text-sm font-medium">Connected</p>
+                  {connectedBusinessName && (
+                    <p className="text-zinc-400 text-xs mt-0.5">{connectedBusinessName}</p>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={openFinder}
+                className="text-xs text-amber-400 hover:text-amber-300 transition-colors min-h-[32px] self-start font-medium"
+              >
+                Change Business
+              </button>
+            </>
+          ) : (
             <button
               type="button"
-              onClick={() => {
-                setFindBusinessName(name);
-                setFindCity("");
-                setFindError("");
-                setFindResults(null);
-                setFindExtraDetails("");
-                setFindWeakMatch(false);
-                setReviewLinkApplied(false);
-                setShowFindLinkSheet(true);
-              }}
-              className="text-xs text-amber-400 hover:text-amber-300 transition-colors min-h-[32px] font-medium"
+              onClick={openFinder}
+              className="w-full bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-white font-semibold text-base rounded-xl py-3.5 transition-colors min-h-[56px]"
             >
               Find My Review Link
             </button>
-            <button
-              type="button"
-              onClick={() => setShowReviewLinkHelp(!showReviewLinkHelp)}
-              className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300 transition-colors min-h-[32px]"
-            >
-              <svg
-                viewBox="0 0 16 16"
-                fill="none"
-                className={`w-3.5 h-3.5 transition-transform ${showReviewLinkHelp ? "rotate-90" : ""}`}
-                aria-hidden="true"
+          )}
+
+          <button
+            type="button"
+            onClick={() => setShowManualEntry(!showManualEntry)}
+            className="text-xs text-zinc-500 hover:text-zinc-400 transition-colors min-h-[32px] self-start"
+          >
+            Can&apos;t find your business?
+          </button>
+
+          {showManualEntry && (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-zinc-400">Google Review Link</label>
+              <input
+                type="url"
+                className={inputClass}
+                placeholder="https://g.page/r/..."
+                value={googleReviewLink}
+                onChange={(e) => {
+                  setGoogleReviewLink(e.target.value);
+                  setConnectedBusinessName("");
+                  setReviewLinkSaveError("");
+                }}
+                autoComplete="url"
+                autoCorrect="off"
+                autoCapitalize="none"
+                spellCheck={false}
+              />
+              {reviewLinkSaveError && (
+                <p className="text-amber-400 text-xs">{reviewLinkSaveError}</p>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowReviewLinkHelp(!showReviewLinkHelp)}
+                className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300 transition-colors min-h-[32px]"
               >
-                <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              How do I find it?
-            </button>
-          </div>
-          {showReviewLinkHelp && (
-            <div className="flex flex-col gap-2">
-              <ol className="ml-1 flex flex-col gap-1 text-xs text-zinc-500 list-decimal list-inside">
-                <li>Go to Google and search your business name.</li>
-                <li>Make sure you are logged into the Google account that manages the business.</li>
-                <li>In the Business Profile panel, look for &ldquo;Ask for reviews&rdquo; or &ldquo;Share review form&rdquo;.</li>
-                <li>Copy the review link.</li>
-                <li>Paste it here.</li>
-              </ol>
-              <p className="text-zinc-600 text-xs ml-1">If you don&apos;t see this option, open Google Business Profile Manager and select your business.</p>
+                <svg
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  className={`w-3.5 h-3.5 transition-transform ${showReviewLinkHelp ? "rotate-90" : ""}`}
+                  aria-hidden="true"
+                >
+                  <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                How do I find it?
+              </button>
+              {showReviewLinkHelp && (
+                <ol className="ml-1 flex flex-col gap-1 text-xs text-zinc-500 list-decimal list-inside">
+                  <li>Open your Google Business Profile.</li>
+                  <li>Click &ldquo;Ask for reviews&rdquo;.</li>
+                  <li>Copy the review link.</li>
+                  <li>Paste it here.</li>
+                </ol>
+              )}
             </div>
           )}
         </div>
@@ -642,7 +693,8 @@ export function ProfileForm({
                       onClick={() => {
                         const rl = match.reviewLink || `https://search.google.com/local/writereview?placeid=${match.placeId}`;
                         setGoogleReviewLink(rl);
-                        setReviewLinkApplied(true);
+                        setConnectedBusinessName(match.placeName);
+                        setShowManualEntry(false);
                         setShowFindLinkSheet(false);
                       }}
                       className="mt-1 w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950 font-bold text-sm rounded-xl py-3 transition-colors min-h-[44px]"
