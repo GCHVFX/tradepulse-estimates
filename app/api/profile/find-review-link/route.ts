@@ -66,10 +66,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return applyTo(NextResponse.json({ error: "Invalid request body" }, { status: 400 }));
   }
 
-  const { businessName, city, streetOrPhone } = body as {
+  const { businessName, city, extraDetails } = body as {
     businessName?: unknown;
     city?: unknown;
-    streetOrPhone?: unknown;
+    extraDetails?: unknown;
   };
 
   if (typeof businessName !== "string" || !businessName.trim()) {
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const name = businessName.trim();
   const cityStr = city.trim();
-  const extra = typeof streetOrPhone === "string" ? streetOrPhone.trim() : "";
+  const extra = typeof extraDetails === "string" ? extraDetails.trim() : "";
 
   try {
     const firstQuery = extra
@@ -118,7 +118,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const ranked = rankMatches(merged, name);
-    const matches = ranked.slice(0, 8);
+    const matches = ranked.slice(0, 10);
 
     const ln = name.toLowerCase().trim();
     const hasStrongMatch = matches.some((m) => {

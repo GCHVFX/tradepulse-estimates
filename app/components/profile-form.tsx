@@ -56,7 +56,7 @@ export function ProfileForm({
     placeId: string;
     reviewLink: string;
   }> | null>(null);
-  const [findStreetOrPhone, setFindStreetOrPhone] = useState("");
+  const [findExtraDetails, setFindExtraDetails] = useState("");
   const [findWeakMatch, setFindWeakMatch] = useState(false);
   const [copied, setCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -222,7 +222,7 @@ export function ProfileForm({
       const res = await fetch("/api/profile/find-review-link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ businessName: findBusinessName, city: findCity, streetOrPhone: findStreetOrPhone }),
+        body: JSON.stringify({ businessName: findBusinessName, city: findCity, extraDetails: findExtraDetails }),
       });
       const data = await res.json() as {
         error?: string;
@@ -405,7 +405,7 @@ export function ProfileForm({
                 setFindCity("");
                 setFindError("");
                 setFindResults(null);
-                setFindStreetOrPhone("");
+                setFindExtraDetails("");
                 setFindWeakMatch(false);
                 setShowFindLinkSheet(true);
               }}
@@ -562,14 +562,14 @@ export function ProfileForm({
           aria-hidden="true"
         />
         <div
-          className={`fixed bottom-0 left-0 right-0 z-50 bg-zinc-900 rounded-t-2xl transition-transform duration-300 ease-out ${showFindLinkSheet ? "translate-y-0" : "translate-y-full"}`}
+          className={`fixed bottom-0 left-0 right-0 z-50 bg-zinc-900 rounded-t-2xl transition-transform duration-300 ease-out flex flex-col max-h-[90dvh] ${showFindLinkSheet ? "translate-y-0" : "translate-y-full"}`}
           role="dialog"
           aria-modal="true"
         >
-          <div className="flex justify-center pt-3">
+          <div className="flex justify-center pt-3 shrink-0">
             <div className="w-10 h-1 rounded-full bg-zinc-700" />
           </div>
-          <div className="flex items-center justify-between px-5 pt-3 pb-2 min-h-[52px]">
+          <div className="flex items-center justify-between px-5 pt-3 pb-2 min-h-[52px] shrink-0">
             <span className="text-white font-semibold text-base">Find My Review Link</span>
             <button
               type="button"
@@ -582,7 +582,7 @@ export function ProfileForm({
               </svg>
             </button>
           </div>
-          <div className="px-5 pb-10 pt-2 flex flex-col gap-4">
+          <div className="flex-1 overflow-y-auto overscroll-contain px-5 pt-2 pb-4 flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-zinc-400">Business name</label>
               <input
@@ -604,13 +604,13 @@ export function ProfileForm({
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-zinc-400">Street address or phone number <span className="text-zinc-600 font-normal">(optional)</span></label>
+              <label className="text-sm font-medium text-zinc-400">Street, phone, or extra details <span className="text-zinc-600 font-normal">(optional)</span></label>
               <input
                 type="text"
                 className={inputClass}
                 placeholder="Optional, helps find the right business"
-                value={findStreetOrPhone}
-                onChange={(e) => setFindStreetOrPhone(e.target.value)}
+                value={findExtraDetails}
+                onChange={(e) => setFindExtraDetails(e.target.value)}
               />
             </div>
             {findError && (
@@ -620,7 +620,7 @@ export function ProfileForm({
             )}
             {findWeakMatch && findResults && findResults.length > 0 && (
               <div className="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-zinc-400 text-sm">
-                We couldn&apos;t find an exact name match. Choose the correct business below, or try adding your street address.
+                We could not find an exact match. Try adding a street address or phone number.
               </div>
             )}
             {findResults && findResults.length > 0 && (
@@ -643,6 +643,8 @@ export function ProfileForm({
                 ))}
               </div>
             )}
+          </div>
+          <div className="shrink-0 px-5 pt-3 pb-10 border-t border-zinc-800">
             <button
               type="button"
               disabled={findLoading || !findBusinessName.trim() || !findCity.trim()}
