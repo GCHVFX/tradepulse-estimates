@@ -54,7 +54,7 @@ export function EstimateActions({
             </svg>
             <span className="text-green-400 font-semibold text-base">Job Done</span>
           </div>
-        ) : (
+        ) : status === "sent" ? (
           <button
             type="button"
             onClick={() => setShowDoneSheet(true)}
@@ -62,7 +62,7 @@ export function EstimateActions({
           >
             Mark Job Done
           </button>
-        )}
+        ) : null}
 
         <button
           type="button"

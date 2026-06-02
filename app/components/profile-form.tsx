@@ -44,6 +44,7 @@ export function ProfileForm({
   const [status, setStatus] = useState<SaveStatus>("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
+  const [showReviewLinkHelp, setShowReviewLinkHelp] = useState(false);
   const [copied, setCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -339,7 +340,32 @@ export function ProfileForm({
             autoCapitalize="none"
             spellCheck={false}
           />
-          <p className="text-zinc-500 text-xs">Used to send Google review requests after a job is done.</p>
+          <p className="text-zinc-500 text-xs">Paste the review link from your Google Business Profile, not your profile URL.</p>
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowReviewLinkHelp(!showReviewLinkHelp)}
+              className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300 transition-colors min-h-[32px]"
+            >
+              <svg
+                viewBox="0 0 16 16"
+                fill="none"
+                className={`w-3.5 h-3.5 transition-transform ${showReviewLinkHelp ? "rotate-90" : ""}`}
+                aria-hidden="true"
+              >
+                <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              How do I find it?
+            </button>
+            {showReviewLinkHelp && (
+              <ol className="mt-1 ml-1 flex flex-col gap-1 text-xs text-zinc-500 list-decimal list-inside">
+                <li>Open your Google Business Profile</li>
+                <li>Click &ldquo;Ask for Reviews&rdquo;</li>
+                <li>Copy the review link</li>
+                <li>Paste it here</li>
+              </ol>
+            )}
+          </div>
         </div>
 
         {status === "error" && errorMsg && (

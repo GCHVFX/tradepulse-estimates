@@ -78,8 +78,9 @@ export function MarkJobDoneSheet({
       if (!isPro) {
         setPanel("upgrade");
       } else if (googleReviewLink) {
+        const greeting = customerName ? `Hi ${customerName},` : "Hi,";
         setMessageBody(
-          `Hi ${customerName || "there"}, thanks for choosing ${businessName || "us"}. If you have a moment, we'd appreciate a Google review: ${googleReviewLink}`
+          `${greeting}\n\nThanks for choosing ${businessName || "us"}.\n\nIf you have a moment, we'd appreciate a Google review.`
         );
         setPanel("review-ready");
       } else {
@@ -277,6 +278,7 @@ export function MarkJobDoneSheet({
                   rows={4}
                   className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-zinc-300 text-sm leading-relaxed resize-none focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 disabled:opacity-50 min-h-[96px]"
                 />
+                <p className="text-zinc-600 text-xs px-1">Your Google review link will be attached automatically.</p>
                 {reviewError && (
                   <div className="bg-red-950 border border-red-800 rounded-xl px-4 py-3 text-red-300 text-sm">
                     {reviewError}
@@ -344,6 +346,7 @@ export function MarkJobDoneSheet({
                     className="w-full bg-transparent px-4 pb-3 text-zinc-300 text-sm leading-relaxed resize-none focus:outline-none disabled:opacity-50 min-h-[80px]"
                   />
                 </div>
+                <p className="text-zinc-600 text-xs px-1">Your Google review link will be attached automatically.</p>
                 {reviewError && (
                   <div className="bg-red-950 border border-red-800 rounded-xl px-4 py-3 text-red-300 text-sm">
                     {reviewError}

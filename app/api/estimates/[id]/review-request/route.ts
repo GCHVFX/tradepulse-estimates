@@ -78,13 +78,8 @@ export async function POST(
     return applyTo(NextResponse.json({ error: "Review request already sent" }, { status: 409 }));
   }
 
-  if (requestMessageBody !== null) {
-    if (!requestMessageBody) {
-      return applyTo(NextResponse.json({ error: "Message cannot be empty" }, { status: 400 }));
-    }
-    if (!requestMessageBody.includes(business.google_review_link)) {
-      return applyTo(NextResponse.json({ error: "Message must include the Google review link" }, { status: 400 }));
-    }
+  if (requestMessageBody !== null && !requestMessageBody) {
+    return applyTo(NextResponse.json({ error: "Message cannot be empty" }, { status: 400 }));
   }
 
   let formattedPhone: string;
@@ -95,14 +90,16 @@ export async function POST(
     return applyTo(NextResponse.json({ error: message }, { status: 400 }));
   }
 
-  const customerName = estimate.customer_name?.trim() || "there";
+  const customerName = estimate.customer_name?.trim() ?? "";
   const businessName = business.name?.trim() || "us";
-  const messageBody = requestMessageBody ?? `Hi ${customerName}, thanks for choosing ${businessName}. If you have a moment, we'd appreciate a Google review: ${business.google_review_link}`;
+  const greeting = customerName ? `Hi ${customerName},` : "Hi,";
+  const defaultMessage = `${greeting}\n\nThanks for choosing ${businessName}.\n\nIf you have a moment, we'd appreciate a Google review.`;
+  const smsBody = `${requestMessageBody ?? defaultMessage}\n\n${business.google_review_link}`;
 
   try {
     const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
     await client.messages.create({
-      body: messageBody,
+      body: smsBody,
       from: process.env.TWILIO_FROM_NUMBER,
       to: formattedPhone,
     });
