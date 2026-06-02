@@ -23,13 +23,12 @@ async function searchPlaces(query: string, apiKey: string): Promise<PlaceMatch[]
       "X-Goog-Api-Key": apiKey,
       "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress",
     },
-    body: JSON.stringify({ textQuery: query, maxResultCount: 3 }),
+    body: JSON.stringify({ textQuery: query, maxResultCount: 5 }),
   });
 
   if (!res.ok) return [];
 
   const data = await res.json() as { places?: PlacesApiPlace[] };
-  console.log("[find-review-link] query:", query, "| response:", JSON.stringify(data));
 
   return (data.places ?? []).map((p) => ({
     placeName: p.displayName.text,
@@ -37,6 +36,19 @@ async function searchPlaces(query: string, apiKey: string): Promise<PlaceMatch[]
     placeId: p.id,
     reviewLink: `https://search.google.com/local/writereview?placeid=${p.id}`,
   }));
+}
+
+function rankMatches(matches: PlaceMatch[], enteredName: string): PlaceMatch[] {
+  const ln = enteredName.toLowerCase().trim();
+
+  function score(m: PlaceMatch): number {
+    const lp = m.placeName.toLowerCase().trim();
+    if (lp === ln) return 0;
+    if (lp.includes(ln) || ln.includes(lp)) return 1;
+    return 2;
+  }
+
+  return [...matches].sort((a, b) => score(a) - score(b));
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -54,7 +66,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return applyTo(NextResponse.json({ error: "Invalid request body" }, { status: 400 }));
   }
 
-  const { businessName, city } = body as { businessName?: unknown; city?: unknown };
+  const { businessName, city, streetOrPhone } = body as {
+    businessName?: unknown;
+    city?: unknown;
+    streetOrPhone?: unknown;
+  };
 
   if (typeof businessName !== "string" || !businessName.trim()) {
     return applyTo(NextResponse.json({ error: "Business name is required" }, { status: 400 }));
@@ -70,17 +86,47 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const name = businessName.trim();
   const cityStr = city.trim();
+  const extra = typeof streetOrPhone === "string" ? streetOrPhone.trim() : "";
 
   try {
-    let matches = await searchPlaces(`${name} ${cityStr} BC Canada`, apiKey);
-    if (!matches.length) matches = await searchPlaces(name, apiKey);
-    if (!matches.length) matches = await searchPlaces(`${name} ${cityStr}`, apiKey);
+    const firstQuery = extra
+      ? `${name} ${extra} ${cityStr} BC Canada`
+      : `${name} ${cityStr} BC Canada`;
 
-    if (!matches.length) {
+    const queries = [
+      firstQuery,
+      `${name} ${cityStr}`,
+      name,
+      `${name} near ${cityStr}`,
+    ];
+
+    const batches = await Promise.all(queries.map((q) => searchPlaces(q, apiKey)));
+
+    const seen = new Set<string>();
+    const merged: PlaceMatch[] = [];
+    for (const batch of batches) {
+      for (const match of batch) {
+        if (!seen.has(match.placeId)) {
+          seen.add(match.placeId);
+          merged.push(match);
+        }
+      }
+    }
+
+    if (!merged.length) {
       return applyTo(NextResponse.json({ error: "No matching business found." }, { status: 404 }));
     }
 
-    return applyTo(NextResponse.json({ matches }));
+    const ranked = rankMatches(merged, name);
+    const matches = ranked.slice(0, 8);
+
+    const ln = name.toLowerCase().trim();
+    const hasStrongMatch = matches.some((m) => {
+      const lp = m.placeName.toLowerCase().trim();
+      return lp === ln || lp.includes(ln) || ln.includes(lp);
+    });
+
+    return applyTo(NextResponse.json({ matches, hasStrongMatch }));
   } catch (err) {
     const message = err instanceof Error ? err.message : "Search failed";
     return applyTo(NextResponse.json({ error: message }, { status: 500 }));

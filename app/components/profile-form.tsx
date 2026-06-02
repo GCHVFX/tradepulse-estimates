@@ -56,6 +56,8 @@ export function ProfileForm({
     placeId: string;
     reviewLink: string;
   }> | null>(null);
+  const [findStreetOrPhone, setFindStreetOrPhone] = useState("");
+  const [findWeakMatch, setFindWeakMatch] = useState(false);
   const [copied, setCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -215,11 +217,12 @@ export function ProfileForm({
     setFindLoading(true);
     setFindError("");
     setFindResults(null);
+    setFindWeakMatch(false);
     try {
       const res = await fetch("/api/profile/find-review-link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ businessName: findBusinessName, city: findCity }),
+        body: JSON.stringify({ businessName: findBusinessName, city: findCity, streetOrPhone: findStreetOrPhone }),
       });
       const data = await res.json() as {
         error?: string;
@@ -229,12 +232,14 @@ export function ProfileForm({
           placeId: string;
           reviewLink: string;
         }>;
+        hasStrongMatch?: boolean;
       };
       if (!res.ok) {
         setFindError(data.error ?? `Error ${res.status}`);
         return;
       }
       setFindResults(data.matches ?? []);
+      setFindWeakMatch(!(data.hasStrongMatch ?? true));
     } catch {
       setFindError("Something went wrong. Try again.");
     } finally {
@@ -400,6 +405,8 @@ export function ProfileForm({
                 setFindCity("");
                 setFindError("");
                 setFindResults(null);
+                setFindStreetOrPhone("");
+                setFindWeakMatch(false);
                 setShowFindLinkSheet(true);
               }}
               className="text-xs text-amber-400 hover:text-amber-300 transition-colors min-h-[32px] font-medium"
@@ -596,9 +603,24 @@ export function ProfileForm({
                 onChange={(e) => setFindCity(e.target.value)}
               />
             </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-zinc-400">Street address or phone number <span className="text-zinc-600 font-normal">(optional)</span></label>
+              <input
+                type="text"
+                className={inputClass}
+                placeholder="Optional, helps find the right business"
+                value={findStreetOrPhone}
+                onChange={(e) => setFindStreetOrPhone(e.target.value)}
+              />
+            </div>
             {findError && (
               <div className="bg-red-950 border border-red-800 rounded-xl px-4 py-3 text-red-300 text-sm">
                 {findError}
+              </div>
+            )}
+            {findWeakMatch && findResults && findResults.length > 0 && (
+              <div className="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-zinc-400 text-sm">
+                We couldn&apos;t find an exact name match. Choose the correct business below, or try adding your street address.
               </div>
             )}
             {findResults && findResults.length > 0 && (
