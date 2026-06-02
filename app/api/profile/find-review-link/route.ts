@@ -23,7 +23,7 @@ async function searchPlaces(query: string, apiKey: string): Promise<PlaceMatch[]
       "X-Goog-Api-Key": apiKey,
       "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress",
     },
-    body: JSON.stringify({ textQuery: query, maxResultCount: 5 }),
+    body: JSON.stringify({ textQuery: query, maxResultCount: 5, includePureServiceAreaBusinesses: true }),
   });
 
   if (!res.ok) return [];

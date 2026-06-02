@@ -610,7 +610,10 @@ export function ProfileForm({
                 className={inputClass}
                 placeholder="Optional, helps find the right business"
                 value={findExtraDetails}
-                onChange={(e) => setFindExtraDetails(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setFindExtraDetails(/[a-zA-Z]/.test(v) ? v : formatPhoneInput(v));
+                }}
               />
             </div>
             {findError && (
