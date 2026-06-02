@@ -35,6 +35,8 @@ export function EstimateActions({
 }: EstimateActionsProps) {
   const [showSendSheet, setShowSendSheet] = useState(false);
   const [showDoneSheet, setShowDoneSheet] = useState(false);
+  const [localStatus, setLocalStatus] = useState(status ?? "");
+  const [localCustomerPhone, setLocalCustomerPhone] = useState(customerPhone ?? "");
   const [isDone, setIsDone] = useState(status === "done");
 
   return (
@@ -54,14 +56,21 @@ export function EstimateActions({
             </svg>
             <span className="text-green-400 font-semibold text-base">Job Done</span>
           </div>
-        ) : status === "sent" ? (
-          <button
-            type="button"
-            onClick={() => setShowDoneSheet(true)}
-            className="w-full bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px]"
-          >
-            Mark Job Done
-          </button>
+        ) : localStatus === "sent" ? (
+          <>
+            {isPro && googleReviewLink && (
+              <div className="flex items-center justify-center gap-1.5 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 text-amber-400 text-xs font-semibold">
+                ⭐ Review Request Ready
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowDoneSheet(true)}
+              className="w-full bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+            >
+              Mark Job Done
+            </button>
+          </>
         ) : null}
 
         <button
@@ -76,6 +85,10 @@ export function EstimateActions({
       <SendEstimateSheet
         isOpen={showSendSheet}
         onClose={() => setShowSendSheet(false)}
+        onSent={(phone) => {
+          setLocalStatus("sent");
+          if (phone) setLocalCustomerPhone(phone);
+        }}
         estimateId={estimateId}
         customerPhone={customerPhone}
         customerEmail={customerEmail}
@@ -92,7 +105,7 @@ export function EstimateActions({
         estimateId={estimateId}
         isPro={isPro}
         googleReviewLink={googleReviewLink}
-        customerPhone={customerPhone ?? ""}
+        customerPhone={localCustomerPhone}
         customerName={customerName ?? ""}
         businessName={businessName ?? ""}
         reviewRequestedAt={reviewRequestedAt ?? null}

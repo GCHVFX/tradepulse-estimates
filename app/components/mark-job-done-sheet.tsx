@@ -158,7 +158,9 @@ export function MarkJobDoneSheet({
         {panel === "confirm" && (
           <div className="px-5 pb-10 pt-2 flex flex-col gap-4">
             <p className="text-zinc-400 text-sm leading-relaxed">
-              Mark this job as complete. The estimate stays on file and can still be shared.
+              {isPro
+                ? "This will mark the job as completed and prepare a review request."
+                : "This will mark the job as completed."}
             </p>
             {error && (
               <div className="bg-red-950 border border-red-800 rounded-xl px-4 py-3 text-red-300 text-sm">

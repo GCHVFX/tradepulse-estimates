@@ -11,6 +11,7 @@ type SendStatus = "idle" | "sending" | "sent" | "error";
 interface SendEstimateSheetProps {
   isOpen: boolean;
   onClose: () => void;
+  onSent?: (phone?: string) => void;
   estimateId?: string;
   customerPhone?: string;
   customerEmail?: string;
@@ -23,6 +24,7 @@ interface SendEstimateSheetProps {
 export function SendEstimateSheet({
   isOpen,
   onClose,
+  onSent,
   estimateId,
   customerPhone,
   customerEmail,
@@ -103,6 +105,7 @@ export function SendEstimateSheet({
       }
 
       setSmsStatus("sent");
+      onSent?.(phone.trim());
     } catch (err) {
       setSmsError(
         err instanceof Error ? err.message : "Something went wrong. Try again."
@@ -131,6 +134,7 @@ export function SendEstimateSheet({
       }
 
       setEmailStatus("sent");
+      onSent?.();
     } catch (err) {
       setEmailError(
         err instanceof Error ? err.message : "Something went wrong. Try again."

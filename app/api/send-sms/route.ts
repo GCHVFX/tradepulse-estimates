@@ -77,7 +77,7 @@ if (!hasAccess) return applyTo(NextResponse.json({ error: "Subscription required
   // Verify ownership of estimate
   const { data: estimate } = await supabaseAdmin
     .from("tpe_estimates")
-    .select("id")
+    .select("id, customer_phone")
     .eq("id", estimateId)
     .eq("business_id", user.id)
     .maybeSingle();
@@ -124,12 +124,14 @@ if (!hasAccess) return applyTo(NextResponse.json({ error: "Subscription required
       to: formattedPhone,
     });
 
+    const phoneUpdate = !estimate.customer_phone ? { customer_phone: to.trim() } : {};
     const { error: updateError } = await supabaseAdmin
       .from("tpe_estimates")
       .update({
         status: "sent",
         sent_via: "sms",
         sent_at: new Date().toISOString(),
+        ...phoneUpdate,
       })
       .eq("id", estimateId)
       .eq("business_id", user.id);
