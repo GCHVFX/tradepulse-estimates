@@ -12,9 +12,11 @@ export type Database = {
       tpe_businesses: {
         Row: {
           email: string | null
+          google_review_link: string | null
           logo_url: string | null
           name: string
           phone: string | null
+          plan: string
           prepared_by: string
           signup_source: string | null
           stripe_customer_id: string | null
@@ -25,9 +27,11 @@ export type Database = {
         }
         Insert: {
           email?: string | null
+          google_review_link?: string | null
           logo_url?: string | null
           name: string
           phone?: string | null
+          plan?: string
           prepared_by?: string
           signup_source?: string | null
           stripe_customer_id?: string | null
@@ -38,9 +42,11 @@ export type Database = {
         }
         Update: {
           email?: string | null
+          google_review_link?: string | null
           logo_url?: string | null
           name?: string
           phone?: string | null
+          plan?: string
           prepared_by?: string
           signup_source?: string | null
           stripe_customer_id?: string | null
@@ -82,6 +88,7 @@ export type Database = {
         Row: {
           assumptions: string | null
           business_id: string | null
+          completed_at: string | null
           created_at: string | null
           customer_address: string
           customer_email: string
@@ -105,6 +112,7 @@ export type Database = {
         Insert: {
           assumptions?: string | null
           business_id?: string | null
+          completed_at?: string | null
           created_at?: string | null
           customer_address?: string
           customer_email?: string
@@ -128,6 +136,7 @@ export type Database = {
         Update: {
           assumptions?: string | null
           business_id?: string | null
+          completed_at?: string | null
           created_at?: string | null
           customer_address?: string
           customer_email?: string

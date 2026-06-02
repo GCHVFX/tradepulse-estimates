@@ -13,6 +13,7 @@ interface Profile {
   email: string;
   logo_url: string;
   prepared_by: string;
+  google_review_link: string;
 }
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
@@ -35,6 +36,7 @@ export function ProfileForm({
   const [phone, setPhone] = useState(formatPhoneInput(profile.phone));
   const [email, setEmail] = useState(profile.email);
   const [preparedBy, setPreparedBy] = useState(profile.prepared_by);
+  const [googleReviewLink, setGoogleReviewLink] = useState(profile.google_review_link);
   const [logoUrl, setLogoUrl] = useState(profile.logo_url);
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -122,7 +124,7 @@ export function ProfileForm({
       const res = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phone, email, logo_url: url, prepared_by: preparedBy }),
+        body: JSON.stringify({ name, phone, email, logo_url: url, prepared_by: preparedBy, google_review_link: googleReviewLink }),
       });
 
       if (!res.ok) throw new Error("Failed to save logo.");
@@ -149,7 +151,7 @@ export function ProfileForm({
       const res = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phone, email, logo_url: "", prepared_by: preparedBy }),
+        body: JSON.stringify({ name, phone, email, logo_url: "", prepared_by: preparedBy, google_review_link: googleReviewLink }),
       });
 
       if (!res.ok) throw new Error("Failed to remove logo.");
@@ -172,7 +174,7 @@ export function ProfileForm({
       const res = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phone, email, logo_url: logoUrl, prepared_by: preparedBy }),
+        body: JSON.stringify({ name, phone, email, logo_url: logoUrl, prepared_by: preparedBy, google_review_link: googleReviewLink }),
       });
 
       if (!res.ok) {
@@ -321,6 +323,23 @@ export function ProfileForm({
             autoCapitalize="none"
             spellCheck={false}
           />
+        </div>
+
+        {/* Google Review Link */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-zinc-400">Google Review Link</label>
+          <input
+            type="url"
+            className={inputClass}
+            placeholder="https://g.page/r/..."
+            value={googleReviewLink}
+            onChange={(e) => setGoogleReviewLink(e.target.value)}
+            autoComplete="url"
+            autoCorrect="off"
+            autoCapitalize="none"
+            spellCheck={false}
+          />
+          <p className="text-zinc-500 text-xs">Used to send Google review requests after a job is done.</p>
         </div>
 
         {status === "error" && errorMsg && (

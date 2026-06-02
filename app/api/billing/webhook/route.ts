@@ -46,6 +46,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
       update.subscription_status = status;
 
+      // Detect plan from price ID — set STRIPE_PRO_PRICE_ID env var when Pro is launched
+      const priceId = sub.items?.data?.[0]?.price?.id;
+      if (priceId && process.env.STRIPE_PRO_PRICE_ID) {
+        update.plan = priceId === process.env.STRIPE_PRO_PRICE_ID ? "pro" : "starter";
+      }
+
       await supabaseAdmin
         .from("tpe_businesses")
         .update(update)

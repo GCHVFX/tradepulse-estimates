@@ -29,6 +29,8 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     customer_email?: unknown;
     deposit_amount?: unknown;
     summary?: unknown;
+    status?: unknown;
+    completed_at?: unknown;
   };
   try {
     body = await request.json();
@@ -53,6 +55,14 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
 
   if ("summary" in body) {
     updateFields.summary = typeof body.summary === "string" ? body.summary.trim() : undefined;
+  }
+
+  if ("status" in body && typeof body.status === "string") {
+    updateFields.status = body.status;
+  }
+
+  if ("completed_at" in body) {
+    updateFields.completed_at = typeof body.completed_at === "string" ? body.completed_at : null;
   }
 
   const { error } = await supabaseAdmin

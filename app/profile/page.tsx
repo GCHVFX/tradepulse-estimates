@@ -18,7 +18,7 @@ export default async function ProfilePage({
 
   const { data } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("name, phone, email, logo_url, prepared_by, subscription_status, trial_ends_at")
+    .select("name, phone, email, logo_url, prepared_by, google_review_link, subscription_status, trial_ends_at")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -28,6 +28,7 @@ export default async function ProfilePage({
     email: data?.email ?? "",
     logo_url: data?.logo_url ?? "",
     prepared_by: data?.prepared_by ?? "",
+    google_review_link: data?.google_review_link ?? "",
   };
 
   const nextPath = typeof next === "string" && next.startsWith("/") ? next : null;

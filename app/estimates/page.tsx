@@ -68,6 +68,7 @@ export default async function EstimatesPage() {
           <ul className="flex flex-col gap-3">
             {items.map((estimate) => {
               const isSent = estimate.status === "sent";
+              const isDone = estimate.status === "done";
 
               return (
                 <li key={estimate.id}>
@@ -88,10 +89,14 @@ export default async function EstimatesPage() {
                         />
                         <span
                           className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
-                            isSent ? "bg-green-500/15 text-green-300" : "bg-zinc-800 text-zinc-300"
+                            isDone
+                              ? "bg-green-500/15 text-green-300"
+                              : isSent
+                              ? "bg-blue-500/15 text-blue-300"
+                              : "bg-zinc-800 text-zinc-300"
                           }`}
                         >
-                          {isSent ? "Sent" : "Draft"}
+                          {isDone ? "Done" : isSent ? "Sent" : "Draft"}
                         </span>
                       </div>
 

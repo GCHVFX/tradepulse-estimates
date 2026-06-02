@@ -7,6 +7,7 @@ interface ProfileBody {
   email?: unknown;
   logo_url?: unknown;
   prepared_by?: unknown;
+  google_review_link?: unknown;
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const { data, error } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("name, phone, email, logo_url, prepared_by, subscription_status, trial_ends_at")
+    .select("name, phone, email, logo_url, prepared_by, google_review_link, subscription_status, trial_ends_at")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -37,6 +38,10 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     return applyTo(NextResponse.json({ error: "Invalid request body" }, { status: 400 }));
   }
 
+  const googleReviewLink = typeof body.google_review_link === "string"
+    ? body.google_review_link.trim() || null
+    : null;
+
   const { error } = await supabaseAdmin
     .from("tpe_businesses")
     .upsert(
@@ -47,6 +52,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         email: typeof body.email === "string" ? body.email.trim() : "",
         logo_url: typeof body.logo_url === "string" ? body.logo_url.trim() : "",
         prepared_by: typeof body.prepared_by === "string" ? body.prepared_by.trim() : "",
+        google_review_link: googleReviewLink,
       },
       { onConflict: "user_id" }
     );

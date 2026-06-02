@@ -32,13 +32,15 @@ export default async function EstimatePage({
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("logo_url, name, email")
+    .select("logo_url, name, email, plan, google_review_link")
     .eq("user_id", user.id)
     .maybeSingle();
 
   const logoUrl = business?.logo_url ?? null;
   const businessName = business?.name ?? "";
   const businessEmail = business?.email ?? "";
+  const isPro = business?.plan === "pro";
+  const googleReviewLink = business?.google_review_link ?? null;
 
   return (
     <div className="min-h-dvh bg-zinc-950 text-white flex flex-col">
@@ -88,10 +90,13 @@ export default async function EstimatePage({
         estimateId={estimate.id}
         title={estimate.title ?? ""}
         summary={estimate.summary ?? ""}
+        status={estimate.status}
         customerPhone={estimate.customer_phone ?? ""}
         customerEmail={estimate.customer_email ?? ""}
         businessName={businessName}
         logoUrl={logoUrl}
+        isPro={isPro}
+        googleReviewLink={googleReviewLink}
       />
 
       <div className="fixed bottom-0 left-0 right-0 z-40">
