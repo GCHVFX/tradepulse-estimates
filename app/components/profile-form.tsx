@@ -50,12 +50,12 @@ export function ProfileForm({
   const [findCity, setFindCity] = useState("");
   const [findLoading, setFindLoading] = useState(false);
   const [findError, setFindError] = useState("");
-  const [findResult, setFindResult] = useState<{
+  const [findResults, setFindResults] = useState<Array<{
     placeName: string;
     formattedAddress: string;
     placeId: string;
     reviewLink: string;
-  } | null>(null);
+  }> | null>(null);
   const [copied, setCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -214,7 +214,7 @@ export function ProfileForm({
   async function handleFindBusiness() {
     setFindLoading(true);
     setFindError("");
-    setFindResult(null);
+    setFindResults(null);
     try {
       const res = await fetch("/api/profile/find-review-link", {
         method: "POST",
@@ -223,21 +223,18 @@ export function ProfileForm({
       });
       const data = await res.json() as {
         error?: string;
-        placeName?: string;
-        formattedAddress?: string;
-        placeId?: string;
-        reviewLink?: string;
+        matches?: Array<{
+          placeName: string;
+          formattedAddress: string;
+          placeId: string;
+          reviewLink: string;
+        }>;
       };
       if (!res.ok) {
         setFindError(data.error ?? `Error ${res.status}`);
         return;
       }
-      setFindResult({
-        placeName: data.placeName ?? "",
-        formattedAddress: data.formattedAddress ?? "",
-        placeId: data.placeId ?? "",
-        reviewLink: data.reviewLink ?? "",
-      });
+      setFindResults(data.matches ?? []);
     } catch {
       setFindError("Something went wrong. Try again.");
     } finally {
@@ -402,7 +399,7 @@ export function ProfileForm({
                 setFindBusinessName(name);
                 setFindCity("");
                 setFindError("");
-                setFindResult(null);
+                setFindResults(null);
                 setShowFindLinkSheet(true);
               }}
               className="text-xs text-amber-400 hover:text-amber-300 transition-colors min-h-[32px] font-medium"
@@ -604,20 +601,24 @@ export function ProfileForm({
                 {findError}
               </div>
             )}
-            {findResult && (
-              <div className="bg-zinc-800 rounded-xl px-4 py-3.5 flex flex-col gap-2">
-                <p className="text-white text-sm font-medium">{findResult.placeName}</p>
-                <p className="text-zinc-500 text-xs">{findResult.formattedAddress}</p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setGoogleReviewLink(findResult.reviewLink);
-                    setShowFindLinkSheet(false);
-                  }}
-                  className="mt-1 w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950 font-bold text-sm rounded-xl py-3 transition-colors min-h-[44px]"
-                >
-                  Use This Review Link
-                </button>
+            {findResults && findResults.length > 0 && (
+              <div className="flex flex-col gap-3">
+                {findResults.map((match) => (
+                  <div key={match.placeId} className="bg-zinc-800 rounded-xl px-4 py-3.5 flex flex-col gap-2">
+                    <p className="text-white text-sm font-medium">{match.placeName}</p>
+                    <p className="text-zinc-500 text-xs">{match.formattedAddress}</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGoogleReviewLink(match.reviewLink);
+                        setShowFindLinkSheet(false);
+                      }}
+                      className="mt-1 w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950 font-bold text-sm rounded-xl py-3 transition-colors min-h-[44px]"
+                    >
+                      Use This Business
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
             <button

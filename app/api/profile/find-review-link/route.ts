@@ -2,6 +2,43 @@ import { NextRequest, NextResponse } from "next/server";
 import { createApiClient } from "@/lib/supabase-server";
 import { validateContentType } from "@/lib/api-utils";
 
+interface PlaceMatch {
+  placeName: string;
+  formattedAddress: string;
+  placeId: string;
+  reviewLink: string;
+}
+
+interface PlacesApiPlace {
+  id: string;
+  displayName: { text: string; languageCode: string };
+  formattedAddress: string;
+}
+
+async function searchPlaces(query: string, apiKey: string): Promise<PlaceMatch[]> {
+  const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Goog-Api-Key": apiKey,
+      "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress",
+    },
+    body: JSON.stringify({ textQuery: query, maxResultCount: 3 }),
+  });
+
+  if (!res.ok) return [];
+
+  const data = await res.json() as { places?: PlacesApiPlace[] };
+  console.log("[find-review-link] query:", query, "| response:", JSON.stringify(data));
+
+  return (data.places ?? []).map((p) => ({
+    placeName: p.displayName.text,
+    formattedAddress: p.formattedAddress,
+    placeId: p.id,
+    reviewLink: `https://search.google.com/local/writereview?placeid=${p.id}`,
+  }));
+}
+
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const { supabase, applyTo } = createApiClient(request);
   const { data: { user } } = await supabase.auth.getUser();
@@ -31,37 +68,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return applyTo(NextResponse.json({ error: "Google Places API is not configured" }, { status: 503 }));
   }
 
-  const query = `${businessName.trim()} ${city.trim()}`;
-  const placesUrl = `https://maps.googleapis.com/maps/api/place/findplacefromtext/json?input=${encodeURIComponent(query)}&inputtype=textquery&fields=place_id,name,formatted_address&key=${apiKey}`;
+  const name = businessName.trim();
+  const cityStr = city.trim();
 
   try {
-    const res = await fetch(placesUrl);
-    if (!res.ok) {
-      return applyTo(NextResponse.json({ error: "Places API request failed" }, { status: 502 }));
-    }
+    let matches = await searchPlaces(`${name} ${cityStr} BC Canada`, apiKey);
+    if (!matches.length) matches = await searchPlaces(name, apiKey);
+    if (!matches.length) matches = await searchPlaces(`${name} ${cityStr}`, apiKey);
 
-    const data = await res.json() as {
-      status: string;
-      candidates?: Array<{
-        place_id: string;
-        name: string;
-        formatted_address: string;
-      }>;
-    };
-
-    if (data.status !== "OK" || !data.candidates?.length) {
+    if (!matches.length) {
       return applyTo(NextResponse.json({ error: "No matching business found." }, { status: 404 }));
     }
 
-    const place = data.candidates[0];
-    const reviewLink = `https://search.google.com/local/writereview?placeid=${place.place_id}`;
-
-    return applyTo(NextResponse.json({
-      placeName: place.name,
-      formattedAddress: place.formatted_address,
-      placeId: place.place_id,
-      reviewLink,
-    }));
+    return applyTo(NextResponse.json({ matches }));
   } catch (err) {
     const message = err instanceof Error ? err.message : "Search failed";
     return applyTo(NextResponse.json({ error: message }, { status: 500 }));
