@@ -288,10 +288,10 @@ function FormView({
 
       <main className="flex-1 px-5 pb-52 flex flex-col gap-5">
         <div className="flex flex-col gap-2">
-          <p className="text-xs text-zinc-500">Describe the job.</p>
+          <p className="text-xs text-zinc-300">Describe the job.</p>
           <textarea
             ref={textareaRef}
-            className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3.5 text-white placeholder-zinc-500 text-base leading-relaxed resize-none focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-40"
+            className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3.5 text-white placeholder-zinc-400 text-base leading-relaxed resize-none focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-40"
             placeholder={placeholders[placeholderIndex]}
             rows={6}
             value={jobDescription}
@@ -300,7 +300,7 @@ function FormView({
           />
           {isFirstTime && (
             <div className="flex flex-col gap-1.5 mt-1">
-              <p className="text-xs text-zinc-600">Try:</p>
+              <p className="text-xs text-zinc-300">Try:</p>
               <div className="flex flex-wrap gap-1.5">
                 {EXAMPLE_CHIPS.map((chip) => (
                   <button
@@ -316,7 +316,7 @@ function FormView({
                         }
                       });
                     }}
-                    className="inline-flex items-center rounded-full border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-[11px] font-medium text-zinc-400 hover:border-zinc-600 hover:text-zinc-300 transition-colors"
+                    className="inline-flex items-center rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-sm font-medium text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors"
                   >
                     {chip.label}
                   </button>
