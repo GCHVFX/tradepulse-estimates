@@ -18,7 +18,7 @@ export default async function ProfilePage({
 
   const { data } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("name, phone, email, logo_url, prepared_by, google_review_link, subscription_status, trial_ends_at")
+    .select("name, phone, email, logo_url, prepared_by, google_review_link, subscription_status, trial_ends_at, plan")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -65,6 +65,7 @@ export default async function ProfilePage({
           nextPath={nextPath}
           subscriptionStatus={data?.subscription_status ?? "trial"}
           trialEndsAt={data?.trial_ends_at ?? null}
+          plan={data?.plan ?? "starter"}
         />
       </main>
 

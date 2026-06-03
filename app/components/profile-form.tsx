@@ -24,12 +24,14 @@ export function ProfileForm({
   nextPath,
   subscriptionStatus,
   trialEndsAt,
+  plan,
 }: {
   profile: Profile;
   userId: string;
   nextPath?: string | null;
   subscriptionStatus?: string;
   trialEndsAt?: string | null;
+  plan?: string;
 }) {
   const router = useRouter();
   const [name, setName] = useState(profile.name);
@@ -355,6 +357,13 @@ export function ProfileForm({
     }
   }
 
+  const billingDaysLeft = trialEndsAt
+    ? Math.max(0, Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+    : 0;
+  const trialEndFormatted = trialEndsAt
+    ? new Date(trialEndsAt).toLocaleDateString("en-CA", { month: "long", day: "numeric", year: "numeric" })
+    : null;
+
   return (
     <>
       <div className="flex flex-col gap-4">
@@ -481,7 +490,8 @@ export function ProfileForm({
           />
         </div>
 
-        {/* Google Reviews */}
+        {/* Google Reviews — Pro only */}
+        {plan === "pro" && (
         <div className="flex flex-col gap-2">
           <label className="text-sm font-medium text-zinc-400">Google Reviews</label>
 
@@ -575,6 +585,7 @@ export function ProfileForm({
             </div>
           )}
         </div>
+        )}
 
         {status === "error" && errorMsg && (
           <div className="bg-red-950 border border-red-800 rounded-xl px-4 py-3 text-red-300 text-sm">
@@ -666,23 +677,28 @@ export function ProfileForm({
           Sign out
         </button>
 
-        {subscriptionStatus === "trial" && trialEndsAt && (() => {
-          const daysLeft = Math.max(0, Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
-          const urgent = daysLeft <= 3;
-          const message = daysLeft === 0
-            ? "Your free trial ends today."
-            : `${daysLeft} day${daysLeft === 1 ? "" : "s"} left in your free trial.`;
-          return urgent ? (
-            <p className="text-xs text-amber-500 text-center">
-              {message}{" "}
-              <a href="/subscribe" className="font-semibold underline hover:text-amber-400 transition-colors">
-                Subscribe now
+        {subscriptionStatus === "trial" && (
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-4 flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-white">Free Trial</p>
+              {trialEndsAt && (
+                <span className={`text-xs font-medium ${billingDaysLeft <= 3 ? "text-amber-400" : "text-zinc-400"}`}>
+                  {billingDaysLeft} {billingDaysLeft === 1 ? "day" : "days"} remaining
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-zinc-400">TradePulse Estimates</p>
+            <p className="text-xs text-zinc-400">$39/month after your trial ends</p>
+            {trialEndFormatted && (
+              <p className="text-xs text-zinc-500 mt-0.5">Your trial ends on {trialEndFormatted}.</p>
+            )}
+            {billingDaysLeft <= 3 && (
+              <a href="/subscribe" className="mt-1 text-xs font-semibold text-amber-400 hover:text-amber-300 transition-colors">
+                Subscribe now to keep access
               </a>
-            </p>
-          ) : (
-            <p className="text-xs text-zinc-400 text-center">{message}</p>
-          );
-        })()}
+            )}
+          </div>
+        )}
 
         <form action="/api/billing/portal" method="POST">
           <button
