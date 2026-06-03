@@ -54,7 +54,13 @@ export default async function SubscribePage({ searchParams }: { searchParams: Pr
             <span className="text-4xl font-bold">$39</span>
             <span className="text-zinc-500 mb-1">/month</span>
           </div>
-          <p className="text-zinc-500 text-sm mb-6">Cancel anytime from your profile.</p>
+          <p className="text-zinc-500 text-sm mb-4">Cancel anytime from your profile.</p>
+
+          <div className="bg-zinc-800/50 rounded-xl px-4 py-3 mb-6">
+            <p className="text-zinc-300 text-sm leading-relaxed">
+              Most contractors spend 30–60 minutes creating an estimate. TradePulse helps create professional estimates in seconds.
+            </p>
+          </div>
 
           <ul className="space-y-2.5 mb-6">
             {[
@@ -91,44 +97,6 @@ export default async function SubscribePage({ searchParams }: { searchParams: Pr
               </button>
             </form>
           )}
-        </div>
-
-        <div className="mt-4 mb-4">
-          <h2 className="text-zinc-300 font-semibold text-sm mb-3 px-1">Coming Soon in Pro</h2>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 mb-3">
-            <ul className="space-y-2.5">
-              {[
-                "Google Review Requests",
-                "Payment Reminders",
-                "Customer Follow-Ups",
-              ].map(feature => (
-                <li key={feature} className="flex items-center gap-3 text-sm text-zinc-300">
-                  <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4 text-emerald-500 shrink-0" aria-hidden="true">
-                    <path d="M3 8l3.5 3.5 6.5-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  {feature}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="rounded-2xl border border-amber-500/30 bg-amber-950/30 p-5">
-            <p className="text-amber-400 font-semibold text-sm mb-2">Lock In Founding Member Pricing</p>
-            <p className="text-zinc-300 text-sm mb-4">Subscribe today and become a founding member.</p>
-            <p className="text-zinc-400 text-sm leading-relaxed mb-5">
-              When TradePulse Pro launches, founding members can upgrade and lock in Pro for $59/month for as long as their subscription remains active.
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-zinc-900/60 rounded-xl px-4 py-3">
-                <p className="text-zinc-500 text-xs mb-1">Expected Pro Price</p>
-                <p className="text-zinc-400 text-lg font-semibold line-through decoration-zinc-500">$69<span className="text-sm font-normal">/month</span></p>
-              </div>
-              <div className="bg-zinc-900/60 rounded-xl px-4 py-3">
-                <p className="text-amber-400 text-xs mb-1">Founding Member Price</p>
-                <p className="text-white text-lg font-bold">$59<span className="text-sm font-normal">/month</span></p>
-              </div>
-            </div>
-          </div>
         </div>
 
         <p className="text-center text-zinc-600 text-xs">

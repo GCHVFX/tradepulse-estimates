@@ -87,7 +87,7 @@ export function MarkJobDoneSheet({
       onDone();
 
       if (!isPro) {
-        setPanel("upgrade");
+        onClose();
       } else if (googleReviewLink) {
         setMessageBody(defaultReviewMessage);
         setPanel("review-ready");
@@ -388,9 +388,12 @@ export function MarkJobDoneSheet({
 
         {panel === "needs-link" && (
           <div className="px-5 pb-10 pt-2 flex flex-col gap-4">
-            <p className="text-zinc-400 text-sm leading-relaxed">
-              Add your Google Review Link in Profile to send review requests after completing jobs.
-            </p>
+            <div>
+              <p className="text-white font-semibold text-sm mb-1">Google review link missing</p>
+              <p className="text-zinc-400 text-sm leading-relaxed">
+                Add your Google review link in Profile before sending review requests.
+              </p>
+            </div>
             <a
               href="/profile"
               className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px] flex items-center justify-center"
@@ -402,7 +405,7 @@ export function MarkJobDoneSheet({
               onClick={onClose}
               className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px]"
             >
-              Done
+              Skip
             </button>
           </div>
         )}

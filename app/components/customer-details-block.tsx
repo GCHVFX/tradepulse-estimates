@@ -177,14 +177,14 @@ export function CustomerDetailsBlock({
           <input
             type="email"
             className={inputClass}
-            placeholder="customer@example.com"
+            placeholder="Email (optional)"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
           <input
             type="text"
             className={inputClass}
-            placeholder="Job address"
+            placeholder="Job address (optional)"
             value={address}
             onChange={(e) => setAddress(e.target.value)}
           />

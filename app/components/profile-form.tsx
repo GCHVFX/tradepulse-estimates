@@ -586,7 +586,11 @@ export function ProfileForm({
           type="button"
           onClick={handleSave}
           disabled={status === "saving"}
-          className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px] flex items-center justify-center gap-2"
+          className={`w-full disabled:opacity-40 disabled:cursor-not-allowed font-bold text-base rounded-xl py-4 transition-colors min-h-[56px] flex items-center justify-center gap-2 ${
+            status === "idle" && !isDirty
+              ? "bg-zinc-800 hover:bg-zinc-700 text-zinc-300"
+              : "bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950"
+          }`}
         >
           {status === "saving" ? (
             <>

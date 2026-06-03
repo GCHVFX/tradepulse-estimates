@@ -88,9 +88,9 @@ export default async function EstimatesPage() {
                           className="text-zinc-400 text-xs"
                         />
                         <span
-                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                             isDone
-                              ? "bg-green-500/15 text-green-300"
+                              ? "bg-green-500/10 text-green-500/70"
                               : isSent
                               ? "bg-blue-500/15 text-blue-300"
                               : "bg-zinc-800 text-zinc-300"

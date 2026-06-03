@@ -25,6 +25,12 @@ const PREFILLS: Record<string, string> = {
   "leak-repair": "Locate and repair pipe leak under kitchen sink, replace shutoff valves, check surrounding connections.",
 };
 
+const EXAMPLE_CHIPS = [
+  { label: "Water Heater Replacement", text: "Replace 50-gallon gas water heater. New unit, expansion tank, about 3 hours labour." },
+  { label: "Lawn Mowing Service", text: "Mow front and back lawn, trim edges and curb, blow off driveway, about 2 hours." },
+  { label: "Electrical Panel Upgrade", text: "Upgrade 100A panel to 200A. Pull permit, new Square D panel, reconnect all circuits, about 6 hours." },
+] as const;
+
 const jobPlaceholders = [
   "Replace hot water tank in basement",
   "Install 200 amp electrical panel",
@@ -270,6 +276,8 @@ function FormView({
   onGenerate,
   onViewEstimate,
 }: FormViewProps) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
   return (
     <div className="min-h-dvh bg-zinc-950 text-white flex flex-col">
       <header className="px-5 pt-10 pb-6 shrink-0">
@@ -277,13 +285,40 @@ function FormView({
       </header>
 
       <main className="flex-1 px-5 pb-52 flex flex-col gap-5">
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-3">
           {isFirstTime && (
-            <p className="text-sm text-zinc-400 mb-2">
-              Try it now. Describe any job, real or made up.
-            </p>
+            <div className="flex flex-col gap-1">
+              <p className="text-sm text-zinc-400">
+                Try it now. Describe any job, real or made up.
+              </p>
+              <p className="text-xs text-zinc-500">
+                Or tap an example below to get started.
+              </p>
+            </div>
           )}
+          <div className="flex flex-wrap gap-2">
+            {EXAMPLE_CHIPS.map((chip) => (
+              <button
+                key={chip.label}
+                type="button"
+                onClick={() => {
+                  setJobDescription(chip.text);
+                  requestAnimationFrame(() => {
+                    const el = textareaRef.current;
+                    if (el) {
+                      el.focus();
+                      el.setSelectionRange(chip.text.length, chip.text.length);
+                    }
+                  });
+                }}
+                className="inline-flex items-center rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors"
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
           <textarea
+            ref={textareaRef}
             className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3.5 text-white placeholder-zinc-500 text-base leading-relaxed resize-none focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-40"
             placeholder={placeholders[placeholderIndex]}
             rows={6}
@@ -291,9 +326,6 @@ function FormView({
             onChange={(e) => setJobDescription(e.target.value)}
             autoFocus
           />
-          <p className="text-xs text-zinc-400">
-            A sentence or two is enough. The more detail you give, the better the estimate.
-          </p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -332,7 +364,7 @@ function FormView({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-zinc-400">Email</label>
+            <label className="text-sm font-medium text-zinc-400">Email <span className="font-normal text-zinc-600 text-xs">(Optional)</span></label>
             <input
               type="email"
               className={inputClass}
@@ -346,7 +378,7 @@ function FormView({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-zinc-400">Job address</label>
+            <label className="text-sm font-medium text-zinc-400">Job address <span className="font-normal text-zinc-600 text-xs">(Optional)</span></label>
             <input
               type="text"
               className={inputClass}

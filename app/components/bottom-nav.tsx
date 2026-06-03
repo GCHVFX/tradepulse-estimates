@@ -25,7 +25,7 @@ export function BottomNav({ onNewClick }: BottomNavProps = {}) {
         type="button"
         onClick={handleNew}
         className={`flex-1 flex flex-col items-center gap-1 pt-2.5 pb-7 min-h-[44px] transition-colors ${
-          pathname === "/new" ? "text-amber-500" : "text-zinc-400 hover:text-zinc-200"
+          pathname === "/new" ? "text-amber-500" : "text-zinc-300 hover:text-white"
         }`}
       >
         <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5" aria-hidden="true">
@@ -38,7 +38,7 @@ export function BottomNav({ onNewClick }: BottomNavProps = {}) {
       <Link
         href="/estimates"
         className={`flex-1 flex flex-col items-center gap-1 pt-2.5 pb-7 min-h-[44px] transition-colors ${
-          pathname === "/estimates" ? "text-amber-500" : "text-zinc-400 hover:text-zinc-200"
+          pathname === "/estimates" ? "text-amber-500" : "text-zinc-300 hover:text-white"
         }`}
       >
         <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5" aria-hidden="true">
@@ -51,7 +51,7 @@ export function BottomNav({ onNewClick }: BottomNavProps = {}) {
       <Link
         href="/rates"
         className={`flex-1 flex flex-col items-center gap-1 pt-2.5 pb-7 min-h-[44px] transition-colors ${
-          pathname === "/rates" ? "text-amber-500" : "text-zinc-400 hover:text-zinc-200"
+          pathname === "/rates" ? "text-amber-500" : "text-zinc-300 hover:text-white"
         }`}
       >
         <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5" aria-hidden="true">
@@ -64,7 +64,7 @@ export function BottomNav({ onNewClick }: BottomNavProps = {}) {
       <Link
         href="/profile"
         className={`flex-1 flex flex-col items-center gap-1 pt-2.5 pb-7 min-h-[44px] transition-colors ${
-          pathname === "/profile" ? "text-amber-500" : "text-zinc-400 hover:text-zinc-200"
+          pathname === "/profile" ? "text-amber-500" : "text-zinc-300 hover:text-white"
         }`}
       >
         <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5" aria-hidden="true">

@@ -419,14 +419,14 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        {/* What's Coming */}
+        {/* Coming Soon */}
         <section className="py-8 sm:py-10 bg-white border-t border-slate-100">
           <div className="mx-auto max-w-3xl px-6 sm:px-10">
             <div className="text-center mb-5">
-              <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: "#0D1B2E", opacity: 0.4 }}>What&apos;s coming</p>
+              <p className="text-sm font-semibold uppercase tracking-widest mb-2" style={{ color: "#f59e0b" }}>Coming Soon</p>
               <h2 className="text-xl sm:text-2xl font-bold text-slate-900">More ways to keep jobs moving</h2>
               <p className="mt-2 text-sm text-slate-500 max-w-lg mx-auto leading-relaxed">
-                TradePulse is expanding beyond estimates with tools that help contractors collect reviews, follow up on unpaid invoices, and bring past customers back.
+                TradePulse is expanding beyond estimates with tools that help contractors collect reviews, follow up on unpaid invoices, and stay connected with past customers.
               </p>
             </div>
 
@@ -450,9 +450,7 @@ export default async function LandingPage() {
               ))}
             </div>
 
-            <p className="text-center text-xs text-slate-400">
-              Founding members can lock in Pro for $59/month when it launches. Expected Pro price: $69/month.
-            </p>
+            <p className="text-center text-xs text-slate-500">Available in a future TradePulse Pro plan.</p>
           </div>
         </section>
 
