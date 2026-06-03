@@ -419,42 +419,40 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        {/* Founding Member Pricing */}
-        <section className="py-12 sm:py-16" style={{ background: "linear-gradient(180deg, #F8FAFC 0%, #F1F5F9 100%)" }}>
+        {/* What's Coming */}
+        <section className="py-8 sm:py-10 bg-white border-t border-slate-100">
           <div className="mx-auto max-w-3xl px-6 sm:px-10">
-            <div className="text-center mb-8">
-              <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: "#0D1B2E", opacity: 0.4 }}>What&apos;s coming</p>
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Founding Member Pricing</h2>
-              <p className="mt-4 text-lg text-slate-500 max-w-lg mx-auto">
-                Join TradePulse today and lock in preferred pricing when Pro launches.
+            <div className="text-center mb-5">
+              <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: "#0D1B2E", opacity: 0.4 }}>What&apos;s coming</p>
+              <h2 className="text-xl sm:text-2xl font-bold text-slate-900">More ways to keep jobs moving</h2>
+              <p className="mt-2 text-sm text-slate-500 max-w-lg mx-auto leading-relaxed">
+                TradePulse is expanding beyond estimates with tools that help contractors collect reviews, follow up on unpaid invoices, and bring past customers back.
               </p>
             </div>
 
-            <div className="grid sm:grid-cols-3 gap-5 mb-8">
+            <div className="grid sm:grid-cols-3 gap-3 mb-5">
               {[
                 { title: "Google Review Requests", description: "Ask customers for Google reviews after completed jobs." },
-                { title: "Payment Reminders", description: "Automatically follow up on unpaid invoices." },
+                { title: "Payment Reminders", description: "Follow up on unpaid invoices." },
                 { title: "Customer Follow-Ups", description: "Stay connected with past customers and generate repeat business." },
               ].map(item => (
-                <div key={item.title} className="card-lift gradient-border rounded-2xl p-6">
-                  <div className="flex items-start gap-3">
-                    <svg className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <div key={item.title} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5">
+                  <div className="flex items-start gap-2.5">
+                    <svg className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                       <path d="M3 8l3.5 3.5 6.5-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                     <div>
-                      <p className="font-semibold text-slate-900 mb-1">{item.title}</p>
-                      <p className="text-sm text-slate-500 leading-relaxed">{item.description}</p>
+                      <p className="text-sm font-semibold text-slate-800">{item.title}</p>
+                      <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{item.description}</p>
                     </div>
                   </div>
                 </div>
               ))}
             </div>
 
-            <div className="text-center text-sm text-slate-500 space-y-1">
-              <p>Current plan: $39/month.</p>
-              <p>Founding members can upgrade to Pro for $59/month when Pro launches.</p>
-              <p>Future Pro pricing is expected to be $69/month.</p>
-            </div>
+            <p className="text-center text-xs text-slate-400">
+              Founding members can lock in Pro for $59/month when it launches. Expected Pro price: $69/month.
+            </p>
           </div>
         </section>
 
