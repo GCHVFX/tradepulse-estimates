@@ -287,33 +287,21 @@ function FormView({
       </header>
 
       <main className="flex-1 px-5 pb-52 flex flex-col gap-5">
-        {needsProfileSetup && (
-          <div className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 flex items-center justify-between gap-3">
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white">Complete your profile</p>
-              <p className="text-xs text-zinc-400 mt-0.5">Add your business details so your estimates look professional.</p>
-            </div>
-            <Link
-              href="/profile"
-              className="shrink-0 text-xs font-semibold text-amber-400 hover:text-amber-300 transition-colors min-h-[44px] flex items-center"
-            >
-              Open Profile
-            </Link>
-          </div>
-        )}
-
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2">
+          <p className="text-xs text-zinc-500">Describe the job.</p>
+          <textarea
+            ref={textareaRef}
+            className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3.5 text-white placeholder-zinc-500 text-base leading-relaxed resize-none focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-40"
+            placeholder={placeholders[placeholderIndex]}
+            rows={6}
+            value={jobDescription}
+            onChange={(e) => setJobDescription(e.target.value)}
+            autoFocus
+          />
           {isFirstTime && (
-            <>
-              <div className="flex flex-col gap-1">
-                <p className="text-sm text-zinc-400">
-                  Try it now. Describe any job, real or made up.
-                </p>
-                <p className="text-xs text-zinc-500">
-                  Or tap an example below to get started.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
+            <div className="flex flex-col gap-1.5 mt-1">
+              <p className="text-xs text-zinc-600">Try:</p>
+              <div className="flex flex-wrap gap-1.5">
                 {EXAMPLE_CHIPS.map((chip) => (
                   <button
                     key={chip.label}
@@ -328,24 +316,43 @@ function FormView({
                         }
                       });
                     }}
-                    className="inline-flex items-center rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors"
+                    className="inline-flex items-center rounded-full border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-[11px] font-medium text-zinc-400 hover:border-zinc-600 hover:text-zinc-300 transition-colors"
                   >
                     {chip.label}
                   </button>
                 ))}
               </div>
-            </>
+            </div>
           )}
-          <textarea
-            ref={textareaRef}
-            className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3.5 text-white placeholder-zinc-500 text-base leading-relaxed resize-none focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-40"
-            placeholder={placeholders[placeholderIndex]}
-            rows={6}
-            value={jobDescription}
-            onChange={(e) => setJobDescription(e.target.value)}
-            autoFocus
-          />
         </div>
+
+        {error && (
+          <p className="text-red-400 text-sm">{error}</p>
+        )}
+
+        <button
+          type="button"
+          disabled={!jobDescription.trim()}
+          onClick={onGenerate}
+          className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+        >
+          {saved ? "Regenerate Estimate" : "Generate Estimate"}
+        </button>
+
+        {needsProfileSetup && (
+          <div className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 flex items-center justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-white">Complete your profile</p>
+              <p className="text-xs text-zinc-400 mt-0.5">Add your business details so your estimates look professional.</p>
+            </div>
+            <Link
+              href="/profile"
+              className="shrink-0 text-xs font-semibold text-amber-400 hover:text-amber-300 transition-colors min-h-[44px] flex items-center"
+            >
+              Open Profile
+            </Link>
+          </div>
+        )}
 
         <div className="flex items-center gap-3">
           <div className="h-px flex-1 bg-zinc-800" />
@@ -446,8 +453,8 @@ function FormView({
       </main>
 
       <div className="fixed bottom-0 left-0 right-0">
-        <div className="px-5 pt-4 pb-3 bg-zinc-950 border-t border-zinc-800 flex flex-col gap-3">
-          {saved && (
+        {saved && (
+          <div className="px-5 pt-4 pb-3 bg-zinc-950 border-t border-zinc-800">
             <button
               type="button"
               onClick={onViewEstimate}
@@ -455,19 +462,8 @@ function FormView({
             >
               Back to Estimate
             </button>
-          )}
-          {error && (
-            <p className="text-red-400 text-sm text-center">{error}</p>
-          )}
-          <button
-            type="button"
-            disabled={!jobDescription.trim()}
-            onClick={onGenerate}
-            className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
-          >
-            {saved ? "Regenerate Estimate" : "Generate Estimate"}
-          </button>
-        </div>
+          </div>
+        )}
         <BottomNav />
       </div>
     </div>
