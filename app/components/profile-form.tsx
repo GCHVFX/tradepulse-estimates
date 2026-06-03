@@ -42,6 +42,7 @@ export function ProfileForm({
   const [deleting, setDeleting] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [status, setStatus] = useState<SaveStatus>("idle");
+  const [isDirty, setIsDirty] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [showReviewLinkHelp, setShowReviewLinkHelp] = useState(false);
@@ -61,11 +62,19 @@ export function ProfileForm({
   const [connectedBusinessName, setConnectedBusinessName] = useState("");
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [reviewLinkSaveError, setReviewLinkSaveError] = useState("");
+  const [reviewLinkAdded, setReviewLinkAdded] = useState(false);
   const [copied, setCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  const referralUrl = `https://trytradepulse.com/signup?ref=${userId}`;
+  // Auto-save refs
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasMountedRef = useRef(false);
+  const savedReviewLinkRef = useRef(profile.google_review_link);
+  const logoUrlRef = useRef(logoUrl);
+  logoUrlRef.current = logoUrl;
+
+  const referralUrl = `https://trytradepulse.com`;
 
   const inputClass =
     "w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3.5 text-white placeholder-zinc-600 text-base focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]";
@@ -77,6 +86,59 @@ export function ProfileForm({
       color: { dark: "#f59e0b", light: "#09090b" },
     }).catch(console.error);
   }, [modalOpen]);
+
+  // Auto-save when text fields change
+  useEffect(() => {
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      return;
+    }
+    setIsDirty(true);
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(async () => {
+      autoSaveTimerRef.current = null;
+      setIsDirty(false);
+
+      // Resolve review link — don't save empty/invalid over a valid saved one
+      let linkToSave = googleReviewLink.trim();
+      if (linkToSave && !linkToSave.includes("writereview")) {
+        const converted = tryConvertToReviewLink(linkToSave);
+        if (converted) {
+          linkToSave = converted;
+        } else {
+          linkToSave = savedReviewLinkRef.current;
+        }
+      }
+      if (!linkToSave && savedReviewLinkRef.current) {
+        linkToSave = savedReviewLinkRef.current;
+      }
+
+      setStatus("saving");
+      try {
+        const res = await fetch("/api/profile", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name,
+            phone,
+            email,
+            logo_url: logoUrlRef.current,
+            prepared_by: preparedBy,
+            google_review_link: linkToSave,
+          }),
+        });
+        if (!res.ok) throw new Error("Save failed");
+        savedReviewLinkRef.current = linkToSave;
+        setStatus("saved");
+        setTimeout(() => setStatus("idle"), 3000);
+      } catch {
+        setStatus("error");
+      }
+    }, 1000);
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [name, phone, email, preparedBy, googleReviewLink]);
 
   async function handleCopy() {
     await navigator.clipboard.writeText(referralUrl);
@@ -199,10 +261,18 @@ export function ProfileForm({
     setFindResults(null);
     setFindExtraDetails("");
     setFindWeakMatch(false);
+    setReviewLinkAdded(false);
     setShowFindLinkSheet(true);
   }
 
   async function handleSave() {
+    // Cancel any pending auto-save
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+
+    setIsDirty(false);
     setStatus("saving");
     setErrorMsg("");
     setReviewLinkSaveError("");
@@ -214,8 +284,10 @@ export function ProfileForm({
         linkToSave = converted;
         setGoogleReviewLink(converted);
       } else {
+        setStatus("idle");
         setReviewLinkSaveError("This doesn't look like a review link. Use Find My Review Link for best results.");
         setShowManualEntry(true);
+        return;
       }
     }
 
@@ -223,7 +295,7 @@ export function ProfileForm({
       const res = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phone, email, logo_url: logoUrl, prepared_by: preparedBy, google_review_link: linkToSave }),
+        body: JSON.stringify({ name, phone, email, logo_url: logoUrlRef.current, prepared_by: preparedBy, google_review_link: linkToSave }),
       });
 
       if (!res.ok) {
@@ -233,6 +305,7 @@ export function ProfileForm({
         );
       }
 
+      savedReviewLinkRef.current = linkToSave;
       setStatus("saved");
       if (nextPath) {
         router.push(nextPath);
@@ -335,7 +408,7 @@ export function ProfileForm({
               </button>
             )}
             {!logoUrl && (
-              <p className="text-zinc-500 text-xs text-center leading-tight">PNG or JPG<br />max 2MB</p>
+              <p className="text-zinc-400 text-xs text-center leading-tight">PNG or JPG<br />max 2MB</p>
             )}
           </div>
 
@@ -349,7 +422,7 @@ export function ProfileForm({
               onChange={(e) => setName(e.target.value)}
               autoComplete="organization"
             />
-            <p className="text-zinc-500 text-xs">If your logo includes your company name, you can leave this blank.</p>
+            <p className="text-zinc-400 text-xs">If your logo includes your company name, you can leave this blank.</p>
           </div>
         </div>
 
@@ -376,7 +449,7 @@ export function ProfileForm({
             onChange={(e) => setPreparedBy(e.target.value)}
             autoComplete="name"
           />
-          <p className="text-zinc-500 text-xs">Appears as "Prepared by" on estimates.</p>
+          <p className="text-zinc-400 text-xs">Appears as "Prepared by" on estimates.</p>
         </div>
 
         {/* Phone */}
@@ -425,6 +498,9 @@ export function ProfileForm({
                   )}
                 </div>
               </div>
+              {reviewLinkAdded && (
+                <p className="text-emerald-400 text-xs">Review link added.</p>
+              )}
               <button
                 type="button"
                 onClick={openFinder}
@@ -446,7 +522,7 @@ export function ProfileForm({
           <button
             type="button"
             onClick={() => setShowManualEntry(!showManualEntry)}
-            className="text-xs text-zinc-500 hover:text-zinc-400 transition-colors min-h-[32px] self-start"
+            className="text-xs text-zinc-400 hover:text-zinc-300 transition-colors min-h-[32px] self-start"
           >
             Can&apos;t find your business?
           </button>
@@ -463,6 +539,7 @@ export function ProfileForm({
                   setGoogleReviewLink(e.target.value);
                   setConnectedBusinessName("");
                   setReviewLinkSaveError("");
+                  setReviewLinkAdded(false);
                 }}
                 autoComplete="url"
                 autoCorrect="off"
@@ -475,7 +552,7 @@ export function ProfileForm({
               <button
                 type="button"
                 onClick={() => setShowReviewLinkHelp(!showReviewLinkHelp)}
-                className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300 transition-colors min-h-[32px]"
+                className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-300 transition-colors min-h-[32px]"
               >
                 <svg
                   viewBox="0 0 16 16"
@@ -488,7 +565,7 @@ export function ProfileForm({
                 How do I find it?
               </button>
               {showReviewLinkHelp && (
-                <ol className="ml-1 flex flex-col gap-1 text-xs text-zinc-500 list-decimal list-inside">
+                <ol className="ml-1 flex flex-col gap-1 text-xs text-zinc-400 list-decimal list-inside">
                   <li>Open your Google Business Profile.</li>
                   <li>Click &ldquo;Ask for reviews&rdquo;.</li>
                   <li>Copy the review link.</li>
@@ -519,15 +596,17 @@ export function ProfileForm({
               </svg>
               Saving...
             </>
-          ) : status === "saved" ? (
+          ) : status === "error" ? (
+            "Try Again"
+          ) : isDirty ? (
+            "Save Now"
+          ) : (
             <>
               <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5" aria-hidden="true">
                 <path d="M4 10l4.5 4.5L16 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
               Saved
             </>
-          ) : (
-            "Save Profile"
           )}
         </button>
 
@@ -537,7 +616,7 @@ export function ProfileForm({
         >
           <div>
             <p className="text-sm font-medium text-white">Set your labour rate and markup</p>
-            <p className="text-xs text-zinc-500 mt-0.5">Estimates use your actual numbers when rates are set.</p>
+            <p className="text-xs text-zinc-400 mt-0.5">Estimates use your actual numbers when rates are set.</p>
           </div>
           <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4 text-zinc-600 shrink-0 ml-3" aria-hidden="true">
             <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -563,7 +642,7 @@ export function ProfileForm({
           </svg>
         </button>
 
-        <p className="text-center text-zinc-500 text-sm">
+        <p className="text-center text-zinc-400 text-sm">
           Need help?{" "}
           <a href="mailto:support@trytradepulse.com" className="hover:text-zinc-400 transition-colors">
             support@trytradepulse.com
@@ -597,7 +676,7 @@ export function ProfileForm({
               </a>
             </p>
           ) : (
-            <p className="text-xs text-zinc-500 text-center">{message}</p>
+            <p className="text-xs text-zinc-400 text-center">{message}</p>
           );
         })()}
 
@@ -687,13 +766,14 @@ export function ProfileForm({
                 {findResults.map((match) => (
                   <div key={match.placeId} className="bg-zinc-800 rounded-xl px-4 py-3.5 flex flex-col gap-2">
                     <p className="text-white text-sm font-medium">{match.placeName}</p>
-                    <p className="text-zinc-500 text-xs">{match.formattedAddress}</p>
+                    <p className="text-zinc-400 text-xs">{match.formattedAddress}</p>
                     <button
                       type="button"
                       onClick={() => {
                         const rl = match.reviewLink || `https://search.google.com/local/writereview?placeid=${match.placeId}`;
                         setGoogleReviewLink(rl);
                         setConnectedBusinessName(match.placeName);
+                        setReviewLinkAdded(true);
                         setShowManualEntry(false);
                         setShowFindLinkSheet(false);
                       }}

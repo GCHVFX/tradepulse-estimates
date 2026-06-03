@@ -291,14 +291,14 @@ function FormView({
             onChange={(e) => setJobDescription(e.target.value)}
             autoFocus
           />
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-zinc-400">
             A sentence or two is enough. The more detail you give, the better the estimate.
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           <div className="h-px flex-1 bg-zinc-800" />
-          <p className="text-xs font-semibold text-zinc-500 uppercase tracking-widest">Customer details</p>
+          <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest">Customer details</p>
           <div className="h-px flex-1 bg-zinc-800" />
         </div>
 
@@ -308,7 +308,7 @@ function FormView({
             <input
               type="text"
               className={inputClass}
-              placeholder="Sarah Thompson"
+              placeholder="Michael Turner"
               value={customerName}
               onChange={(e) => {
                 setCustomerName(e.target.value);

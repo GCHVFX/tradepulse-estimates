@@ -77,7 +77,7 @@ if (!hasAccess) return applyTo(NextResponse.json({ error: "Subscription required
   // Verify ownership of estimate
   const { data: estimate } = await supabaseAdmin
     .from("tpe_estimates")
-    .select("id, customer_phone")
+    .select("id, customer_phone, customer_name")
     .eq("id", estimateId)
     .eq("business_id", user.id)
     .maybeSingle();
@@ -100,9 +100,12 @@ if (!hasAccess) return applyTo(NextResponse.json({ error: "Subscription required
 
   const shareUrl = `${origin}/share/${estimateId}`;
 
-  const messageBody = business?.name
-    ? `Your estimate from ${business.name} is ready. View it here: ${shareUrl}`
-    : `Your estimate is ready. View it here: ${shareUrl}`;
+  const customerName = (estimate.customer_name ?? "").trim();
+  const greeting = customerName ? `Hi ${customerName},` : "Hi,";
+  const bizName = business?.name ?? "";
+  const messageBody = bizName
+    ? `${greeting} ${bizName} has sent you an estimate: ${shareUrl}`
+    : `${greeting} your estimate is ready: ${shareUrl}`;
 
   try {
     const client = twilio(

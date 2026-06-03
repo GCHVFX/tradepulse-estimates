@@ -62,7 +62,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // Verify ownership of estimate
   const { data: estimate } = await supabaseAdmin
     .from("tpe_estimates")
-    .select("id")
+    .select("id, customer_name")
     .eq("id", estimateId)
     .eq("business_id", user.id)
     .maybeSingle();
@@ -85,6 +85,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const shareUrl = `${origin}/share/${estimateId}`;
   const businessName = business?.name || "Your contractor";
+  const customerName = (estimate.customer_name ?? "").trim();
+  const greeting = customerName ? `Hi ${customerName},` : "Hi,";
 
   const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -96,7 +98,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       subject: `Your estimate from ${businessName}`,
       html: `
         <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 24px; color: #111;">
-          <p style="font-size: 16px; margin: 0 0 16px;">Hi,</p>
+          <p style="font-size: 16px; margin: 0 0 16px;">${greeting}</p>
           <p style="font-size: 16px; margin: 0 0 24px;">
             ${businessName} has sent you an estimate. Click below to view it.
           </p>

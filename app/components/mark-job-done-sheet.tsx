@@ -44,9 +44,8 @@ export function MarkJobDoneSheet({
   const [messageBody, setMessageBody] = useState("");
 
   const defaultReviewMessage = useMemo(() => {
-    const greeting = customerName ? `Hi ${customerName},` : "Hi,";
-    return `${greeting}\n\nThanks for choosing ${businessName || "us"}. If anything wasn't right, reply to this text and we'll make it right.\n\nIf you have a moment, we'd appreciate a Google review.`;
-  }, [customerName, businessName]);
+    return `Thanks for choosing ${businessName || "us"}. If anything wasn't right, reply to this text and we'll make it right.`;
+  }, [businessName]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -210,7 +209,7 @@ export function MarkJobDoneSheet({
                 </div>
                 <div>
                   <p className="text-white text-sm font-medium">Review Requests</p>
-                  <p className="text-zinc-500 text-xs mt-0.5">Send a Google review request when a job is done.</p>
+                  <p className="text-zinc-400 text-xs mt-0.5">Send a Google review request when a job is done.</p>
                 </div>
               </div>
               <div className="flex items-start gap-3 bg-zinc-800 rounded-xl px-4 py-3.5">
@@ -222,7 +221,7 @@ export function MarkJobDoneSheet({
                 </div>
                 <div>
                   <p className="text-white text-sm font-medium">Payment Reminders</p>
-                  <p className="text-zinc-500 text-xs mt-0.5">Follow up until the invoice is paid.</p>
+                  <p className="text-zinc-400 text-xs mt-0.5">Follow up until the invoice is paid.</p>
                 </div>
               </div>
               <div className="flex items-start gap-3 bg-zinc-800 rounded-xl px-4 py-3.5">
@@ -235,7 +234,7 @@ export function MarkJobDoneSheet({
                 </div>
                 <div>
                   <p className="text-white text-sm font-medium">Follow-Up Reminders</p>
-                  <p className="text-zinc-500 text-xs mt-0.5">Remind past customers to book again.</p>
+                  <p className="text-zinc-400 text-xs mt-0.5">Remind past customers to book again.</p>
                 </div>
               </div>
             </div>
@@ -266,7 +265,7 @@ export function MarkJobDoneSheet({
                   <div>
                     <p className="text-white text-sm font-medium">Review request sent</p>
                     {customerPhone && (
-                      <p className="text-zinc-500 text-xs mt-0.5">Text sent to {customerPhone}</p>
+                      <p className="text-zinc-400 text-xs mt-0.5">Text sent to {customerPhone}</p>
                     )}
                   </div>
                 </div>
@@ -290,8 +289,8 @@ export function MarkJobDoneSheet({
                   rows={4}
                   className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-zinc-300 text-sm leading-relaxed resize-none focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 disabled:opacity-50 min-h-[96px]"
                 />
-                <p className="text-zinc-600 text-xs px-1">Your Google review link will be attached automatically.</p>
-                <p className="text-zinc-600 text-xs px-1">Customers can reply to this text if there&apos;s an issue.</p>
+                <p className="text-zinc-400 text-xs px-1">Your Google review link will be attached automatically.</p>
+                <p className="text-zinc-400 text-xs px-1">Customers can reply to this text if there&apos;s an issue.</p>
                 {reviewError && (
                   <div className="bg-red-950 border border-red-800 rounded-xl px-4 py-3 text-red-300 text-sm">
                     {reviewError}
@@ -321,21 +320,21 @@ export function MarkJobDoneSheet({
                     <path d="M4 10l4.5 4.5L16 6" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                   <div>
-                    <p className="text-white text-sm font-medium">Review request already sent</p>
-                    <p className="text-zinc-500 text-xs mt-0.5">
-                      Sent on{" "}
-                      {new Date(reviewRequestedAt).toLocaleDateString("en-CA", {
-                        month: "long",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
+                    <p className="text-white text-sm font-medium">Review request sent</p>
+                    <p className="text-zinc-400 text-xs mt-0.5">
+                      {(() => {
+                        const d = new Date(reviewRequestedAt);
+                        const date = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                        const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+                        return `${date} at ${time}`;
+                      })()}
                     </p>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setReviewConfirming(true)}
-                  className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+                  className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
                 >
                   Send Again
                 </button>
@@ -350,7 +349,7 @@ export function MarkJobDoneSheet({
             ) : (
               <>
                 <div className="bg-zinc-800 rounded-xl overflow-hidden">
-                  <p className="text-zinc-500 text-xs font-medium uppercase tracking-wide px-4 pt-3 pb-1.5">Message</p>
+                  <p className="text-zinc-400 text-xs font-medium uppercase tracking-wide px-4 pt-3 pb-1.5">Message</p>
                   <textarea
                     value={messageBody}
                     onChange={(e) => setMessageBody(e.target.value)}
@@ -359,8 +358,8 @@ export function MarkJobDoneSheet({
                     className="w-full bg-transparent px-4 pb-3 text-zinc-300 text-sm leading-relaxed resize-none focus:outline-none disabled:opacity-50 min-h-[80px]"
                   />
                 </div>
-                <p className="text-zinc-600 text-xs px-1">Your Google review link will be attached automatically.</p>
-                <p className="text-zinc-600 text-xs px-1">Customers can reply to this text if there&apos;s an issue.</p>
+                <p className="text-zinc-400 text-xs px-1">Your Google review link will be attached automatically.</p>
+                <p className="text-zinc-400 text-xs px-1">Customers can reply to this text if there&apos;s an issue.</p>
                 {reviewError && (
                   <div className="bg-red-950 border border-red-800 rounded-xl px-4 py-3 text-red-300 text-sm">
                     {reviewError}

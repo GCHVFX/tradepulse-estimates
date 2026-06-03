@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import { EstimateMarkdown } from '@/app/components/estimate-markdown';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -220,7 +220,7 @@ function XBtn({ onClick }: { onClick: () => void }) {
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="text-base font-bold text-zinc-900 mt-6 mb-2 uppercase tracking-wide">
+    <h2 className="text-base font-bold text-zinc-900 mt-6 mb-2 uppercase tracking-wide border-l-[3px] border-amber-500 pl-2.5">
       {children}
     </h2>
   );
@@ -249,6 +249,16 @@ export function EditableEstimateBody({
   const [showAddItem, setShowAddItem] = useState(false);
   const [newLabel, setNewLabel] = useState('');
   const [newCost, setNewCost] = useState('');
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+
+  // Leave-page warning when a save is pending
+  useEffect(() => {
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      if (timerRef.current !== null) e.preventDefault();
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
 
   const subtotal = lineItems.reduce((sum, i) => sum + parseCost(i.cost), 0);
   const tax = Math.round(subtotal * 0.05);
@@ -262,7 +272,8 @@ export function EditableEstimateBody({
     nextBefore: BeforeSection[],
   ) {
     if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
+    timerRef.current = setTimeout(async () => {
+      timerRef.current = null;
       setToastVisible(false);
       setUndo(null);
       const newSummary = serializeSummary(
@@ -273,11 +284,19 @@ export function EditableEstimateBody({
         nextBefore,
         afterPricingSections,
       );
-      fetch('/api/estimates', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: estimateId, summary: newSummary }),
-      });
+      setSaveStatus('saving');
+      try {
+        const res = await fetch('/api/estimates', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: estimateId, summary: newSummary }),
+        });
+        if (!res.ok) throw new Error('Save failed');
+        setSaveStatus('saved');
+        setTimeout(() => setSaveStatus('idle'), 2000);
+      } catch {
+        setSaveStatus('error');
+      }
     }, 4000);
   }
 
@@ -540,6 +559,13 @@ export function EditableEstimateBody({
           <EstimateMarkdown content={s.content} />
         </div>
       ))}
+
+      {/* Save status */}
+      {saveStatus !== 'idle' && (
+        <p className={`text-xs mt-1 mb-2 ${saveStatus === 'error' ? 'text-red-500' : 'text-zinc-400'}`}>
+          {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved' : 'Could not save'}
+        </p>
+      )}
 
       {/* Toast */}
       {toastVisible && (

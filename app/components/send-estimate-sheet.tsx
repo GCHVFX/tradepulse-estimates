@@ -224,7 +224,7 @@ export function SendEstimateSheet({
               </span>
               <div className="flex-1 min-w-0">
                 <p className="text-white font-medium text-sm">Send via SMS</p>
-                <p className="text-zinc-500 text-xs mt-0.5">Text a link to the estimate</p>
+                <p className="text-zinc-400 text-xs mt-0.5">Text a link to the estimate</p>
               </div>
               <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4 text-zinc-600 shrink-0" aria-hidden="true">
                 <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -244,7 +244,7 @@ export function SendEstimateSheet({
               </span>
               <div className="flex-1 min-w-0">
                 <p className="text-white font-medium text-sm">Send via Email</p>
-                <p className="text-zinc-500 text-xs mt-0.5">Email a link to the estimate</p>
+                <p className="text-zinc-400 text-xs mt-0.5">Email a link to the estimate</p>
               </div>
               <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4 text-zinc-600 shrink-0" aria-hidden="true">
                 <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -272,7 +272,7 @@ export function SendEstimateSheet({
                 <p className={`font-medium text-sm ${copied ? "text-green-400" : "text-white"}`}>
                   {copied ? "Copied!" : "Copy Link"}
                 </p>
-                <p className="text-zinc-500 text-xs mt-0.5">Share a link to this estimate</p>
+                <p className="text-zinc-400 text-xs mt-0.5">Share a link to this estimate</p>
               </div>
             </button>
 
@@ -328,7 +328,7 @@ export function SendEstimateSheet({
                 </div>
                 <div className="text-center">
                   <p className="text-white font-semibold text-base">Estimate sent</p>
-                  <p className="text-zinc-500 text-sm mt-1">Link sent to {phone}</p>
+                  <p className="text-zinc-400 text-sm mt-1">Link sent to {phone}</p>
                 </div>
                 <button
                   type="button"
@@ -390,7 +390,7 @@ export function SendEstimateSheet({
                 </div>
                 <div className="text-center">
                   <p className="text-white font-semibold text-base">Estimate sent</p>
-                  <p className="text-zinc-500 text-sm mt-1">Email sent to {email}</p>
+                  <p className="text-zinc-400 text-sm mt-1">Email sent to {email}</p>
                 </div>
                 <button
                   type="button"

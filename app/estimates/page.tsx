@@ -56,7 +56,7 @@ export default async function EstimatesPage() {
               <rect x="8" y="6" width="32" height="36" rx="3" stroke="currentColor" strokeWidth="2" />
               <path d="M16 16h16M16 22h16M16 28h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
-            <p className="text-zinc-500 text-sm">No estimates yet.</p>
+            <p className="text-zinc-400 text-sm">No estimates yet.</p>
             <Link
               href="/new"
               className="mt-1 bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950 font-bold text-sm rounded-xl px-6 py-3 transition-colors min-h-[44px] flex items-center"
@@ -76,7 +76,7 @@ export default async function EstimatesPage() {
                     <Link href={`/estimates/${estimate.id}`} className="flex-1 px-4 py-4 min-w-0">
                       <span className="text-white font-medium text-sm leading-snug block truncate">{estimate.title}</span>
                       {(estimate.customer_name || estimate.customer_address) && (
-                        <span className="text-zinc-500 text-xs mt-0.5 block truncate">
+                        <span className="text-zinc-400 text-xs mt-0.5 block truncate">
                           {[estimate.customer_name, estimate.customer_address].filter(Boolean).join(" · ")}
                         </span>
                       )}
@@ -85,7 +85,7 @@ export default async function EstimatesPage() {
                         <LocalDateText
                           dateStr={estimate.created_at}
                           prefix="Created"
-                          className="text-zinc-500 text-xs"
+                          className="text-zinc-400 text-xs"
                         />
                         <span
                           className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${

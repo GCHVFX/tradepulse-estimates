@@ -60,30 +60,42 @@ export function EstimateActions({
               <span className="text-green-400 font-semibold text-base">Job Done</span>
             </div>
             {isPro && googleReviewLink && (
-              <div className="flex items-center justify-between px-1">
-                <span className="text-zinc-500 text-xs">
-                  {localReviewRequestedAt ? "Review request sent" : "No review request sent"}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDoneSheetInitialPanel("review-ready");
-                    setShowDoneSheet(true);
-                  }}
-                  className="text-amber-400 text-xs font-semibold hover:text-amber-300 transition-colors min-h-[32px] px-1"
-                >
-                  {localReviewRequestedAt ? "Send again" : "Send review request"}
-                </button>
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3">
+                {localReviewRequestedAt ? (
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-zinc-300 text-xs font-medium">Review request sent</p>
+                      <p className="text-zinc-500 text-xs mt-0.5">
+                        {(() => {
+                          const d = new Date(localReviewRequestedAt);
+                          const date = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                          const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+                          return `${date} at ${time}`;
+                        })()}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setDoneSheetInitialPanel("review-ready"); setShowDoneSheet(true); }}
+                      className="text-amber-400 text-xs font-semibold hover:text-amber-300 transition-colors min-h-[32px] shrink-0"
+                    >
+                      Send Again
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => { setDoneSheetInitialPanel("review-ready"); setShowDoneSheet(true); }}
+                    className="w-full text-amber-400 text-sm font-semibold hover:text-amber-300 transition-colors min-h-[32px] text-center"
+                  >
+                    Send review request
+                  </button>
+                )}
               </div>
             )}
           </>
         ) : localStatus === "sent" ? (
           <>
-            {isPro && googleReviewLink && (
-              <div className="flex items-center justify-center gap-1.5 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 text-amber-400 text-xs font-semibold">
-                ⭐ Review Request Ready
-              </div>
-            )}
             <button
               type="button"
               onClick={() => setShowDoneSheet(true)}
@@ -91,16 +103,26 @@ export function EstimateActions({
             >
               Mark Job Done
             </button>
+            {isPro && googleReviewLink && status === "sent" && (
+              <p className="text-center text-xs text-zinc-500 -mt-1">Review request available after completion.</p>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowSendSheet(true)}
+              className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+            >
+              Send Estimate
+            </button>
           </>
-        ) : null}
-
-        <button
-          type="button"
-          onClick={() => setShowSendSheet(true)}
-          className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
-        >
-          Send Estimate
-        </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowSendSheet(true)}
+            className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+          >
+            Send Estimate
+          </button>
+        )}
       </div>
 
       <SendEstimateSheet

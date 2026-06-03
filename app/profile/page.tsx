@@ -38,11 +38,11 @@ export default async function ProfilePage({
       <header className="px-5 pt-10 pb-3 shrink-0">
         <Logo businessName={profile.name} />
         <h1 className="text-2xl font-bold mt-5">Profile</h1>
-        <p className="text-zinc-500 text-sm mt-1">
+        <p className="text-zinc-400 text-sm mt-1">
           Your business details appear on estimates.
         </p>
         {user.email && (
-          <p className="text-zinc-600 text-xs mt-1">Signed in as {user.email}</p>
+          <p className="text-zinc-400 text-xs mt-1">Signed in as {user.email}</p>
         )}
         {data?.subscription_status === "active" && (
           <span className="inline-flex items-center gap-1.5 text-xs text-emerald-400 mt-0.5">
