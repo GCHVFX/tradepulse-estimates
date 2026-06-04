@@ -1,8 +1,6 @@
 export const maxDuration = 60;
 
-import { checkUserSubscriptionAccess } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { logEstimateChange } from "@/lib/audit-log";
 import { validateContentType } from "@/lib/api-utils";
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
@@ -63,17 +61,23 @@ export async function POST(request: NextRequest) {
     return applyTo(new NextResponse("Too many requests. Please wait a moment.", { status: 429 }));
   }
 
-const { hasAccess } = await checkUserSubscriptionAccess(user.id, supabaseAdmin);
-if (!hasAccess) return applyTo(NextResponse.json({ error: "Subscription required" }, { status: 403 }));
+  const { data: business } = await supabaseAdmin
+    .from("tpe_businesses")
+    .select("name, prepared_by, subscription_status, trial_ends_at")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const isActive = business?.subscription_status === "active";
+  const isTrialing =
+    business?.subscription_status === "trial" &&
+    business?.trial_ends_at &&
+    new Date(business.trial_ends_at) > new Date();
+  const hasAccess = isActive || isTrialing || business?.subscription_status === "complimentary";
+
+  if (!hasAccess) return applyTo(NextResponse.json({ error: "Subscription required" }, { status: 403 }));
 
   const contentTypeError = validateContentType(request);
   if (contentTypeError) return applyTo(contentTypeError);
-
-  const { data: business } = await supabaseAdmin
-    .from("tpe_businesses")
-    .select("name, prepared_by")
-    .eq("user_id", user.id)
-    .maybeSingle();
 
   const [priceBookResult, priceItemsResult] = await Promise.all([
     supabaseAdmin
@@ -232,16 +236,6 @@ if (!hasAccess) return applyTo(NextResponse.json({ error: "Subscription required
           return;
         }
         controller.enqueue(new TextEncoder().encode(`\n__ID__:${data[0].id}`));
-
-        // Log estimate creation
-        await logEstimateChange(
-          supabaseAdmin,
-          data[0].id,
-          user.id,
-          "created",
-          undefined,
-          { title: data[0].title, summary: fullText.substring(0, 500) }
-        );
 
         controller.close();
       } catch (err) {

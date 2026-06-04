@@ -86,6 +86,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         {
           user_id: userId,
           name: "",
+          plan: "starter",
           subscription_status: "trial",
           trial_ends_at: trialEndsAt,
           stripe_customer_id: customer.id,

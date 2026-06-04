@@ -710,14 +710,16 @@ export function ProfileForm({
           </div>
         )}
 
-        <form action="/api/billing/portal" method="POST">
-          <button
-            type="submit"
-            className="w-full text-zinc-600 hover:text-zinc-400 text-xs py-2 transition-colors"
-          >
-            Manage billing
-          </button>
-        </form>
+        {subscriptionStatus === "active" && (
+          <form action="/api/billing/portal" method="POST">
+            <button
+              type="submit"
+              className="w-full text-zinc-600 hover:text-zinc-400 text-xs py-2 transition-colors"
+            >
+              Manage billing
+            </button>
+          </form>
+        )}
       </div>
 
       <>

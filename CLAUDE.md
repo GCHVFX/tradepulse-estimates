@@ -12,6 +12,7 @@ TradePulse Estimates turns a short job description into a professional estimate 
 - Anthropic API, `claude-haiku-4-5-20251001` for estimate generation
 - Stripe (subscriptions, CA$39/month Starter, CA$69/month Pro, 14-day free trial)
 - Vercel (hosting), Sentry (errors), PostHog (analytics)
+- Google Places API (review link lookup in profile)
 
 ---
 
@@ -26,104 +27,156 @@ TradePulse Estimates turns a short job description into a professional estimate 
 
 ---
 
+## Scalability Principles
+
+TradePulse should scale from early validation to thousands of subscribers without a platform rewrite.
+
+Do not over-engineer for scale too early, but avoid choices that make scale painful later.
+
+### Keep `plan` separate from `subscription_status`
+
+Never use `subscription_status` for feature access.
+
+Use:
+
+- `plan = 'starter' | 'pro'`
+- `subscription_status = 'trial' | 'active' | 'past_due' | 'cancelled' | 'complimentary'`
+
+Feature access must use:
+
+```ts
+business.plan === "pro"
+```
+
+Subscription access (can they use the app at all) uses:
+
+```ts
+const isActive = business.subscription_status === "active";
+const isTrialing = business.subscription_status === "trial" && new Date(business.trial_ends_at) > new Date();
+const hasAccess = isActive || isTrialing || business.subscription_status === "complimentary";
+```
+
+---
+
 ## Folder Structure
 
 ```
 app/
-  new/page.tsx              Estimate creation + streaming (client)
-  estimates/page.tsx        Estimate list (server)
-  estimates/[id]/page.tsx   Estimate detail (server)
-  share/[id]/page.tsx       Public estimate view, no auth (server)
-  profile/page.tsx          Business profile
-  onboarding/page.tsx       First-run onboarding
-  rates/page.tsx            Price book
-  subscribe/page.tsx        Paywall
-  components/               Shared UI components
-  api/                      Route handlers
+  new/page.tsx                   Estimate creation + streaming (client)
+  estimates/page.tsx             Estimate list (server)
+  estimates/[id]/page.tsx        Estimate detail (server)
+  share/[id]/page.tsx            Public estimate view, no auth (server)
+  profile/page.tsx               Business profile
+  onboarding/page.tsx            Redirects to /new (stub)
+  rates/page.tsx                 Price book
+  subscribe/page.tsx             Paywall / trial expired
+  demo/page.tsx                  Public demo page
+  go/
+    electricians-postcard/page.tsx  UTM postcard redirect → /electricians
+    trades-postcard/page.tsx        UTM postcard redirect → /trades
+  plumbers/page.tsx              SEO landing page
+  electricians/page.tsx          SEO landing page
+  trades/page.tsx                SEO landing page
+  plumbing-cost/page.tsx         SEO cost guide
+  electrical-cost/page.tsx       SEO cost guide
+  components/                    Shared UI components (see below)
+  api/                           Route handlers (see below)
+  auth/callback/route.ts         Supabase auth code exchange
 lib/
-  supabase-server.ts        supabaseAdmin, createApiClient, createSupabaseServerClient
-  supabase-browser.ts       createSupabaseBrowserClient
-  stripe.ts                 Single Stripe instance (import from here only)
-  format-phone.ts           Canadian phone formatting
-  generate-pdf.ts           jsPDF estimate rendering
+  supabase-server.ts             supabaseAdmin, createApiClient, createSupabaseServerClient
+  supabase-browser.ts            createSupabaseBrowserClient
+  stripe.ts                      Single Stripe instance (import from here only)
+  auth.ts                        checkUserSubscriptionAccess(userId, supabaseAdmin)
+  api-utils.ts                   validateContentType(), generateRequestId(), addRequestIdToResponse()
+  rate-limit.ts                  checkRateLimit() — DB-backed, uses tpe_rate_limits table
+  format-phone.ts                Canadian phone formatting
+  generate-pdf.ts                jsPDF estimate rendering
+  database.types.ts              Generated from live schema. Do not edit manually.
   hooks/
-    use-business-profile.ts Shared profile data hook (logo, name, email, preparedBy)
-proxy.ts                    Auth + subscription middleware (NOT middleware.ts)
+    use-business-profile.ts      Shared profile hook — logoUrl, businessName, businessEmail, preparedBy, isPro, googleReviewLink, isLoading
+proxy.ts                         Auth + subscription middleware (NOT middleware.ts)
+docs/
+  SCALING-NOTES.md               Scaling assumptions and future hardening notes
 ```
 
 ---
 
-## V1 Scope (Estimates — Starter Plan)
+## What Is Built (Current State)
 
-**Build only:**
-- Create estimate (text input → AI generation → streaming)
-- Review and edit estimate
-- Send estimate (SMS, email, copy link)
-- Basic customer and estimate storage
-- Business profile (name, phone, email, logo)
-- Stripe subscription + trial gating
+### Starter Features (live)
+- Estimate creation: text input → AI streaming → save to DB
+- Estimate list, detail, edit, delete
+- Send estimate: SMS (Twilio), email (Resend), copy link, PDF download
+- Business profile: name, phone, email, logo, prepared_by
+- Price book: labour rate, markup %, deposit %, common line items
+- Customer details on estimates (editable after generation)
+- Stripe subscription + 14-day free trial, no card required
+- Billing portal (shown on profile only when subscription_status === 'active')
 
-**Do not build:**
-- Reviews, Payments, Follow-Up (Pro features — separate routing under /reviews, /payments, /follow-up)
-- Dashboards or analytics
-- Team features or permissions
-- Complex pricing engines, e-signatures, client portals
+### Reviews Feature (live, Pro-gated)
+- `mark-job-done-sheet.tsx` — bottom sheet triggered from estimate detail after marking done
+- Sends Google review request via SMS using Twilio
+- Custom message editable before send, Google review link appended automatically
+- Tracks `review_requested_at` on `tpe_estimates`, allows resend with confirmation
+- Profile has Google review link field with Google Places API lookup helper
+- Gated by `business.plan === 'pro'` in `estimates/[id]/review-request/route.ts`
+- "Mark Job Done" button only shown on estimate detail when `isPro === true` and status === 'sent'
 
----
-
-## Pro Features (Future — `/reviews`, `/payments`, `/follow-up`)
-
-All Pro features live in this same app, gated by `plan` field on `tpe_businesses`.
-
-- Reviews: post-job Google review requests via SMS/email
-- Payments: automated invoice reminders until paid
-- Follow-Up: scheduled customer outreach for maintenance/upgrades
-- Camera input: photo → AI estimate enhancement (image sent to Anthropic as content block, requires Sonnet not Haiku)
-
-Pro routes gated in `proxy.ts` by `business.plan === 'pro'`. Do not build Pro features into Starter routes.
-
----
-
-## Primary Flow
-
-```
-Describe job → Generate estimate → Review / edit → Send
-```
-
-Each screen maps to one step. No step requires more than one decision.
+### Not Yet Built
+- Payments (automated invoice reminders)
+- Follow-Up (scheduled customer outreach)
+- Camera input for estimates (requires Sonnet, Pro only)
+- Pro upgrade flow (no Pro subscribers yet, STRIPE_PRO_PRICE_ID not set)
 
 ---
 
 ## Routing
 
-- `/` public landing page (light theme)
-- `/new` estimate creation
-- `/estimates` estimate list
-- `/estimates/[id]` estimate detail
-- `/share/[id]` public estimate (no auth)
-- `/plumbers`, `/electricians` SEO landing pages
-- `/plumbing-cost`, `/electrical-cost` SEO cost guides
+- `/` — public landing page (light theme)
+- `/new` — estimate creation
+- `/estimates` — estimate list
+- `/estimates/[id]` — estimate detail
+- `/share/[id]` — public estimate (no auth)
+- `/go/*` — postcard QR redirect pages (public, no auth)
+- `/plumbers`, `/electricians`, `/trades` — trade-specific landing pages (public)
+- `/plumbing-cost`, `/electrical-cost` — SEO cost guides (public)
+- `/demo` — public demo page
 - All app routes gated by `proxy.ts` (not `middleware.ts`), exported function must be named `proxy`
+
+Public paths are listed in `proxy.ts PUBLIC_PATHS`. Every `/api/` path is already public via the `isPublic()` function — do not add individual API routes to PUBLIC_PATHS.
 
 ---
 
 ## Database Tables (Supabase, `tpe_` prefix)
 
-- `tpe_businesses` — `user_id` (FK to auth.users), `name`, `phone`, `email`, `logo_url`, `prepared_by`, `plan` ('starter'|'pro'), `subscription_status`, `trial_ends_at`, `stripe_customer_id`, `stripe_subscription_id`, `signup_source`
-- `tpe_estimates` — `id`, `business_id` (FK to auth.users), `title`, `summary`, `status`, `customer_name`, `customer_phone`, `customer_email`, `customer_address`, `prepared_by`, `deposit_amount`, `sent_via`, `sent_at`, `created_at`
-- `tpe_price_book` — `user_id` (FK to auth.users), `labour_rate`, `markup_percent`, `deposit_percent`, `deposit_threshold`
-- `tpe_price_book_items` — `user_id` (FK to auth.users), `name`, `unit_price`
+**`tpe_businesses`**
+`user_id` (FK to auth.users, PK), `name`, `phone`, `email`, `logo_url`, `prepared_by`, `google_review_link`, `plan` ('starter'|'pro', default 'starter'), `subscription_status`, `trial_ends_at`, `stripe_customer_id`, `stripe_subscription_id`, `signup_source`
+
+**`tpe_estimates`**
+`id`, `business_id` (FK to auth.users), `title`, `summary` (full markdown content), `status` ('draft'|'sent'|'done'), `customer_name`, `customer_phone`, `customer_email`, `customer_address`, `prepared_by`, `deposit_amount`, `sent_via`, `sent_at`, `copied_at`, `completed_at`, `review_requested_at`, `created_at`
+
+**`tpe_price_book`**
+`user_id`, `labour_rate`, `markup_percent`, `deposit_percent`, `deposit_threshold`
+
+**`tpe_price_book_items`**
+`user_id`, `name`, `unit`, `unit_price`, `created_at`
+
+**`tpe_rate_limits`**
+`key`, `action`, `count`, `expires_at`, `created_at` — used by `lib/rate-limit.ts`
+
+**`tpe_customers`**
+`id`, `business_id`, `name`, `phone`, `email`, `address` — exists in schema, not yet used in queries
 
 All tables: uuid primary keys, RLS enabled.
 
-**Critical:**
-- `tpe_businesses` uses `user_id` not `id` as the FK
+**Critical field names:**
+- `tpe_businesses` uses `user_id` not `id` as the PK/FK
 - Business name field is `name` not `company_name`
 - `tpe_estimates` uses `business_id` not `user_id` as the ownership FK
 - Estimate content column is `summary` not `content`
 
 `lib/database.types.ts` is generated from the live schema. Do not edit manually.
-To regenerate: `npx supabase gen types typescript --project-id hmkkuyznyumhajjqbxpu > lib/database.types.ts`
+To regenerate: use the Supabase MCP tool `Supabase:generate_typescript_types` (do not use CLI — it hangs on interactive auth). Filter output to `tpe_` prefixed tables only before writing to `lib/database.types.ts`.
 
 ---
 
@@ -160,43 +213,64 @@ const { data: { user } } = await supabase.auth.getUser();
 Import only from `@/lib/stripe`. Never instantiate `new Stripe()` directly in route files.
 
 ```ts
-// lib/stripe.ts — single source of truth
 import { stripe } from "@/lib/stripe";
 ```
 
 - CA$39/month Starter plan, CA$69/month Pro plan, 14-day free trial, no card required upfront
 - `trial_ends_at` + `subscription_status` (default: `'trial'`) tracked in DB
-- Webhooks sync subscription status — check `amount_paid > 0` in `invoice.payment_succeeded`
-- Billing portal accessible from Profile page
+- `plan` defaults to `'starter'` at signup, set explicitly in `auth/signup/route.ts`
+- Webhooks sync subscription status — `amount_paid > 0` guard in `invoice.payment_succeeded`
+- Billing portal accessible from Profile page only when `subscription_status === 'active'`
+- `STRIPE_PRO_PRICE_ID` env var not yet set — Pro plan not yet launched
 
 ---
 
 ## API Routes
 
+**Estimates**
+- `GET /api/estimates` — list user's estimates (id, title, status, customer_name, created_at)
+- `PATCH /api/estimates` — update estimate fields (selective — only fields present in body are updated)
+- `DELETE /api/estimates?id=` — delete estimate
 - `POST /api/generate-estimate` — streams AI estimate, saves to `tpe_estimates`
+  - Rate limited: 10 calls per user per 60 seconds via `tpe_rate_limits` table
+  - Input `jobDescription` capped at 2000 characters
   - `controller.close()` must come AFTER the `__ID__` chunk is enqueued
-  - Input `jobDescription` capped at 2000 characters server-side
-  - Rate limited: 10 calls per user per minute (in-memory Map)
-- `PATCH /api/estimates` — update estimate fields
-- `DELETE /api/estimates` — delete estimate (requires `?id=`)
+  - Injects price book data (labour rate, markup, common items) into the prompt
+- `POST /api/estimates/[id]/review-request` — sends Google review SMS via Twilio, Pro-gated
+
+**Profile**
+- `GET /api/profile` — returns `tpe_businesses` record (includes `plan`, `subscription_status`, `trial_ends_at`, `google_review_link`)
+- `PATCH /api/profile` — upserts all profile fields; always send all fields to avoid overwriting with empty strings
+- `POST /api/profile/find-review-link` — Google Places API search, returns ranked `{ matches, hasStrongMatch }`
+- `POST /api/upload-logo` — accepts base64 `{ data, type }`, uploads to Supabase Storage `{userId}/logo`, returns `{ url }`
+
+**Comms**
 - `POST /api/send-sms` — Twilio SMS (`{ to, estimateId }`)
 - `POST /api/send-email` — Resend email; do not include `reply_to` / `replyTo` (TypeScript conflict)
-- `GET /api/profile` — returns current user's `tpe_businesses` record
-- `PATCH /api/profile` — upserts `tpe_businesses`
-- `POST /api/upload-logo` — accepts base64 JSON `{ data, type }`, uploads to Supabase Storage under `{userId}/logo`, returns `{ url }`
+- `POST /api/send-reset-email` — password reset email
 
-## Public Routes (no auth required, listed in proxy.ts PUBLIC_PATHS)
+**Billing**
+- `POST /api/billing/checkout` — creates Stripe Checkout session, redirects to Stripe
+- `POST /api/billing/portal` — creates Stripe billing portal session, redirects to Stripe
+- `POST /api/billing/webhook` — Stripe webhook handler (handles subscription.created/updated/deleted, invoice.payment_succeeded)
 
-- `/plumbers`, `/electricians` — trade-specific landing pages
-- `/plumbing-cost`, `/electrical-cost` — cost guide pages
-- `/share/[id]` — customer-facing estimate view
+**Auth / Internal**
+- `POST /api/auth/signup` — creates Supabase user + Stripe trial subscription + `tpe_businesses` row
+- `GET /api/exchange-recovery` — exchanges Supabase auth code for session (password reset flow)
+- `POST /api/notify-error` — emails `support@trytradepulse.com` on Anthropic API errors; always returns 200
+- `POST /api/webhooks/new-signup` — Supabase auth hook → email notification on new signup; auth via `x-webhook-secret` header
 
 ---
 
 ## Shared Components
 
-- `EstimateMarkdown` — single source of truth for estimate markdown rendering. Never duplicate markdown component config. Import from `@/app/components/estimate-markdown`.
-- `useBusinessProfile()` — hook for logo/name/email/preparedBy. Use in any screen that shows business identity. Never fetch `/api/profile` inside an event handler.
+- `EstimateMarkdown` — single source of truth for estimate markdown rendering. Never duplicate. Import from `@/app/components/estimate-markdown`.
+- `useBusinessProfile()` — hook returning `{ logoUrl, businessName, businessEmail, preparedBy, isPro, googleReviewLink, isLoading }`. Use in any screen that shows business identity. Never fetch `/api/profile` inside an event handler.
+- `MarkJobDoneSheet` — bottom sheet for post-job review request flow. Shown after "Mark Job Done" on estimate detail. Takes `estimateId`, `googleReviewLink`, `reviewRequestedAt`, `isPro`.
+- `SendEstimateSheet` — bottom sheet for SMS / email / copy link / PDF. Takes `estimateId`, `currentStatus`, customer fields, business fields.
+- `EstimateActions` — fixed bottom action bar on estimate detail. Manages Send, Mark Job Done, and review request state.
+- `CustomerDetailsBlock` — editable customer info block on estimate view.
+- `CompanyEstimateHeader` — logo + business name header on the white estimate card.
 
 ---
 
@@ -216,9 +290,9 @@ Every generated estimate follows this exact structure:
 2. Job Summary (2 to 3 sentences)
 3. Scope of Work (bullet list, specific tasks, plain language)
 4. Line Items (labour and materials, pipe table)
-5. Assumptions and Exclusions (included / not included)
+5. Assumptions and Exclusions (plain bullets, no bold labels)
 6. Pricing Summary (pipe table: subtotal, tax, total, deposit, balance)
-7. Payment Terms (2 to 4 lines)
+7. Payment Terms (2 to 4 lines, always includes "This estimate is valid for 30 days")
 8. Notes (optional, omit if nothing relevant)
 
 Customer details are stored as columns on `tpe_estimates` and rendered via `CustomerDetailsBlock`. Not baked into AI output. H1 lines are filtered from markdown rendering. Business name and job title are displayed separately in the UI.

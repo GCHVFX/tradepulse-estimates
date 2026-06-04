@@ -17,7 +17,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return applyTo(NextResponse.redirect(new URL("/subscribe", request.url)));
   }
 
-  const origin = request.headers.get("origin") ?? process.env.NEXT_PUBLIC_APP_URL ?? "https://tradepulse.app";
+  const origin = request.headers.get("origin") ?? process.env.NEXT_PUBLIC_APP_URL ?? "https://www.trytradepulse.com";
 
   const session = await stripe.billingPortal.sessions.create({
     customer: business.stripe_customer_id,

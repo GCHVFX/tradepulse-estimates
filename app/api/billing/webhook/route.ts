@@ -78,6 +78,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           .from("tpe_businesses")
           .update({ subscription_status: "active" })
           .eq("stripe_customer_id", customerId);
+        if (error) {
+          console.error("[webhook] failed to activate subscription:", error.message);
+        }
       }
     }
   }

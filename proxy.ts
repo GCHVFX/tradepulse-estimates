@@ -9,13 +9,13 @@ const PUBLIC_PATHS = [
   "/auth",
   "/share",
   "/onboarding",
-  "/api/billing/webhook",
   "/electricians",
   "/plumbers",
   "/trades",
   "/plumbing-cost",
   "/electrical-cost",
   "/demo",
+  "/go",
 ];
 
 function isPublic(pathname: string): boolean {
