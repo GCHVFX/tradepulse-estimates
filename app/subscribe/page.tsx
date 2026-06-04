@@ -52,9 +52,9 @@ export default async function SubscribePage({ searchParams }: { searchParams: Pr
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 mb-4">
           <div className="flex items-end gap-2 mb-1">
             <span className="text-4xl font-bold">$39</span>
-            <span className="text-zinc-500 mb-1">/month</span>
+            <span className="text-zinc-400 mb-1">/month</span>
           </div>
-          <p className="text-zinc-500 text-sm mb-4">Cancel anytime from your profile.</p>
+          <p className="text-zinc-400 text-sm mb-4">Cancel anytime from your profile.</p>
 
           <div className="bg-zinc-800/50 rounded-xl px-4 py-3 mb-6">
             <p className="text-zinc-300 text-sm leading-relaxed">
@@ -99,11 +99,11 @@ export default async function SubscribePage({ searchParams }: { searchParams: Pr
           )}
         </div>
 
-        <p className="text-center text-zinc-600 text-xs">
+        <p className="text-center text-zinc-500 text-xs">
           Powered by Stripe. Your payment is secure.
         </p>
 
-        <p className="text-center text-zinc-500 text-sm mt-4">
+        <p className="text-center text-zinc-400 text-sm mt-4">
           Questions?{" "}
           <a href="mailto:support@trytradepulse.com" className="text-zinc-400 hover:text-zinc-300 transition-colors">
             support@trytradepulse.com

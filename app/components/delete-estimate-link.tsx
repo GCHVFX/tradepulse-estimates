@@ -28,7 +28,7 @@ export function DeleteEstimateLink({ estimateId }: { estimateId: string }) {
           <button
             type="button"
             onClick={() => setConfirmDelete(false)}
-            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors min-h-[44px] px-3"
+            className="text-xs text-zinc-400 hover:text-zinc-300 transition-colors min-h-[44px] px-3"
           >
             Cancel
           </button>

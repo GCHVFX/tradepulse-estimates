@@ -682,7 +682,7 @@ export function ProfileForm({
             router.push("/login");
             router.refresh();
           }}
-          className="w-full bg-transparent text-zinc-500 hover:text-zinc-300 text-sm py-3 transition-colors min-h-[44px]"
+          className="w-full bg-transparent text-zinc-400 hover:text-zinc-300 text-sm py-3 transition-colors min-h-[44px]"
         >
           Sign out
         </button>
@@ -700,7 +700,7 @@ export function ProfileForm({
             <p className="text-xs text-zinc-400">TradePulse Estimates</p>
             <p className="text-xs text-zinc-400">$39/month after your trial ends</p>
             {trialEndFormatted && (
-              <p className="text-xs text-zinc-500 mt-0.5">Your trial ends on {trialEndFormatted}.</p>
+              <p className="text-xs text-zinc-400 mt-0.5">Your trial ends on {trialEndFormatted}.</p>
             )}
             {billingDaysLeft <= 3 && (
               <a href="/subscribe" className="mt-1 text-xs font-semibold text-amber-400 hover:text-amber-300 transition-colors">
@@ -741,7 +741,7 @@ export function ProfileForm({
             <button
               type="button"
               onClick={() => setShowFindLinkSheet(false)}
-              className="text-zinc-500 hover:text-white transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+              className="text-zinc-400 hover:text-white transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
               aria-label="Close"
             >
               <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4" aria-hidden="true">
@@ -771,7 +771,7 @@ export function ProfileForm({
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-zinc-400">Street, phone, or extra details <span className="text-zinc-600 font-normal">(optional)</span></label>
+              <label className="text-sm font-medium text-zinc-400">Street, phone, or extra details <span className="text-zinc-500 font-normal">(optional)</span></label>
               <input
                 type="text"
                 className={inputClass}
@@ -854,7 +854,7 @@ export function ProfileForm({
               <button
                 type="button"
                 onClick={() => setModalOpen(false)}
-                className="text-zinc-500 hover:text-white transition-colors p-1 -mr-1 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                className="text-zinc-400 hover:text-white transition-colors p-1 -mr-1 min-h-[44px] min-w-[44px] flex items-center justify-center"
                 aria-label="Close"
               >
                 <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5" aria-hidden="true">

@@ -152,7 +152,7 @@ export function PriceBook() {
           <div className="flex flex-col gap-1.5 flex-1">
             <label className="text-sm font-medium text-zinc-400">Labour rate ($/hr)</label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm pointer-events-none select-none">$</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 text-sm pointer-events-none select-none">$</span>
               <input
                 type="number"
                 className={inputClass + " pl-7"}
@@ -171,7 +171,7 @@ export function PriceBook() {
               value={rates.markup_percent || ""}
               onChange={(e) => setRates((r) => ({ ...r, markup_percent: parseFloat(e.target.value) || 0 }))}
             />
-            <p className="text-zinc-500 text-xs">Applied on top of material costs in estimates.</p>
+            <p className="text-zinc-400 text-xs">Applied on top of material costs in estimates.</p>
           </div>
         </div>
 
@@ -189,7 +189,7 @@ export function PriceBook() {
           <div className="flex flex-col gap-1.5 flex-1">
             <label className="text-sm font-medium text-zinc-400">Minimum job amount</label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm pointer-events-none select-none">$</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 text-sm pointer-events-none select-none">$</span>
               <input
                 type="number"
                 className={inputClass + " pl-7"}
@@ -198,7 +198,7 @@ export function PriceBook() {
                 onChange={(e) => setRates((r) => ({ ...r, deposit_threshold: parseFloat(e.target.value) || 0 }))}
               />
             </div>
-            <p className="text-zinc-500 text-xs">Require deposit on jobs over this amount.</p>
+            <p className="text-zinc-400 text-xs">Require deposit on jobs over this amount.</p>
           </div>
         </div>
 
@@ -216,7 +216,7 @@ export function PriceBook() {
       <div className="flex flex-col gap-3">
         <div>
           <p className="text-sm font-medium text-zinc-400">Common line items</p>
-          <p className="text-xs text-zinc-500 mt-1">
+          <p className="text-xs text-zinc-400 mt-1">
             Material prices on estimates include your markup. Customers see final prices only.
           </p>
         </div>
@@ -232,7 +232,7 @@ export function PriceBook() {
               autoFocus
             />
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm pointer-events-none select-none">$</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 text-sm pointer-events-none select-none">$</span>
               <input
                 type="number"
                 className={inputClass + " pl-7"}
@@ -262,7 +262,7 @@ export function PriceBook() {
         )}
 
         {items.length === 0 && !showAddForm && (
-          <p className="text-zinc-500 text-sm">No items yet. Add your common line items and the AI will use them when estimating.</p>
+          <p className="text-zinc-400 text-sm">No items yet. Add your common line items and the AI will use them when estimating.</p>
         )}
 
         {items.map((item) =>
@@ -276,7 +276,7 @@ export function PriceBook() {
                 autoFocus
               />
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm pointer-events-none select-none">$</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 text-sm pointer-events-none select-none">$</span>
                 <input
                   type="number"
                   className={inputClass + " pl-7"}
@@ -310,7 +310,7 @@ export function PriceBook() {
             >
               <div className="flex-1 min-w-0">
                 <p className="text-white text-sm font-medium truncate">{item.name}</p>
-                <p className="text-zinc-500 text-xs mt-0.5">
+                <p className="text-zinc-400 text-xs mt-0.5">
                   ${item.unit_price.toFixed(2)}
                 </p>
               </div>

@@ -57,7 +57,7 @@ export default async function ShareEstimatePage({
             <div className="pb-5 mb-5 border-b border-slate-200">
               <CompanyEstimateHeader logoUrl={logoUrl} businessName={businessName} />
               {estimate.prepared_by && (
-                <p className={`text-sm text-zinc-600 ${logoUrl || businessName ? "mt-2" : ""}`}>
+                <p className={`text-sm text-zinc-500 ${logoUrl || businessName ? "mt-2" : ""}`}>
                   {estimate.prepared_by}
                 </p>
               )}

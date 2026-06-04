@@ -171,7 +171,7 @@ export function CustomerDetailsBlock({
 
   return (
     <div className="mb-4 flex items-start justify-between gap-2">
-      <div className="text-zinc-500 text-xs leading-relaxed">
+      <div className="text-zinc-400 text-xs leading-relaxed">
         {name && <span className="block">Prepared for: {name}</span>}
         {phone && <span className="block">Phone: {phone}</span>}
         {email && <span className="block">Email: {email}</span>}

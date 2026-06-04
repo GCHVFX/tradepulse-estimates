@@ -97,7 +97,7 @@ export function EstimateActions({
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-zinc-300 text-xs font-medium">Review request sent</p>
-                      <p className="text-zinc-500 text-xs mt-0.5">
+                      <p className="text-zinc-400 text-xs mt-0.5">
                         {(() => {
                           const d = new Date(localReviewRequestedAt);
                           const date = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -145,7 +145,7 @@ export function EstimateActions({
               </>
             )}
             {isPro && googleReviewLink && status === "sent" && (
-              <p className="text-center text-xs text-zinc-500 -mt-1">Review request available after completion.</p>
+              <p className="text-center text-xs text-zinc-400 -mt-1">Review request available after completion.</p>
             )}
             <button
               type="button"

@@ -229,7 +229,7 @@ export function OnboardingForm({ userId }: { userId: string }) {
               >
                 {logoUploading ? (
                   <svg
-                    className="animate-spin w-5 h-5 text-zinc-500"
+                    className="animate-spin w-5 h-5 text-zinc-400"
                     viewBox="0 0 24 24"
                     fill="none"
                     aria-hidden="true"
@@ -294,7 +294,7 @@ export function OnboardingForm({ userId }: { userId: string }) {
 
             <div className="flex flex-col gap-1.5 flex-1">
               <label className="text-sm font-medium text-zinc-400">
-                Company name <span className="text-zinc-500">(optional)</span>
+                Company name <span className="text-zinc-400">(optional)</span>
               </label>
               <input
                 type="text"
@@ -329,7 +329,7 @@ export function OnboardingForm({ userId }: { userId: string }) {
             onChange={(e) => setPreparedBy(e.target.value)}
             autoComplete="name"
           />
-          <p className="text-zinc-600 text-xs">Shows as “Prepared by” on estimates.</p>
+          <p className=”text-zinc-500 text-xs”>Shows as “Prepared by” on estimates.</p>
         </div>
 
         <div className="flex flex-col gap-1.5">
@@ -354,7 +354,7 @@ export function OnboardingForm({ userId }: { userId: string }) {
             onChange={(e) => setEmail(e.target.value)}
             autoComplete="email"
           />
-          <p className="text-zinc-600 text-xs">Appears on estimates so customers can reach you.</p>
+          <p className="text-zinc-500 text-xs">Appears on estimates so customers can reach you.</p>
         </div>
 
         {error && <p className="text-red-400 text-sm">{error}</p>}
@@ -389,7 +389,7 @@ export function OnboardingForm({ userId }: { userId: string }) {
 
       <div>
         <h2 className="text-lg font-semibold">Set your rates</h2>
-        <p className="text-zinc-500 text-sm mt-1">
+        <p className="text-zinc-400 text-sm mt-1">
           The AI uses these to price estimates accurately. You can update them any time in Rates.
         </p>
       </div>
@@ -398,7 +398,7 @@ export function OnboardingForm({ userId }: { userId: string }) {
         <div className="flex flex-col gap-1.5 flex-1">
           <label className="text-sm font-medium text-zinc-400">Labour rate ($/hr)</label>
           <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm pointer-events-none select-none">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 text-sm pointer-events-none select-none">
               $
             </span>
             <input
@@ -421,7 +421,7 @@ export function OnboardingForm({ userId }: { userId: string }) {
             value={markup}
             onChange={(e) => setMarkup(e.target.value)}
           />
-          <p className="text-zinc-600 text-xs">Applied on top of material costs in estimates.</p>
+          <p className="text-zinc-500 text-xs">Applied on top of material costs in estimates.</p>
         </div>
       </div>
 
@@ -440,7 +440,7 @@ export function OnboardingForm({ userId }: { userId: string }) {
         <div className="flex flex-col gap-1.5 flex-1">
           <label className="text-sm font-medium text-zinc-400">Minimum job amount</label>
           <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm pointer-events-none select-none">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 text-sm pointer-events-none select-none">
               $
             </span>
             <input
@@ -451,7 +451,7 @@ export function OnboardingForm({ userId }: { userId: string }) {
               onChange={(e) => setDepositThreshold(e.target.value)}
             />
           </div>
-          <p className="text-zinc-600 text-xs">Require deposit on jobs over this amount.</p>
+          <p className="text-zinc-500 text-xs">Require deposit on jobs over this amount.</p>
         </div>
       </div>
 
@@ -471,7 +471,7 @@ export function OnboardingForm({ userId }: { userId: string }) {
               autoFocus
             />
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm pointer-events-none select-none">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 text-sm pointer-events-none select-none">
                 $
               </span>
               <input
@@ -503,7 +503,7 @@ export function OnboardingForm({ userId }: { userId: string }) {
         )}
 
         {items.length === 0 && !showAddForm && (
-          <p className="text-zinc-600 text-sm">
+          <p className="text-zinc-500 text-sm">
             No items yet. Add your common line items and the AI will use them when estimating.
           </p>
         )}
@@ -515,7 +515,7 @@ export function OnboardingForm({ userId }: { userId: string }) {
           >
             <div className="flex-1 min-w-0">
               <p className="text-white text-sm font-medium truncate">{item.name}</p>
-              <p className="text-zinc-500 text-xs mt-0.5">${item.unit_price.toFixed(2)}</p>
+              <p className="text-zinc-400 text-xs mt-0.5">${item.unit_price.toFixed(2)}</p>
             </div>
             <button
               type="button"
@@ -567,7 +567,7 @@ export function OnboardingForm({ userId }: { userId: string }) {
             router.push("/new");
             router.refresh();
           }}
-          className="w-full text-zinc-500 hover:text-zinc-300 text-sm py-3 transition-colors"
+          className="w-full text-zinc-400 hover:text-zinc-300 text-sm py-3 transition-colors"
         >
           Skip for now
         </button>

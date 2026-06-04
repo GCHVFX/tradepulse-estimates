@@ -390,7 +390,7 @@ function FormView({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-zinc-400">Email <span className="font-normal text-zinc-600 text-xs">(Optional)</span></label>
+            <label className="text-sm font-medium text-zinc-400">Email <span className="font-normal text-zinc-500 text-xs">(Optional)</span></label>
             <input
               type="email"
               className={inputClass}
@@ -404,7 +404,7 @@ function FormView({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-zinc-400">Job address <span className="font-normal text-zinc-600 text-xs">(Optional)</span></label>
+            <label className="text-sm font-medium text-zinc-400">Job address <span className="font-normal text-zinc-500 text-xs">(Optional)</span></label>
             <input
               type="text"
               className={inputClass}

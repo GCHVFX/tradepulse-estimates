@@ -115,7 +115,7 @@ export function MarkJobDoneSheet({
           <button
             type="button"
             onClick={onClose}
-            className="text-zinc-500 hover:text-white transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+            className="text-zinc-400 hover:text-white transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
             aria-label="Close"
           >
             <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4" aria-hidden="true">

@@ -14,7 +14,7 @@ export default async function RatesPage() {
       <header className="px-5 pt-10 pb-6 shrink-0">
         <Logo />
         <h1 className="text-2xl font-bold mt-5">Rates</h1>
-        <p className="text-zinc-500 text-sm mt-1">
+        <p className="text-zinc-400 text-sm mt-1">
           Set your rates and the AI will use them when generating estimates.
         </p>
       </header>
