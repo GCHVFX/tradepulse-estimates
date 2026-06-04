@@ -211,172 +211,174 @@ export function OnboardingForm({ userId }: { userId: string }) {
 
   if (step === "profile") {
     return (
-      <div className="flex flex-col gap-5 flex-1">
-        <div className="flex gap-2 mb-2">
-          <div className="flex-1 h-1 rounded-full bg-amber-500" />
-          <div className="flex-1 h-1 rounded-full bg-zinc-800" />
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <div className="flex gap-3 items-end">
-            <div className="flex flex-col gap-1.5 shrink-0">
-              <label className="text-sm font-medium text-zinc-400">Company logo</label>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={logoUploading}
-                className="w-20 min-h-[56px] h-[56px] bg-zinc-900 border border-zinc-700 border-dashed rounded-xl flex items-center justify-center transition-colors hover:border-zinc-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {logoUploading ? (
-                  <svg
-                    className="animate-spin w-5 h-5 text-zinc-400"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    aria-hidden="true"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    />
-                  </svg>
-                ) : logoUrl ? (
-                  <Image
-                    src={logoUrl}
-                    alt="Company logo"
-                    width={80}
-                    height={56}
-                    className="w-full h-full object-contain rounded-xl"
-                    unoptimized
-                  />
-                ) : (
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    className="w-6 h-6 text-zinc-600"
-                    aria-hidden="true"
-                  >
-                    <rect
-                      x="3"
-                      y="3"
-                      width="18"
-                      height="18"
-                      rx="2"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                    />
-                    <circle
-                      cx="8.5"
-                      cy="8.5"
-                      r="1.5"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                    />
-                    <path
-                      d="M21 15l-5-5L5 21"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                )}
-              </button>
-            </div>
-
-            <div className="flex flex-col gap-1.5 flex-1">
-              <label className="text-sm font-medium text-zinc-400">
-                Company name <span className="text-zinc-400">(optional)</span>
-              </label>
-              <input
-                type="text"
-                className={inputClass}
-                placeholder="Smith Plumbing Co."
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-                autoFocus
-                autoComplete="organization"
-              />
-            </div>
+      <>
+        <div className="flex flex-col gap-5 flex-1">
+          <div className="flex gap-2 mb-2">
+            <div className="flex-1 h-1 rounded-full bg-amber-500" />
+            <div className="flex-1 h-1 rounded-full bg-zinc-800" />
           </div>
 
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/png,image/jpeg"
-            className="hidden"
-            onChange={handleLogoSelect}
-          />
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-3 items-end">
+              <div className="flex flex-col gap-1.5 shrink-0">
+                <label className="text-sm font-medium text-zinc-400">Company logo</label>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={logoUploading}
+                  className="w-20 min-h-[56px] h-[56px] bg-zinc-900 border border-zinc-700 border-dashed rounded-xl flex items-center justify-center transition-colors hover:border-zinc-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {logoUploading ? (
+                    <svg
+                      className="animate-spin w-5 h-5 text-zinc-400"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      aria-hidden="true"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      />
+                    </svg>
+                  ) : logoUrl ? (
+                    <Image
+                      src={logoUrl}
+                      alt="Company logo"
+                      width={80}
+                      height={56}
+                      className="w-full h-full object-contain rounded-xl"
+                      unoptimized
+                    />
+                  ) : (
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      className="w-6 h-6 text-zinc-600"
+                      aria-hidden="true"
+                    >
+                      <rect
+                        x="3"
+                        y="3"
+                        width="18"
+                        height="18"
+                        rx="2"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                      />
+                      <circle
+                        cx="8.5"
+                        cy="8.5"
+                        r="1.5"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                      />
+                      <path
+                        d="M21 15l-5-5L5 21"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  )}
+                </button>
+              </div>
 
-          {logoError && <p className="text-red-400 text-sm">{logoError}</p>}
+              <div className="flex flex-col gap-1.5 flex-1">
+                <label className="text-sm font-medium text-zinc-400">
+                  Company name <span className="text-zinc-400">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  className={inputClass}
+                  placeholder="Smith Plumbing Co."
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  autoFocus
+                  autoComplete="organization"
+                />
+              </div>
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg"
+              className="hidden"
+              onChange={handleLogoSelect}
+            />
+
+            {logoError && <p className="text-red-400 text-sm">{logoError}</p>}
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-zinc-400">Your name</label>
+            <input
+              type="text"
+              className={inputClass}
+              placeholder="John Smith"
+              value={preparedBy}
+              onChange={(e) => setPreparedBy(e.target.value)}
+              autoComplete="name"
+            />
+            <p className="text-zinc-500 text-xs">Shows as "Prepared by" on estimates.</p>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-zinc-400">Business phone</label>
+            <input
+              type="tel"
+              className={inputClass}
+              placeholder="000-000-0000"
+              value={phone}
+              onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
+              autoComplete="tel"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-zinc-400">Business email</label>
+            <input
+              type="email"
+              className={inputClass}
+              placeholder="hello@smithplumbing.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+            />
+            <p className="text-zinc-500 text-xs">Appears on estimates so customers can reach you.</p>
+          </div>
+
+          {error && <p className="text-red-400 text-sm">{error}</p>}
+
+          <p className="text-sm text-zinc-400">
+            This information appears on your estimates. You can add or update it anytime in{" "}
+            <Link href="/profile" className="text-amber-500 hover:text-amber-400 transition-colors">
+              Profile
+            </Link>.
+          </p>
+
+          <div className="mt-auto">
+            <button
+              type="button"
+              onClick={handleProfileNext}
+              disabled={saving}
+              className="w-full bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+            >
+              {saving ? "Saving..." : "Next"}
+            </button>
+          </div>
         </div>
-
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-zinc-400">Your name</label>
-          <input
-            type="text"
-            className={inputClass}
-            placeholder="John Smith"
-            value={preparedBy}
-            onChange={(e) => setPreparedBy(e.target.value)}
-            autoComplete="name"
-          />
-          <p className=”text-zinc-500 text-xs”>Shows as “Prepared by” on estimates.</p>
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-zinc-400">Business phone</label>
-          <input
-            type="tel"
-            className={inputClass}
-            placeholder="000-000-0000"
-            value={phone}
-            onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
-            autoComplete="tel"
-          />
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-zinc-400">Business email</label>
-          <input
-            type="email"
-            className={inputClass}
-            placeholder="hello@smithplumbing.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
-          />
-          <p className="text-zinc-500 text-xs">Appears on estimates so customers can reach you.</p>
-        </div>
-
-        {error && <p className="text-red-400 text-sm">{error}</p>}
-
-        <p className="text-sm text-zinc-400">
-          This information appears on your estimates. You can add or update it anytime in{" "}
-          <Link href="/profile" className="text-amber-500 hover:text-amber-400 transition-colors">
-            Profile
-          </Link>.
-        </p>
-
-        <div className="mt-auto">
-          <button
-            type="button"
-            onClick={handleProfileNext}
-            disabled={saving}
-            className="w-full bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
-          >
-            {saving ? "Saving..." : "Next"}
-          </button>
-        </div>
-      </div>
+      </>
     );
   }
 
