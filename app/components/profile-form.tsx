@@ -25,6 +25,7 @@ export function ProfileForm({
   subscriptionStatus,
   trialEndsAt,
   plan,
+  openSection,
 }: {
   profile: Profile;
   userId: string;
@@ -32,6 +33,7 @@ export function ProfileForm({
   subscriptionStatus?: string;
   trialEndsAt?: string | null;
   plan?: string;
+  openSection?: string;
 }) {
   const router = useRouter();
   const [name, setName] = useState(profile.name);
@@ -68,6 +70,7 @@ export function ProfileForm({
   const [copied, setCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
+  const reviewSectionRef = useRef<HTMLDivElement>(null);
 
   // Auto-save refs
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -80,6 +83,15 @@ export function ProfileForm({
 
   const inputClass =
     "w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3.5 text-white placeholder-zinc-600 text-base focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]";
+
+  useEffect(() => {
+    if (openSection === "reviews") {
+      setShowManualEntry(true);
+      setTimeout(() => {
+        reviewSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 150);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!modalOpen || !qrCanvasRef.current) return;
@@ -431,7 +443,7 @@ export function ProfileForm({
               onChange={(e) => setName(e.target.value)}
               autoComplete="organization"
             />
-            <p className="text-zinc-400 text-xs">Used in texts and emails. Add your name even if it appears in your logo.</p>
+            <p className="text-zinc-400 text-xs">Used in estimates, emails, texts, and review requests.</p>
           </div>
         </div>
 
@@ -492,7 +504,7 @@ export function ProfileForm({
 
         {/* Google Reviews — Pro only */}
         {plan === "pro" && (
-        <div className="flex flex-col gap-2">
+        <div ref={reviewSectionRef} className="flex flex-col gap-2">
           <label className="text-sm font-medium text-zinc-400">Google Reviews</label>
 
           {googleReviewLink.trim() ? (
@@ -577,6 +589,7 @@ export function ProfileForm({
               {showReviewLinkHelp && (
                 <ol className="ml-1 flex flex-col gap-1 text-xs text-zinc-400 list-decimal list-inside">
                   <li>Open your Google Business Profile.</li>
+                  <li>Click &ldquo;Manage your Business Profile&rdquo;.</li>
                   <li>Click &ldquo;Ask for reviews&rdquo;.</li>
                   <li>Copy the review link.</li>
                   <li>Paste it here.</li>

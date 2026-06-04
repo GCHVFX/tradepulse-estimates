@@ -32,13 +32,14 @@ export default async function EstimatePage({
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("logo_url, name, email, plan, google_review_link")
+    .select("logo_url, name, email, phone, plan, google_review_link")
     .eq("user_id", user.id)
     .maybeSingle();
 
   const logoUrl = business?.logo_url ?? null;
   const businessName = business?.name ?? "";
   const businessEmail = business?.email ?? "";
+  const businessPhone = business?.phone ?? "";
   const isPro = business?.plan === "pro";
   const googleReviewLink = business?.google_review_link ?? null;
 
@@ -95,6 +96,7 @@ export default async function EstimatePage({
         customerEmail={estimate.customer_email ?? ""}
         customerName={estimate.customer_name ?? ""}
         businessName={businessName}
+        businessPhone={businessPhone}
         logoUrl={logoUrl}
         isPro={isPro}
         googleReviewLink={googleReviewLink}

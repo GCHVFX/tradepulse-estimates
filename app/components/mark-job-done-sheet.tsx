@@ -3,19 +3,18 @@
 import { useState, useEffect, useMemo } from "react";
 import { Spinner } from "@/app/components/spinner";
 
-type Panel = "confirm" | "upgrade" | "review-ready" | "needs-link";
+type Panel = "review-ready" | "needs-link";
 
 interface MarkJobDoneSheetProps {
   isOpen: boolean;
   onClose: () => void;
-  onDone: () => void;
   onReviewSent?: () => void;
   estimateId: string;
-  isPro: boolean;
   googleReviewLink: string | null;
   customerPhone: string;
   customerName: string;
   businessName: string;
+  businessPhone: string;
   reviewRequestedAt: string | null;
   initialPanel?: Panel;
 }
@@ -23,20 +22,17 @@ interface MarkJobDoneSheetProps {
 export function MarkJobDoneSheet({
   isOpen,
   onClose,
-  onDone,
   onReviewSent,
   estimateId,
-  isPro,
   googleReviewLink,
   customerPhone,
   customerName,
   businessName,
+  businessPhone,
   reviewRequestedAt,
   initialPanel,
 }: MarkJobDoneSheetProps) {
-  const [panel, setPanel] = useState<Panel>("confirm");
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [panel, setPanel] = useState<Panel>("review-ready");
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewError, setReviewError] = useState("");
   const [reviewSent, setReviewSent] = useState(false);
@@ -44,60 +40,31 @@ export function MarkJobDoneSheet({
   const [messageBody, setMessageBody] = useState("");
 
   const defaultReviewMessage = useMemo(() => {
-    return `Thanks for choosing ${businessName || "us"}. If anything wasn't right, reply to this text and we'll make it right.`;
-  }, [businessName]);
+    const name = businessName || "us";
+    if (businessPhone) {
+      return `Thanks for choosing ${name}.\n\nIf anything wasn't right, text or call us at ${businessPhone} and we'll make it right.\n\nIf you have a moment, we'd appreciate a Google review.`;
+    }
+    return `Thanks for choosing ${name}.\n\nIf anything wasn't right, contact us directly and we'll make it right.\n\nIf you have a moment, we'd appreciate a Google review.`;
+  }, [businessName, businessPhone]);
 
   useEffect(() => {
     if (!isOpen) {
       const t = setTimeout(() => {
-        setPanel("confirm");
-        setError("");
         setReviewError("");
         setReviewSent(false);
         setReviewConfirming(false);
         setMessageBody("");
       }, 300);
       return () => clearTimeout(t);
-    } else if (initialPanel === "review-ready") {
+    }
+
+    if (initialPanel === "needs-link") {
+      setPanel("needs-link");
+    } else {
       setPanel("review-ready");
       setMessageBody(defaultReviewMessage);
     }
   }, [isOpen, initialPanel, defaultReviewMessage]);
-
-  async function handleMarkDone() {
-    setIsLoading(true);
-    setError("");
-    try {
-      const res = await fetch("/api/estimates", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: estimateId,
-          status: "done",
-          completed_at: new Date().toISOString(),
-        }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setError((data as { error?: string }).error ?? `Server error ${res.status}`);
-        return;
-      }
-
-      onDone();
-
-      if (!isPro) {
-        onClose();
-      } else if (googleReviewLink) {
-        setMessageBody(defaultReviewMessage);
-        setPanel("review-ready");
-      } else {
-        setPanel("needs-link");
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }
 
   async function handleSendReview(force: boolean) {
     setReviewLoading(true);
@@ -124,13 +91,6 @@ export function MarkJobDoneSheet({
     }
   }
 
-  const headerTitle =
-    panel === "confirm"
-      ? "Mark Job Done"
-      : panel === "upgrade"
-      ? "Upgrade to Pro"
-      : "Job Marked Done";
-
   return (
     <>
       <div
@@ -151,7 +111,7 @@ export function MarkJobDoneSheet({
         </div>
 
         <div className="flex items-center justify-between px-5 pt-3 pb-2 min-h-[52px]">
-          <span className="text-white font-semibold text-base">{headerTitle}</span>
+          <span className="text-white font-semibold text-base">Job Marked Done</span>
           <button
             type="button"
             onClick={onClose}
@@ -163,96 +123,6 @@ export function MarkJobDoneSheet({
             </svg>
           </button>
         </div>
-
-        {panel === "confirm" && (
-          <div className="px-5 pb-10 pt-2 flex flex-col gap-4">
-            <p className="text-zinc-400 text-sm leading-relaxed">
-              {isPro
-                ? "This will mark the job as completed and prepare a review request."
-                : "This will mark the job as completed."}
-            </p>
-            {error && (
-              <div className="bg-red-950 border border-red-800 rounded-xl px-4 py-3 text-red-300 text-sm">
-                {error}
-              </div>
-            )}
-            <button
-              type="button"
-              disabled={isLoading}
-              onClick={handleMarkDone}
-              className="w-full bg-green-600 hover:bg-green-500 active:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-base rounded-xl py-4 transition-colors min-h-[56px] flex items-center justify-center gap-2"
-            >
-              {isLoading && <Spinner className="w-5 h-5" />}
-              {isLoading ? "Saving..." : "Mark Job Done"}
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px]"
-            >
-              Cancel
-            </button>
-          </div>
-        )}
-
-        {panel === "upgrade" && (
-          <div className="px-5 pb-10 pt-2 flex flex-col gap-4">
-            <p className="text-zinc-400 text-sm leading-relaxed">
-              Get more Google reviews and follow up with customers automatically.
-            </p>
-            <div className="flex flex-col gap-2">
-              <div className="flex items-start gap-3 bg-zinc-800 rounded-xl px-4 py-3.5">
-                <div className="w-8 h-8 rounded-lg bg-amber-500/15 flex items-center justify-center shrink-0 mt-0.5">
-                  <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4 text-amber-400" aria-hidden="true">
-                    <path d="M8 1.5l1.6 3.3 3.6.5-2.6 2.5.6 3.6L8 9.7l-3.2 1.7.6-3.6L2.8 5.3l3.6-.5L8 1.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-white text-sm font-medium">Review Requests</p>
-                  <p className="text-zinc-400 text-xs mt-0.5">Send a Google review request when a job is done.</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 bg-zinc-800 rounded-xl px-4 py-3.5">
-                <div className="w-8 h-8 rounded-lg bg-amber-500/15 flex items-center justify-center shrink-0 mt-0.5">
-                  <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4 text-amber-400" aria-hidden="true">
-                    <rect x="1.5" y="3" width="13" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
-                    <path d="M5 7.5h6M5 9.5h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-white text-sm font-medium">Payment Reminders</p>
-                  <p className="text-zinc-400 text-xs mt-0.5">Follow up until the invoice is paid.</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 bg-zinc-800 rounded-xl px-4 py-3.5">
-                <div className="w-8 h-8 rounded-lg bg-amber-500/15 flex items-center justify-center shrink-0 mt-0.5">
-                  <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4 text-amber-400" aria-hidden="true">
-                    <rect x="2" y="2" width="12" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
-                    <path d="M5 1v2M11 1v2M2 6h12" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-                    <circle cx="8" cy="10" r="1.5" fill="currentColor" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-white text-sm font-medium">Follow-Up Reminders</p>
-                  <p className="text-zinc-400 text-xs mt-0.5">Remind past customers to book again.</p>
-                </div>
-              </div>
-            </div>
-            <a
-              href="/subscribe"
-              className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px] flex items-center justify-center"
-            >
-              Upgrade to Pro
-            </a>
-            <button
-              type="button"
-              onClick={onClose}
-              className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px]"
-            >
-              Not now
-            </button>
-          </div>
-        )}
 
         {panel === "review-ready" && (
           <div className="px-5 pb-10 pt-2 flex flex-col gap-4">
@@ -290,7 +160,6 @@ export function MarkJobDoneSheet({
                   className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-zinc-300 text-sm leading-relaxed resize-none focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 disabled:opacity-50 min-h-[96px]"
                 />
                 <p className="text-zinc-400 text-xs px-1">Your Google review link will be attached automatically.</p>
-                <p className="text-zinc-400 text-xs px-1">Customers can reply to this text if there&apos;s an issue.</p>
                 {reviewError && (
                   <div className="bg-red-950 border border-red-800 rounded-xl px-4 py-3 text-red-300 text-sm">
                     {reviewError}
@@ -359,7 +228,6 @@ export function MarkJobDoneSheet({
                   />
                 </div>
                 <p className="text-zinc-400 text-xs px-1">Your Google review link will be attached automatically.</p>
-                <p className="text-zinc-400 text-xs px-1">Customers can reply to this text if there&apos;s an issue.</p>
                 {reviewError && (
                   <div className="bg-red-950 border border-red-800 rounded-xl px-4 py-3 text-red-300 text-sm">
                     {reviewError}
@@ -391,14 +259,14 @@ export function MarkJobDoneSheet({
             <div>
               <p className="text-white font-semibold text-sm mb-1">Google review link missing</p>
               <p className="text-zinc-400 text-sm leading-relaxed">
-                Add your Google review link in Profile before sending review requests.
+                Add your Google review link to send review requests after jobs.
               </p>
             </div>
             <a
-              href="/profile"
+              href="/profile?section=reviews"
               className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px] flex items-center justify-center"
             >
-              Open Profile
+              Add Review Link
             </a>
             <button
               type="button"

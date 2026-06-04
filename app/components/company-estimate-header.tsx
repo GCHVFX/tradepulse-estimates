@@ -12,14 +12,14 @@ export function CompanyEstimateHeader({
   if (!logoUrl && !businessName) return null;
 
   return (
-    <div className="flex items-center gap-4 mb-5">
+    <div className="flex flex-col gap-2 mb-5">
       {logoUrl && (
         <Image
           src={logoUrl}
           alt={businessName || "Company logo"}
           width={160}
           height={48}
-          className="object-contain rounded shrink-0"
+          className="object-contain object-left rounded"
           unoptimized
         />
       )}

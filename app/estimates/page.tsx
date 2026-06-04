@@ -15,6 +15,8 @@ interface Estimate {
   status: string;
   sent_via?: string | null;
   sent_at?: string | null;
+  copied_at?: string | null;
+  completed_at?: string | null;
 }
 
 function formatSentMethod(sentVia?: string | null): string {
@@ -32,7 +34,7 @@ export default async function EstimatesPage() {
 
   const { data: estimates } = await supabaseAdmin
     .from("tpe_estimates")
-    .select("id, title, customer_name, customer_address, created_at, status, sent_via, sent_at")
+    .select("id, title, customer_name, customer_address, created_at, status, sent_via, sent_at, copied_at, completed_at")
     .eq("business_id", user.id)
     .order("created_at", { ascending: false });
 
@@ -42,7 +44,18 @@ export default async function EstimatesPage() {
     <div className="min-h-dvh bg-zinc-950 text-white flex flex-col">
       <header className="px-5 pt-10 pb-6 shrink-0">
         <Logo />
-        <h1 className="text-2xl font-bold mt-5">Estimates</h1>
+        <div className="flex items-center justify-between mt-5">
+          <h1 className="text-2xl font-bold">Estimates</h1>
+          <Link
+            href="/new"
+            className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950 font-semibold text-sm rounded-xl px-4 py-2.5 transition-colors min-h-[44px]"
+          >
+            <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4" aria-hidden="true">
+              <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+            New Estimate
+          </Link>
+        </div>
       </header>
 
       <main className="flex-1 px-5 pb-28">
@@ -65,6 +78,7 @@ export default async function EstimatesPage() {
             {items.map((estimate) => {
               const isSent = estimate.status === "sent";
               const isDone = estimate.status === "done";
+              const isCopied = estimate.status === "copied";
 
               return (
                 <li key={estimate.id}>
@@ -89,10 +103,12 @@ export default async function EstimatesPage() {
                               ? "bg-green-500/10 text-green-500/70"
                               : isSent
                               ? "bg-blue-500/15 text-blue-300"
+                              : isCopied
+                              ? "bg-sky-500/10 text-sky-400"
                               : "bg-zinc-800 text-zinc-300"
                           }`}
                         >
-                          {isDone ? "Done" : isSent ? "Sent" : "Draft"}
+                          {isDone ? "Done" : isSent ? "Sent" : isCopied ? "Copied" : "Draft"}
                         </span>
                       </div>
 
@@ -102,9 +118,30 @@ export default async function EstimatesPage() {
                             <span className="font-semibold text-zinc-100">{formatSentMethod(estimate.sent_via)}</span>
                             <LocalDateText
                               dateStr={estimate.sent_at}
-                              className="text-zinc-300"
+                              showTime
+                              className="text-zinc-300 text-xs"
                             />
                           </div>
+                        </div>
+                      )}
+
+                      {isCopied && estimate.copied_at && (
+                        <div className="mt-2 rounded-lg border border-zinc-800 bg-zinc-950/70 px-2.5 py-2">
+                          <LocalDateText
+                            dateStr={estimate.copied_at}
+                            showTime
+                            className="text-zinc-300 text-xs"
+                          />
+                        </div>
+                      )}
+
+                      {isDone && estimate.completed_at && (
+                        <div className="mt-2 rounded-lg border border-zinc-800 bg-zinc-950/70 px-2.5 py-2">
+                          <LocalDateText
+                            dateStr={estimate.completed_at}
+                            showTime
+                            className="text-zinc-300 text-xs"
+                          />
                         </div>
                       )}
                     </Link>

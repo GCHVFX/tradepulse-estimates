@@ -7,9 +7,9 @@ import { ProfileForm } from "@/app/components/profile-form";
 export default async function ProfilePage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; section?: string }>;
 }) {
-  const { next } = await searchParams;
+  const { next, section } = await searchParams;
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -66,6 +66,7 @@ export default async function ProfilePage({
           subscriptionStatus={data?.subscription_status ?? "trial"}
           trialEndsAt={data?.trial_ends_at ?? null}
           plan={data?.plan ?? "starter"}
+          openSection={section ?? undefined}
         />
       </main>
 

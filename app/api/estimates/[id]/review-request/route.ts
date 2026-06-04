@@ -58,7 +58,7 @@ export async function POST(
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("plan, google_review_link, name")
+    .select("plan, google_review_link, name, phone")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -90,10 +90,12 @@ export async function POST(
     return applyTo(NextResponse.json({ error: message }, { status: 400 }));
   }
 
-  const customerName = estimate.customer_name?.trim() ?? "";
   const businessName = business.name?.trim() || "us";
-  const greeting = customerName ? `Hi ${customerName},` : "Hi,";
-  const defaultMessage = `${greeting}\n\nThanks for choosing ${businessName}. If anything wasn't right, reply to this text and we'll make it right.\n\nIf you have a moment, we'd appreciate a Google review.`;
+  const businessPhone = business.phone?.trim() ?? "";
+  const contactLine = businessPhone
+    ? `If anything wasn't right, text or call us at ${businessPhone} and we'll make it right.`
+    : `If anything wasn't right, contact us directly and we'll make it right.`;
+  const defaultMessage = `Thanks for choosing ${businessName}.\n\n${contactLine}\n\nIf you have a moment, we'd appreciate a Google review.`;
   const smsBody = `${requestMessageBody ?? defaultMessage}\n\n${business.google_review_link}`;
 
   try {

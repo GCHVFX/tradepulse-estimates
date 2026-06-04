@@ -31,6 +31,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     summary?: unknown;
     status?: unknown;
     completed_at?: unknown;
+    copied_at?: unknown;
   };
   try {
     body = await request.json();
@@ -68,6 +69,9 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   }
   if ("completed_at" in body) {
     updateFields.completed_at = typeof body.completed_at === "string" ? body.completed_at : null;
+  }
+  if ("copied_at" in body) {
+    updateFields.copied_at = typeof body.copied_at === "string" ? body.copied_at : null;
   }
 
   if (Object.keys(updateFields).length === 0) {

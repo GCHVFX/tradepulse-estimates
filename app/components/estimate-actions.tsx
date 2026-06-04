@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { SendEstimateSheet } from "./send-estimate-sheet";
 import { MarkJobDoneSheet } from "./mark-job-done-sheet";
+import { Spinner } from "./spinner";
 
 interface EstimateActionsProps {
   estimateId: string;
@@ -13,6 +14,7 @@ interface EstimateActionsProps {
   customerEmail?: string;
   customerName?: string;
   businessName?: string;
+  businessPhone?: string;
   logoUrl?: string | null;
   isPro: boolean;
   googleReviewLink: string | null;
@@ -28,6 +30,7 @@ export function EstimateActions({
   customerEmail,
   customerName,
   businessName,
+  businessPhone,
   logoUrl,
   isPro,
   googleReviewLink,
@@ -35,11 +38,40 @@ export function EstimateActions({
 }: EstimateActionsProps) {
   const [showSendSheet, setShowSendSheet] = useState(false);
   const [showDoneSheet, setShowDoneSheet] = useState(false);
-  const [doneSheetInitialPanel, setDoneSheetInitialPanel] = useState<"confirm" | "review-ready">("confirm");
+  const [doneSheetInitialPanel, setDoneSheetInitialPanel] = useState<"review-ready" | "needs-link">("review-ready");
   const [localStatus, setLocalStatus] = useState(status ?? "");
   const [localCustomerPhone, setLocalCustomerPhone] = useState(customerPhone ?? "");
   const [isDone, setIsDone] = useState(status === "done");
   const [localReviewRequestedAt, setLocalReviewRequestedAt] = useState(reviewRequestedAt ?? null);
+  const [isMarkingDone, setIsMarkingDone] = useState(false);
+  const [markDoneError, setMarkDoneError] = useState("");
+
+  async function handleMarkDone() {
+    setIsMarkingDone(true);
+    setMarkDoneError("");
+    try {
+      const res = await fetch("/api/estimates", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: estimateId,
+          status: "done",
+          completed_at: new Date().toISOString(),
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setMarkDoneError((data as { error?: string }).error ?? `Server error ${res.status}`);
+        return;
+      }
+      setIsDone(true);
+      const panel = googleReviewLink ? "review-ready" : "needs-link";
+      setDoneSheetInitialPanel(panel);
+      setShowDoneSheet(true);
+    } finally {
+      setIsMarkingDone(false);
+    }
+  }
 
   return (
     <>
@@ -97,13 +129,20 @@ export function EstimateActions({
         ) : localStatus === "sent" ? (
           <>
             {isPro && (
-              <button
-                type="button"
-                onClick={() => setShowDoneSheet(true)}
-                className="w-full bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px]"
-              >
-                Mark Job Done
-              </button>
+              <>
+                {markDoneError && (
+                  <p className="text-red-400 text-xs text-center">{markDoneError}</p>
+                )}
+                <button
+                  type="button"
+                  disabled={isMarkingDone}
+                  onClick={handleMarkDone}
+                  className="w-full bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px] flex items-center justify-center gap-2"
+                >
+                  {isMarkingDone && <Spinner className="w-5 h-5" />}
+                  {isMarkingDone ? "Saving..." : "Mark Job Done"}
+                </button>
+              </>
             )}
             {isPro && googleReviewLink && status === "sent" && (
               <p className="text-center text-xs text-zinc-500 -mt-1">Review request available after completion.</p>
@@ -135,6 +174,7 @@ export function EstimateActions({
           if (phone) setLocalCustomerPhone(phone);
         }}
         estimateId={estimateId}
+        currentStatus={localStatus}
         customerPhone={customerPhone}
         customerEmail={customerEmail}
         title={title}
@@ -147,16 +187,15 @@ export function EstimateActions({
         isOpen={showDoneSheet}
         onClose={() => {
           setShowDoneSheet(false);
-          setDoneSheetInitialPanel("confirm");
+          setDoneSheetInitialPanel("review-ready");
         }}
-        onDone={() => setIsDone(true)}
         onReviewSent={() => setLocalReviewRequestedAt(new Date().toISOString())}
         estimateId={estimateId}
-        isPro={isPro}
         googleReviewLink={googleReviewLink}
         customerPhone={localCustomerPhone}
         customerName={customerName ?? ""}
         businessName={businessName ?? ""}
+        businessPhone={businessPhone ?? ""}
         reviewRequestedAt={localReviewRequestedAt}
         initialPanel={doneSheetInitialPanel}
       />

@@ -89,6 +89,7 @@ export type Database = {
           assumptions: string | null
           business_id: string | null
           completed_at: string | null
+          copied_at: string | null
           created_at: string | null
           customer_address: string
           customer_email: string
@@ -114,6 +115,7 @@ export type Database = {
           assumptions?: string | null
           business_id?: string | null
           completed_at?: string | null
+          copied_at?: string | null
           created_at?: string | null
           customer_address?: string
           customer_email?: string
@@ -139,6 +141,7 @@ export type Database = {
           assumptions?: string | null
           business_id?: string | null
           completed_at?: string | null
+          copied_at?: string | null
           created_at?: string | null
           customer_address?: string
           customer_email?: string

@@ -13,6 +13,7 @@ interface SendEstimateSheetProps {
   onClose: () => void;
   onSent?: (phone?: string) => void;
   estimateId?: string;
+  currentStatus?: string;
   customerPhone?: string;
   customerEmail?: string;
   title?: string;
@@ -26,6 +27,7 @@ export function SendEstimateSheet({
   onClose,
   onSent,
   estimateId,
+  currentStatus,
   customerPhone,
   customerEmail,
   title,
@@ -85,6 +87,19 @@ export function SendEstimateSheet({
     }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+
+    // Track copy: only upgrade draft → copied; leave sent/done unchanged
+    if (estimateId && (!currentStatus || currentStatus === "draft")) {
+      fetch("/api/estimates", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: estimateId,
+          status: "copied",
+          copied_at: new Date().toISOString(),
+        }),
+      }).catch(() => {});
+    }
   }
 
   async function handleSendSMS() {
