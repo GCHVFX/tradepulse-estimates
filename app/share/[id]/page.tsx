@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { EstimateMarkdown } from "@/app/components/estimate-markdown";
 import { DownloadPdfButton } from "@/app/components/download-pdf-button";
+import { CompanyEstimateHeader } from "@/app/components/company-estimate-header";
 import { supabaseAdmin } from "@/lib/supabase-server";
 
 export default async function ShareEstimatePage({
@@ -13,7 +14,7 @@ export default async function ShareEstimatePage({
   const { data: estimate } = await supabaseAdmin
     .from("tpe_estimates")
     .select(
-      "title, summary, customer_name, customer_phone, customer_email, customer_address, prepared_by, created_at"
+      "title, summary, customer_name, customer_phone, customer_email, customer_address, prepared_by, created_at, business_id"
     )
     .eq("id", id)
     .maybeSingle();
@@ -34,15 +35,32 @@ export default async function ShareEstimatePage({
     );
   }
 
+  // Look up business branding via the estimate's owner
+  const { data: business } = estimate.business_id
+    ? await supabaseAdmin
+        .from("tpe_businesses")
+        .select("name, logo_url")
+        .eq("user_id", estimate.business_id)
+        .maybeSingle()
+    : { data: null };
+
+  const businessName = business?.name ?? "";
+  const logoUrl = business?.logo_url ?? null;
+
   return (
     <div className="min-h-dvh bg-slate-50 flex flex-col">
       <main className="flex-1 px-5 pt-6 pb-20 max-w-2xl mx-auto w-full">
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
 
-          {/* Letterhead header - only show prepared_by since we don't have business_id */}
-          {estimate.prepared_by && (
+          {/* Business letterhead */}
+          {(logoUrl || businessName || estimate.prepared_by) && (
             <div className="pb-5 mb-5 border-b border-slate-200">
-              <p className="text-sm text-zinc-600">{estimate.prepared_by}</p>
+              <CompanyEstimateHeader logoUrl={logoUrl} businessName={businessName} />
+              {estimate.prepared_by && (
+                <p className={`text-sm text-zinc-600 ${logoUrl || businessName ? "mt-2" : ""}`}>
+                  {estimate.prepared_by}
+                </p>
+              )}
             </div>
           )}
 
@@ -90,8 +108,8 @@ export default async function ShareEstimatePage({
           <DownloadPdfButton
             title={estimate.title ?? ""}
             summary={estimate.summary ?? ""}
-            businessName=""
-            logoUrl={null}
+            businessName={businessName}
+            logoUrl={logoUrl}
           />
         </div>
       </main>

@@ -84,23 +84,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     "https://www.trytradepulse.com";
 
   const shareUrl = `${origin}/share/${estimateId}`;
-  const businessName = business?.name || "Your contractor";
+  const businessName = business?.name?.trim() ?? "";
   const customerName = (estimate.customer_name ?? "").trim();
   const greeting = customerName ? `Hi ${customerName},` : "Hi,";
+  const sender = businessName || "We";
+  const subject = businessName ? `Your estimate from ${businessName}` : "Your estimate is ready";
 
   const resend = new Resend(process.env.RESEND_API_KEY);
 
   try {
     const result = await resend.emails.send({
-      // Replace this with your verified domain in Resend
       from: "TradePulse Estimates <estimates@trytradepulse.com>",
       to: to.trim(),
-      subject: `Your estimate from ${businessName}`,
+      subject,
       html: `
         <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 24px; color: #111;">
           <p style="font-size: 16px; margin: 0 0 16px;">${greeting}</p>
           <p style="font-size: 16px; margin: 0 0 24px;">
-            ${businessName} has sent you an estimate. Click below to view it.
+            ${sender} sent you an estimate. Click below to view it.
           </p>
           <a
             href="${shareUrl}"

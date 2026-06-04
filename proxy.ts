@@ -23,6 +23,17 @@ function isPublic(pathname: string): boolean {
   return PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(path + "/"));
 }
 
+// When getUser() refreshes a token it calls setAll() which updates `response`.
+// Any subsequent redirect must carry those updated cookies or the browser
+// keeps the old (expired) access token and the session appears lost.
+function withSessionCookies(redirect: NextResponse, session: NextResponse): NextResponse {
+  session.cookies.getAll().forEach((cookie) => {
+    const { name, value, ...options } = cookie;
+    redirect.cookies.set(name, value, options);
+  });
+  return redirect;
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -64,7 +75,7 @@ export async function proxy(request: NextRequest) {
   if (!user) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("next", pathname);
-    return NextResponse.redirect(loginUrl);
+    return withSessionCookies(NextResponse.redirect(loginUrl), response);
   }
 
   const { data: business } = await supabase
@@ -75,7 +86,7 @@ export async function proxy(request: NextRequest) {
 
   if (!business) {
     if (pathname !== "/subscribe") {
-      return NextResponse.redirect(new URL("/subscribe", request.url));
+      return withSessionCookies(NextResponse.redirect(new URL("/subscribe", request.url)), response);
     }
     return response;
   }
@@ -90,7 +101,7 @@ export async function proxy(request: NextRequest) {
     isActive || isTrialing || business.subscription_status === "complimentary";
 
   if (!hasAccess && pathname !== "/subscribe") {
-    return NextResponse.redirect(new URL("/subscribe", request.url));
+    return withSessionCookies(NextResponse.redirect(new URL("/subscribe", request.url)), response);
   }
 
   return response;

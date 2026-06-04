@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 interface PriceBookItem {
   id: string;
@@ -23,6 +23,10 @@ export function PriceBook() {
   const [loading, setLoading] = useState(true);
   const [rateStatus, setRateStatus] = useState<SaveStatus>("idle");
 
+  // Auto-save for rates
+  const rateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevRatesRef = useRef<Rates | null>(null);
+
   // New item form
   const [newName, setNewName] = useState("");
   const [newPrice, setNewPrice] = useState("");
@@ -41,26 +45,39 @@ export function PriceBook() {
       .then((d: { rates: Rates; items: PriceBookItem[] }) => {
         setRates(d.rates);
         setItems(d.items);
+        prevRatesRef.current = d.rates;
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
-  async function handleSaveRates() {
-    setRateStatus("saving");
-    try {
-      const res = await fetch("/api/price-book", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(rates),
-      });
-      if (!res.ok) throw new Error("Failed");
-      setRateStatus("saved");
-      setTimeout(() => setRateStatus("idle"), 2000);
-    } catch {
-      setRateStatus("error");
-    }
-  }
+  // Auto-save rates 1 s after last change
+  useEffect(() => {
+    if (prevRatesRef.current === null) return; // still loading
+    if (JSON.stringify(rates) === JSON.stringify(prevRatesRef.current)) return;
+    prevRatesRef.current = rates;
+
+    if (rateTimerRef.current) clearTimeout(rateTimerRef.current);
+    rateTimerRef.current = setTimeout(async () => {
+      rateTimerRef.current = null;
+      setRateStatus("saving");
+      try {
+        const res = await fetch("/api/price-book", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(rates),
+        });
+        if (!res.ok) throw new Error("Failed");
+        setRateStatus("saved");
+        setTimeout(() => setRateStatus("idle"), 2000);
+      } catch {
+        setRateStatus("error");
+      }
+    }, 1000);
+    return () => {
+      if (rateTimerRef.current) clearTimeout(rateTimerRef.current);
+    };
+  }, [rates]);
 
   async function handleAddItem() {
     if (!newName.trim()) return;
@@ -185,14 +202,11 @@ export function PriceBook() {
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={handleSaveRates}
-          disabled={rateStatus === "saving"}
-          className="w-full bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-zinc-950 font-bold text-sm rounded-xl py-3 transition-colors min-h-[44px] flex items-center justify-center gap-2"
-        >
-          {rateStatus === "saving" ? "Saving..." : rateStatus === "saved" ? "Saved" : "Save Rates"}
-        </button>
+        {rateStatus !== "idle" && (
+          <p className={`text-xs text-right ${rateStatus === "error" ? "text-red-400" : rateStatus === "saved" ? "text-green-400" : "text-zinc-400"}`}>
+            {rateStatus === "saving" ? "Saving..." : rateStatus === "saved" ? "✓ Saved" : "Could not save"}
+          </p>
+        )}
       </div>
 
       {/* Divider */}
