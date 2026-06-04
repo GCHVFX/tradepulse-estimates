@@ -34,7 +34,6 @@ export function CustomerDetailsBlock({
   const [email, setEmail] = useState(initialEmail);
   const [address, setAddress] = useState(initialAddress);
   const [status, setStatus] = useState<SaveStatus>("idle");
-  const [isDirty, setIsDirty] = useState(false);
 
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasPendingRef = useRef(false);
@@ -64,11 +63,9 @@ export function CustomerDetailsBlock({
 
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     hasPendingRef.current = true;
-    setIsDirty(true);
     autoSaveTimerRef.current = setTimeout(async () => {
       autoSaveTimerRef.current = null;
-      if (!estimateId) { hasPendingRef.current = false; setIsDirty(false); return; }
-      setIsDirty(false);
+      if (!estimateId) { hasPendingRef.current = false; return; }
       setStatus("saving");
       try {
         const res = await fetch("/api/estimates", {
@@ -105,46 +102,12 @@ export function CustomerDetailsBlock({
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, []);
 
-  async function handleSave() {
-    if (!estimateId) return;
-    if (autoSaveTimerRef.current) {
-      clearTimeout(autoSaveTimerRef.current);
-      autoSaveTimerRef.current = null;
-    }
-    hasPendingRef.current = false;
-    setIsDirty(false);
-    setStatus("saving");
-
-    try {
-      const res = await fetch("/api/estimates", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: estimateId,
-          customer_name: name,
-          customer_phone: phone,
-          customer_email: email,
-          customer_address: address,
-        }),
-      });
-
-      if (!res.ok) throw new Error("Failed to save");
-
-      setStatus("saved");
-      setEditing(false);
-      setTimeout(() => setStatus("idle"), 2000);
-    } catch {
-      setStatus("error");
-    }
-  }
-
   function handleCancel() {
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current);
       autoSaveTimerRef.current = null;
     }
     hasPendingRef.current = false;
-    setIsDirty(false);
     setName(initialName);
     setPhone(formatPhoneInput(initialPhone));
     setEmail(initialEmail);
@@ -191,45 +154,16 @@ export function CustomerDetailsBlock({
         </div>
 
         <div className="flex items-center justify-between gap-2">
-          <p className={`text-xs ${status === "error" ? "text-red-400" : "text-zinc-400"}`}>
-            {status === "saving" ? "Saving..." : status === "saved" ? "Saved" : status === "error" ? "Could not save" : ""}
+          <p className={`text-xs ${status === "error" ? "text-red-400" : status === "saved" ? "text-green-400" : "text-zinc-400"}`}>
+            {status === "saving" ? "Saving..." : status === "saved" ? "✓ Saved" : status === "error" ? "Could not save" : ""}
           </p>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={status === "saving"}
-              className="bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-zinc-950 font-semibold text-sm rounded-lg px-4 py-2 transition-colors min-h-[36px] flex items-center justify-center gap-1.5 min-w-[88px]"
-            >
-              {status === "saving" ? (
-                <>
-                  <svg className="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  Saving...
-                </>
-              ) : status === "error" ? (
-                "Try Again"
-              ) : isDirty ? (
-                "Save Now"
-              ) : (
-                <>
-                  <svg viewBox="0 0 20 20" fill="none" className="w-3.5 h-3.5" aria-hidden="true">
-                    <path d="M4 10l4.5 4.5L16 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  Saved
-                </>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={handleCancel}
-              className="bg-zinc-800 hover:bg-zinc-700 text-white text-sm rounded-lg px-4 py-2 transition-colors min-h-[36px]"
-            >
-              Cancel
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="bg-zinc-800 hover:bg-zinc-700 text-white text-sm rounded-lg px-4 py-2 transition-colors min-h-[36px]"
+          >
+            Cancel
+          </button>
         </div>
       </div>
     );
@@ -248,7 +182,7 @@ export function CustomerDetailsBlock({
         )}
         <span className="block">Date: {formattedDate}</span>
         {status === "saved" && (
-          <span className="text-green-500 block mt-0.5">Details saved.</span>
+          <span className="text-green-400 block mt-0.5">✓ Saved</span>
         )}
       </div>
 

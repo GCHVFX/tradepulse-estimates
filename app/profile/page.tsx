@@ -36,7 +36,7 @@ export default async function ProfilePage({
   return (
     <div className="min-h-dvh bg-zinc-950 text-white flex flex-col">
       <header className="px-5 pt-10 pb-3 shrink-0">
-        <Logo businessName={profile.name} />
+        <Logo />
         <h1 className="text-2xl font-bold mt-5">Profile</h1>
         <p className="text-zinc-400 text-sm mt-1">
           Your business details appear on estimates.

@@ -30,22 +30,18 @@ export default async function EstimatesPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: estimates }, { data: business }] = await Promise.all([
-    supabaseAdmin
-      .from("tpe_estimates")
-      .select("id, title, customer_name, customer_address, created_at, status, sent_via, sent_at")
-      .eq("business_id", user.id)
-      .order("created_at", { ascending: false }),
-    supabaseAdmin.from("tpe_businesses").select("name").eq("user_id", user.id).maybeSingle(),
-  ]);
+  const { data: estimates } = await supabaseAdmin
+    .from("tpe_estimates")
+    .select("id, title, customer_name, customer_address, created_at, status, sent_via, sent_at")
+    .eq("business_id", user.id)
+    .order("created_at", { ascending: false });
 
   const items = (estimates ?? []) as Estimate[];
-  const businessName = (business as { name?: string } | null)?.name ?? "";
 
   return (
     <div className="min-h-dvh bg-zinc-950 text-white flex flex-col">
       <header className="px-5 pt-10 pb-6 shrink-0">
-        <Logo businessName={businessName} />
+        <Logo />
         <h1 className="text-2xl font-bold mt-5">Estimates</h1>
       </header>
 

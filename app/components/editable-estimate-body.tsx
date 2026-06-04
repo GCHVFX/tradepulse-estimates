@@ -445,14 +445,18 @@ export function EditableEstimateBody({
             onChange={(e) => setNewLabel(e.target.value)}
             autoFocus
           />
-          <input
-            type="text"
-            className="w-full border border-zinc-200 rounded-lg px-3 py-2.5 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]"
-            placeholder="Cost (e.g. $150)"
-            value={newCost}
-            onChange={(e) => setNewCost(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleAddItem()}
-          />
+          <div className="relative flex items-center">
+            <span className="absolute left-3 text-sm text-zinc-500 pointer-events-none select-none">$</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              className="w-full border border-zinc-200 rounded-lg pl-6 pr-3 py-2.5 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]"
+              placeholder="0"
+              value={newCost}
+              onChange={(e) => setNewCost(e.target.value.replace(/[^0-9.]/g, ''))}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddItem()}
+            />
+          </div>
           <div className="flex gap-2">
             <button
               type="button"
@@ -484,36 +488,6 @@ export function EditableEstimateBody({
           Add item
         </button>
       )}
-
-      {/* Sections between line items and pricing (e.g. Assumptions and Exclusions) */}
-      {beforeSections.map(s => (
-        <div key={s.heading}>
-          <SectionHeading>{s.heading}</SectionHeading>
-          {s.nonBullets && (
-            <ul className="mb-3 space-y-1">
-              <li className="flex items-start gap-2 text-sm text-zinc-700 leading-relaxed">
-                <span className="text-amber-500 mt-0.5 shrink-0">•</span>
-                <span className="flex-1">{s.nonBullets}</span>
-                <XBtn onClick={() => removeAssumption(s.heading, '__nonbullets__')} />
-              </li>
-            </ul>
-          )}
-          {s.bullets.length > 0 && (
-            <ul className="mb-3 space-y-1">
-              {s.bullets.map(item => (
-                <li
-                  key={item.id}
-                  className="flex items-start gap-2 text-sm text-zinc-700 leading-relaxed"
-                >
-                  <span className="text-amber-500 mt-0.5 shrink-0">•</span>
-                  <span className="flex-1">{item.text}</span>
-                  <XBtn onClick={() => removeAssumption(s.heading, item.id)} />
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      ))}
 
       {/* Pricing Summary — always recalculated */}
       <SectionHeading>Pricing Summary</SectionHeading>
@@ -551,6 +525,36 @@ export function EditableEstimateBody({
           </tbody>
         </table>
       </div>
+
+      {/* Assumptions & Exclusions (and any other sections before pricing in source) */}
+      {beforeSections.map(s => (
+        <div key={s.heading}>
+          <SectionHeading>{s.heading}</SectionHeading>
+          {s.nonBullets && (
+            <ul className="mb-3 space-y-1">
+              <li className="flex items-start gap-2 text-sm text-zinc-700 leading-relaxed">
+                <span className="text-amber-500 mt-0.5 shrink-0">•</span>
+                <span className="flex-1">{s.nonBullets}</span>
+                <XBtn onClick={() => removeAssumption(s.heading, '__nonbullets__')} />
+              </li>
+            </ul>
+          )}
+          {s.bullets.length > 0 && (
+            <ul className="mb-3 space-y-1">
+              {s.bullets.map(item => (
+                <li
+                  key={item.id}
+                  className="flex items-start gap-2 text-sm text-zinc-700 leading-relaxed"
+                >
+                  <span className="text-amber-500 mt-0.5 shrink-0">•</span>
+                  <span className="flex-1">{item.text}</span>
+                  <XBtn onClick={() => removeAssumption(s.heading, item.id)} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ))}
 
       {/* Sections after pricing (Payment Terms, Notes) */}
       {afterPricingSections.map(s => (

@@ -1,4 +1,4 @@
-export function Logo({ businessName }: { businessName?: string } = {}) {
+export function Logo() {
   return (
     <div className="flex items-center gap-2.5">
       <svg
@@ -60,12 +60,6 @@ export function Logo({ businessName }: { businessName?: string } = {}) {
         <span className="text-lg font-bold tracking-tight leading-none">TradePulse</span>
         <span className="block text-xs leading-none mt-0.5" style={{ color: "#f59e0b" }}>Estimates</span>
       </div>
-      {businessName && (
-        <>
-          <span className="text-zinc-700 text-sm select-none">|</span>
-          <span className="text-sm font-medium text-zinc-300 truncate max-w-[160px]">{businessName}</span>
-        </>
-      )}
     </div>
   );
 }

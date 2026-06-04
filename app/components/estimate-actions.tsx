@@ -96,13 +96,15 @@ export function EstimateActions({
           </>
         ) : localStatus === "sent" ? (
           <>
-            <button
-              type="button"
-              onClick={() => setShowDoneSheet(true)}
-              className="w-full bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px]"
-            >
-              Mark Job Done
-            </button>
+            {isPro && (
+              <button
+                type="button"
+                onClick={() => setShowDoneSheet(true)}
+                className="w-full bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+              >
+                Mark Job Done
+              </button>
+            )}
             {isPro && googleReviewLink && status === "sent" && (
               <p className="text-center text-xs text-zinc-500 -mt-1">Review request available after completion.</p>
             )}
