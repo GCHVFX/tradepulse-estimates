@@ -88,16 +88,20 @@ export function SendEstimateSheet({
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
 
-    // Track copy: only upgrade draft → copied; leave sent/done unchanged
-    if (estimateId && (!currentStatus || currentStatus === "draft")) {
+    // Track copy as delivery: draft→sent + copied_at; sent→update copied_at only; done→skip
+    if (estimateId && currentStatus !== "done") {
+      const body: Record<string, unknown> = {
+        id: estimateId,
+        copied_at: new Date().toISOString(),
+      };
+      if (!currentStatus || currentStatus === "draft") {
+        body.status = "sent";
+        onSent?.();
+      }
       fetch("/api/estimates", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: estimateId,
-          status: "copied",
-          copied_at: new Date().toISOString(),
-        }),
+        body: JSON.stringify(body),
       }).catch(() => {});
     }
   }

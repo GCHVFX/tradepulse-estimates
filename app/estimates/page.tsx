@@ -19,11 +19,6 @@ interface Estimate {
   completed_at?: string | null;
 }
 
-function formatSentMethod(sentVia?: string | null): string {
-  if (sentVia === "sms") return "SMS";
-  if (sentVia === "email") return "Email";
-  return "Sent";
-}
 
 export default async function EstimatesPage() {
   const supabase = await createSupabaseServerClient();
@@ -78,7 +73,13 @@ export default async function EstimatesPage() {
             {items.map((estimate) => {
               const isSent = estimate.status === "sent";
               const isDone = estimate.status === "done";
-              const isCopied = estimate.status === "copied";
+
+              const deliveryLabel =
+                estimate.sent_via === "sms" ? "SMS"
+                : estimate.sent_via === "email" ? "Email"
+                : estimate.copied_at ? "Copied"
+                : null;
+              const deliveryTime = estimate.sent_via ? estimate.sent_at : estimate.copied_at;
 
               return (
                 <li key={estimate.id}>
@@ -103,21 +104,19 @@ export default async function EstimatesPage() {
                               ? "bg-green-500/10 text-green-500/70"
                               : isSent
                               ? "bg-blue-500/15 text-blue-300"
-                              : isCopied
-                              ? "bg-sky-500/10 text-sky-400"
                               : "bg-zinc-800 text-zinc-300"
                           }`}
                         >
-                          {isDone ? "Done" : isSent ? "Sent" : isCopied ? "Copied" : "Draft"}
+                          {isDone ? "Done" : isSent ? "Sent" : "Draft"}
                         </span>
                       </div>
 
-                      {isSent && estimate.sent_at && (
+                      {(isSent || isDone) && deliveryLabel && deliveryTime && (
                         <div className="mt-2 rounded-lg border border-zinc-800 bg-zinc-950/70 px-2.5 py-2">
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                            <span className="font-semibold text-zinc-100">{formatSentMethod(estimate.sent_via)}</span>
+                            <span className="font-semibold text-zinc-100">{deliveryLabel}</span>
                             <LocalDateText
-                              dateStr={estimate.sent_at}
+                              dateStr={deliveryTime}
                               showTime
                               className="text-zinc-300 text-xs"
                             />
@@ -125,23 +124,16 @@ export default async function EstimatesPage() {
                         </div>
                       )}
 
-                      {isCopied && estimate.copied_at && (
-                        <div className="mt-2 rounded-lg border border-zinc-800 bg-zinc-950/70 px-2.5 py-2">
-                          <LocalDateText
-                            dateStr={estimate.copied_at}
-                            showTime
-                            className="text-zinc-300 text-xs"
-                          />
-                        </div>
-                      )}
-
                       {isDone && estimate.completed_at && (
                         <div className="mt-2 rounded-lg border border-zinc-800 bg-zinc-950/70 px-2.5 py-2">
-                          <LocalDateText
-                            dateStr={estimate.completed_at}
-                            showTime
-                            className="text-zinc-300 text-xs"
-                          />
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                            <span className="font-semibold text-zinc-100">Completed</span>
+                            <LocalDateText
+                              dateStr={estimate.completed_at}
+                              showTime
+                              className="text-zinc-300 text-xs"
+                            />
+                          </div>
                         </div>
                       )}
                     </Link>
