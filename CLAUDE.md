@@ -87,6 +87,7 @@ lib/
   supabase-browser.ts            createSupabaseBrowserClient
   stripe.ts                      Single Stripe instance (import from here only)
   auth.ts                        checkUserSubscriptionAccess(userId, supabaseAdmin)
+  audit-log.ts                   logEstimateChange() — writes to tpe_estimate_changes
   api-utils.ts                   validateContentType(), generateRequestId(), addRequestIdToResponse()
   rate-limit.ts                  checkRateLimit() — DB-backed, uses tpe_rate_limits table
   format-phone.ts                Canadian phone formatting
@@ -122,10 +123,17 @@ docs/
 - Gated by `business.plan === 'pro'` in `estimates/[id]/review-request/route.ts`
 - "Mark Job Done" button only shown on estimate detail when `isPro === true` and status === 'sent'
 
+### Photo Input (live, Pro-gated)
+- Camera button below the job description textarea in `app/new/page.tsx` FormView
+- Photo is downscaled client-side (1568px max edge, JPEG) then sent to `POST /api/analyze-photo`
+- Route sends the image to `claude-sonnet-4-6` (vision), returns a plain-English job description that populates the textarea — existing Generate flow unchanged
+- Photos are never stored. No DB columns involved.
+- Gated by `business.plan === 'pro'` server-side; Starter sees the button greyed out with a Pro badge
+- Rate limited: 5 calls per user per 60 minutes
+
 ### Not Yet Built
-- Payments (automated invoice reminders)
+- Payments (automated invoice reminders) — schema staged: `tpe_payment_reminders` table, payment columns on `tpe_estimates`, `payment_link` on `tpe_businesses`
 - Follow-Up (scheduled customer outreach)
-- Camera input for estimates (requires Sonnet, Pro only)
 - Pro upgrade flow (no Pro subscribers yet, STRIPE_PRO_PRICE_ID not set)
 
 ---
@@ -150,10 +158,17 @@ Public paths are listed in `proxy.ts PUBLIC_PATHS`. Every `/api/` path is alread
 ## Database Tables (Supabase, `tpe_` prefix)
 
 **`tpe_businesses`**
-`user_id` (FK to auth.users, PK), `name`, `phone`, `email`, `logo_url`, `prepared_by`, `google_review_link`, `plan` ('starter'|'pro', default 'starter'), `subscription_status`, `trial_ends_at`, `stripe_customer_id`, `stripe_subscription_id`, `signup_source`
+`user_id` (FK to auth.users, PK), `name`, `phone`, `email`, `logo_url`, `prepared_by`, `google_review_link`, `payment_link` (not yet used — for Payments feature), `plan` ('starter'|'pro', default 'starter'), `subscription_status`, `trial_ends_at`, `stripe_customer_id`, `stripe_subscription_id`, `signup_source`
 
 **`tpe_estimates`**
-`id`, `business_id` (FK to auth.users), `title`, `summary` (full markdown content), `status` ('draft'|'sent'|'done'), `customer_name`, `customer_phone`, `customer_email`, `customer_address`, `prepared_by`, `deposit_amount`, `sent_via`, `sent_at`, `copied_at`, `completed_at`, `review_requested_at`, `created_at`
+`id`, `business_id` (FK to auth.users), `title`, `summary` (full markdown content), `status` ('draft'|'sent'|'done'), `customer_name`, `customer_phone`, `customer_email`, `customer_address`, `customer_id`, `prepared_by`, `deposit_amount`, `sent_via`, `sent_at`, `copied_at`, `completed_at`, `review_requested_at`, `created_at`
+Columns in schema but not yet used in queries: `assumptions`, `scope`, `notes`, `line_items`, `pricing`, `payment_terms` (structured estimate fields), and `payment_status`, `invoice_amount`, `due_date`, `last_reminder_sent_at`, `reminder_count` (for Payments feature)
+
+**`tpe_estimate_changes`**
+`id`, `estimate_id` (FK to tpe_estimates), `user_id`, `change_type` ('created'|'edited'|'sent'|'deleted'), `old_value`, `new_value`, `changed_at`, `created_at` — audit log, written by `lib/audit-log.ts logEstimateChange()`
+
+**`tpe_payment_reminders`**
+`id`, `estimate_id` (FK to tpe_estimates), `business_id`, `channel`, `stage`, `message`, `sent_at` — exists in schema, not yet used (for Payments feature)
 
 **`tpe_price_book`**
 `user_id`, `labour_rate`, `markup_percent`, `deposit_percent`, `deposit_threshold`
@@ -237,6 +252,10 @@ import { stripe } from "@/lib/stripe";
   - `controller.close()` must come AFTER the `__ID__` chunk is enqueued
   - Injects price book data (labour rate, markup, common items) into the prompt
 - `POST /api/estimates/[id]/review-request` — sends Google review SMS via Twilio, Pro-gated
+- `POST /api/analyze-photo` — vision analysis of a job site photo, Pro-gated
+  - Accepts `{ imageBase64, mediaType }` (JPEG/PNG/WebP/GIF, base64 capped at ~6MB), returns `{ description }`
+  - Uses `claude-sonnet-4-6`; image is never stored
+  - Rate limited: 5 calls per user per 60 minutes via `tpe_rate_limits`
 
 **Profile**
 - `GET /api/profile` — returns `tpe_businesses` record (includes `plan`, `subscription_status`, `trial_ends_at`, `google_review_link`)
