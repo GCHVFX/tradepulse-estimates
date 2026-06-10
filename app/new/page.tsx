@@ -39,6 +39,45 @@ const jobPlaceholders = [
   "Repair roof leak over garage",
 ];
 
+// Downscale to keep camera photos under the API image size limit
+async function resizePhotoToJpeg(file: File): Promise<{ dataUrl: string; base64: string }> {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error("Could not read that photo. Try a JPEG or PNG."));
+      el.src = objectUrl;
+    });
+    const maxEdge = 1568;
+    const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(img.width * scale));
+    canvas.height = Math.max(1, Math.round(img.height * scale));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Could not process the photo on this device.");
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+    return { dataUrl, base64: dataUrl.split(",")[1] };
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+function CameraIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+      <path
+        d="M3 8.5a2 2 0 012-2h1.4l1.2-1.8a1.5 1.5 0 011.25-.7h6.3a1.5 1.5 0 011.25.7l1.2 1.8H19a2 2 0 012 2V18a2 2 0 01-2 2H5a2 2 0 01-2-2V8.5z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="13" r="3.5" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
 interface EstimateViewProps {
   generating: boolean;
   estimateStarted: boolean;
@@ -80,6 +119,7 @@ interface FormViewProps {
   placeholderIndex: number;
   isFirstTime: boolean;
   needsProfileSetup: boolean;
+  isPro: boolean;
   error: string;
   onGenerate: () => void;
   onViewEstimate: () => void;
@@ -274,11 +314,44 @@ function FormView({
   placeholderIndex,
   isFirstTime,
   needsProfileSetup,
+  isPro,
   error,
   onGenerate,
   onViewEstimate,
 }: FormViewProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoAnalysing, setPhotoAnalysing] = useState(false);
+  const [photoError, setPhotoError] = useState("");
+
+  async function handlePhotoSelected(file: File) {
+    setPhotoError("");
+    setPhotoAnalysing(true);
+    try {
+      const { dataUrl, base64 } = await resizePhotoToJpeg(file);
+      setPhotoPreview(dataUrl);
+      const res = await fetch("/api/analyze-photo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64: base64, mediaType: "image/jpeg" }),
+      });
+      const data = (await res.json().catch(() => null)) as
+        | { description?: string; error?: string }
+        | null;
+      if (!res.ok || !data?.description) {
+        throw new Error(data?.error || "Could not analyse the photo. Try again.");
+      }
+      setJobDescription(data.description);
+    } catch (err) {
+      setPhotoPreview(null);
+      setPhotoError(
+        err instanceof Error ? err.message : "Could not analyse the photo. Try again."
+      );
+    } finally {
+      setPhotoAnalysing(false);
+    }
+  }
 
   return (
     <div className="min-h-dvh bg-zinc-950 text-white flex flex-col">
@@ -298,6 +371,61 @@ function FormView({
             onChange={(e) => setJobDescription(e.target.value)}
             autoFocus
           />
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (file) void handlePhotoSelected(file);
+            }}
+          />
+          {isPro ? (
+            <button
+              type="button"
+              disabled={photoAnalysing}
+              onClick={() => photoInputRef.current?.click()}
+              className="w-full flex items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm font-medium text-zinc-300 hover:border-zinc-500 hover:text-white disabled:opacity-60 disabled:cursor-not-allowed transition-colors min-h-[44px]"
+            >
+              {photoAnalysing ? (
+                <>
+                  <Spinner className="w-4 h-4 text-amber-500" />
+                  <span>Analysing photo...</span>
+                </>
+              ) : (
+                <>
+                  <CameraIcon className="w-5 h-5" />
+                  <span>Add a Photo of the Job</span>
+                </>
+              )}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() =>
+                setPhotoError("Photo estimates are a Pro feature. Upgrade to Pro to use your camera.")
+              }
+              className="w-full flex items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm font-medium text-zinc-600 transition-colors min-h-[44px]"
+            >
+              <CameraIcon className="w-5 h-5" />
+              <span>Add a Photo of the Job</span>
+              <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-500">
+                Pro
+              </span>
+            </button>
+          )}
+          {photoPreview && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={photoPreview}
+              alt="Job site photo"
+              className="h-20 w-20 rounded-xl border border-zinc-700 object-cover"
+            />
+          )}
+          {photoError && <p className="text-red-400 text-sm">{photoError}</p>}
           {isFirstTime && (
             <div className="flex flex-col gap-1.5 mt-1">
               <p className="text-xs text-zinc-300">Try:</p>
@@ -488,7 +616,7 @@ function NewPageInner() {
   const [savedEstimateId, setSavedEstimateId] = useState<string | null>(null);
   const [showSendSheet, setShowSendSheet] = useState(false);
   const [customerDetailsSaved, setCustomerDetailsSaved] = useState(false);
-  const { logoUrl, businessName, businessEmail, preparedBy, isLoading: profileLoading } = useBusinessProfile();
+  const { logoUrl, businessName, businessEmail, preparedBy, isPro, isLoading: profileLoading } = useBusinessProfile();
   const [jobTitle, setJobTitle] = useState("");
   const [isFirstTime, setIsFirstTime] = useState(false);
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
@@ -684,6 +812,7 @@ function NewPageInner() {
       placeholderIndex={placeholderIndex}
       isFirstTime={isFirstTime}
       needsProfileSetup={needsProfileSetup}
+      isPro={isPro}
       error={error}
       onGenerate={handleGenerate}
       onViewEstimate={() => setView("estimate")}
