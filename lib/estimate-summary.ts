@@ -213,10 +213,10 @@ export function calculateEstimateTotal(summary: string): number {
 }
 
 // ── Display formatter ─────────────────────────────────────────────────────────
-// Re-serializes a stored summary in the order the in-app estimate shows it
-// (Pricing Summary directly after Line Items, assumptions after pricing) with
-// the pricing table recomputed from line items and rounded to whole dollars,
-// matching the in-app view exactly.
+// Re-serializes a stored summary in the spec order (assumptions before
+// pricing: Scope of Work, Line Items, Assumptions and Exclusions, Pricing
+// Summary, Payment Terms, Notes) with the pricing table recomputed from line
+// items and rounded to whole dollars.
 
 export function formatEstimateForDisplay(summary: string): string {
   const p = parseSummary(summary);
@@ -224,8 +224,8 @@ export function formatEstimateForDisplay(summary: string): string {
   if (p.preamble) parts.push(p.preamble);
   parts.push(scopeBlock(p.scopeItems));
   parts.push(lineItemsBlock(p.lineItems));
-  parts.push(pricingBlock(p.lineItems, p.depositPercent));
   for (const s of p.beforePricingSections) parts.push(beforeBlock(s));
+  parts.push(pricingBlock(p.lineItems, p.depositPercent));
   for (const s of p.afterPricingSections) parts.push(`## ${s.heading}\n${s.content}`);
   return parts.join('\n\n');
 }
