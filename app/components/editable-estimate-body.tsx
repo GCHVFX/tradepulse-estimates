@@ -78,6 +78,7 @@ export function EditableEstimateBody({
   const [newLabel, setNewLabel] = useState('');
   const [newCost, setNewCost] = useState('');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [focusId, setFocusId] = useState<string | null>(null);
 
   // Leave-page warning when a save is pending
   useEffect(() => {
@@ -148,6 +149,38 @@ export function EditableEstimateBody({
     setUndo({ item, index: idx, type: 'lineItem' });
     setToastVisible(true);
     startCommitTimer(scopeItems, nextLine, beforeSections, afterSections, preambleText);
+  }
+
+  function updateScope(id: string, text: string) {
+    const nextScope = scopeItems.map(i => (i.id === id ? { ...i, text } : i));
+    setScopeItems(nextScope);
+    startCommitTimer(nextScope, lineItems, beforeSections, afterSections, preambleText);
+  }
+
+  function addScopeItem() {
+    const item: ScopeItem = { id: newId(), text: '' };
+    setFocusId(item.id);
+    setScopeItems([...scopeItems, item]);
+  }
+
+  function updateAssumption(sectionHeading: string, id: string, text: string) {
+    const nextBefore = beforeSections.map(s => {
+      if (s.heading !== sectionHeading) return s;
+      if (id === '__nonbullets__') return { ...s, nonBullets: text };
+      return { ...s, bullets: s.bullets.map(b => (b.id === id ? { ...b, text } : b)) };
+    });
+    setBeforeSections(nextBefore);
+    startCommitTimer(scopeItems, lineItems, nextBefore, afterSections, preambleText);
+  }
+
+  function addAssumption(sectionHeading: string) {
+    const item: AssumptionItem = { id: newId(), text: '' };
+    setFocusId(item.id);
+    setBeforeSections(
+      beforeSections.map(s =>
+        s.heading === sectionHeading ? { ...s, bullets: [...s.bullets, item] } : s,
+      ),
+    );
   }
 
   function updateLine(id: string, field: 'label' | 'cost', value: string) {
@@ -249,15 +282,39 @@ export function EditableEstimateBody({
 
       {/* Scope of Work */}
       <SectionHeading>Scope of Work</SectionHeading>
-      <ul className="mb-3 space-y-1">
+      <ul className="mb-1 space-y-1">
         {scopeItems.map(item => (
           <li key={item.id} className="flex items-start gap-2 text-sm text-zinc-700 leading-relaxed">
-            <span className="text-amber-500 mt-0.5 shrink-0">•</span>
-            <span className="flex-1">{item.text}</span>
+            <span className="text-amber-500 mt-2 shrink-0">•</span>
+            <textarea
+              ref={el => {
+                if (el) {
+                  el.style.height = 'auto';
+                  el.style.height = `${el.scrollHeight}px`;
+                }
+              }}
+              rows={1}
+              value={item.text}
+              autoFocus={item.id === focusId}
+              onChange={e => updateScope(item.id, e.target.value)}
+              aria-label="Edit scope item"
+              className="flex-1 block resize-none overflow-hidden bg-transparent rounded-lg border border-transparent px-2 py-1.5 text-sm text-zinc-700 leading-relaxed focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+            />
             <XBtn onClick={() => removeScope(item.id)} />
           </li>
         ))}
       </ul>
+      <button
+        type="button"
+        onClick={addScopeItem}
+        className="mb-4 text-sm text-amber-600 hover:text-amber-500 transition-colors flex items-center gap-1.5 min-h-[44px]"
+      >
+        <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4" aria-hidden="true">
+          <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M8 5v6M5 8h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+        Add item
+      </button>
 
       {/* Line Items */}
       <SectionHeading>Line Items</SectionHeading>
@@ -407,28 +464,64 @@ export function EditableEstimateBody({
         <div key={s.heading}>
           <SectionHeading>{s.heading}</SectionHeading>
           {s.nonBullets && (
-            <ul className="mb-3 space-y-1">
+            <ul className="mb-1 space-y-1">
               <li className="flex items-start gap-2 text-sm text-zinc-700 leading-relaxed">
-                <span className="text-amber-500 mt-0.5 shrink-0">•</span>
-                <span className="flex-1">{s.nonBullets}</span>
+                <span className="text-amber-500 mt-2 shrink-0">•</span>
+                <textarea
+                  ref={el => {
+                    if (el) {
+                      el.style.height = 'auto';
+                      el.style.height = `${el.scrollHeight}px`;
+                    }
+                  }}
+                  rows={1}
+                  value={s.nonBullets}
+                  onChange={e => updateAssumption(s.heading, '__nonbullets__', e.target.value)}
+                  aria-label={`Edit ${s.heading} item`}
+                  className="flex-1 block resize-none overflow-hidden bg-transparent rounded-lg border border-transparent px-2 py-1.5 text-sm text-zinc-700 leading-relaxed focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                />
                 <XBtn onClick={() => removeAssumption(s.heading, '__nonbullets__')} />
               </li>
             </ul>
           )}
           {s.bullets.length > 0 && (
-            <ul className="mb-3 space-y-1">
+            <ul className="mb-1 space-y-1">
               {s.bullets.map(item => (
                 <li
                   key={item.id}
                   className="flex items-start gap-2 text-sm text-zinc-700 leading-relaxed"
                 >
-                  <span className="text-amber-500 mt-0.5 shrink-0">•</span>
-                  <span className="flex-1">{item.text}</span>
+                  <span className="text-amber-500 mt-2 shrink-0">•</span>
+                  <textarea
+                    ref={el => {
+                      if (el) {
+                        el.style.height = 'auto';
+                        el.style.height = `${el.scrollHeight}px`;
+                      }
+                    }}
+                    rows={1}
+                    value={item.text}
+                    autoFocus={item.id === focusId}
+                    onChange={e => updateAssumption(s.heading, item.id, e.target.value)}
+                    aria-label={`Edit ${s.heading} item`}
+                    className="flex-1 block resize-none overflow-hidden bg-transparent rounded-lg border border-transparent px-2 py-1.5 text-sm text-zinc-700 leading-relaxed focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                  />
                   <XBtn onClick={() => removeAssumption(s.heading, item.id)} />
                 </li>
               ))}
             </ul>
           )}
+          <button
+            type="button"
+            onClick={() => addAssumption(s.heading)}
+            className="mb-4 text-sm text-amber-600 hover:text-amber-500 transition-colors flex items-center gap-1.5 min-h-[44px]"
+          >
+            <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4" aria-hidden="true">
+              <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M8 5v6M5 8h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+            Add item
+          </button>
         </div>
       ))}
 
