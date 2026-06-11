@@ -10,10 +10,13 @@ import { calculateEstimateTotal } from "@/lib/estimate-summary";
 
 export default async function EstimatePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ sent?: string }>;
 }) {
   const { id } = await params;
+  const { sent } = await searchParams;
 
   const supabase = await createSupabaseServerClient();
   const {
@@ -106,6 +109,7 @@ export default async function EstimatePage({
         paymentStatus={estimate.payment_status ?? null}
         invoiceAmount={estimate.invoice_amount ?? null}
         estimateTotal={estimateTotal}
+        justSent={sent === "1"}
         businessHasPaymentLink={Boolean(business?.payment_link?.trim())}
       />
 

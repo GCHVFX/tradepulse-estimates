@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { formatPhoneInput } from "@/lib/format-phone";
 import { Spinner } from "@/app/components/spinner";
 import { generateEstimatePDF } from "@/lib/generate-pdf";
@@ -48,7 +49,7 @@ export function SendEstimateSheet({
   const [smsError, setSmsError] = useState("");
   const [emailStatus, setEmailStatus] = useState<SendStatus>("idle");
   const [emailError, setEmailError] = useState("");
-  const [hasShownReferral, setHasShownReferral] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     if (!isOpen) {
@@ -58,7 +59,6 @@ export function SendEstimateSheet({
         setSmsError("");
         setEmailStatus("idle");
         setEmailError("");
-        setHasShownReferral(false);
       }, 300);
       return () => clearTimeout(t);
     }
@@ -126,8 +126,8 @@ export function SendEstimateSheet({
       }
 
       setSmsStatus("sent");
-      setHasShownReferral(true);
       onSent?.(phone.trim());
+      router.push(`/estimates/${estimateId}?sent=1`);
     } catch (err) {
       setSmsError(
         err instanceof Error ? err.message : "Something went wrong. Try again."
@@ -156,8 +156,8 @@ export function SendEstimateSheet({
       }
 
       setEmailStatus("sent");
-      setHasShownReferral(true);
       onSent?.();
+      router.push(`/estimates/${estimateId}?sent=1`);
     } catch (err) {
       setEmailError(
         err instanceof Error ? err.message : "Something went wrong. Try again."
@@ -360,25 +360,6 @@ export function SendEstimateSheet({
                 >
                   Done
                 </button>
-                {hasShownReferral && (
-                  <div className="w-full flex flex-col items-center gap-2 mt-1">
-                    <p className="text-zinc-400 text-sm text-center">Know a contractor who&apos;d find this useful?</p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const url = "https://trytradepulse.com";
-                        if (navigator.share) {
-                          navigator.share({ title: "TradePulse", url }).catch(() => {});
-                        } else {
-                          navigator.clipboard.writeText(url).catch(() => {});
-                        }
-                      }}
-                      className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-base rounded-xl py-3 transition-colors min-h-[44px]"
-                    >
-                      Share TradePulse
-                    </button>
-                  </div>
-                )}
               </div>
             )}
           </div>
@@ -441,25 +422,6 @@ export function SendEstimateSheet({
                 >
                   Done
                 </button>
-                {hasShownReferral && (
-                  <div className="w-full flex flex-col items-center gap-2 mt-1">
-                    <p className="text-zinc-400 text-sm text-center">Know a contractor who&apos;d find this useful?</p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const url = "https://trytradepulse.com";
-                        if (navigator.share) {
-                          navigator.share({ title: "TradePulse", url }).catch(() => {});
-                        } else {
-                          navigator.clipboard.writeText(url).catch(() => {});
-                        }
-                      }}
-                      className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-base rounded-xl py-3 transition-colors min-h-[44px]"
-                    >
-                      Share TradePulse
-                    </button>
-                  </div>
-                )}
               </div>
             )}
           </div>

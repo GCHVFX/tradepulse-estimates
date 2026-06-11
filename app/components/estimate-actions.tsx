@@ -24,6 +24,7 @@ interface EstimateActionsProps {
   invoiceAmount?: number | null;
   estimateTotal?: number;
   businessHasPaymentLink?: boolean;
+  justSent?: boolean;
 }
 
 export function EstimateActions({
@@ -44,6 +45,7 @@ export function EstimateActions({
   invoiceAmount,
   estimateTotal,
   businessHasPaymentLink,
+  justSent,
 }: EstimateActionsProps) {
   const [showSendSheet, setShowSendSheet] = useState(false);
   const [showDoneSheet, setShowDoneSheet] = useState(false);
@@ -70,6 +72,21 @@ export function EstimateActions({
       return () => cancelAnimationFrame(frame);
     }
   }, [showInvoiceNudge]);
+
+  // Referral nudge after a successful send, triggered by ?sent=1 on the redirect
+  const [showReferralNudge, setShowReferralNudge] = useState(justSent ?? false);
+  const [referralNudgeVisible, setReferralNudgeVisible] = useState(false);
+
+  useEffect(() => {
+    if (showReferralNudge) {
+      // Strip the query param so a refresh does not re-trigger the nudge
+      if (window.location.search.includes("sent=1")) {
+        window.history.replaceState(null, "", window.location.pathname);
+      }
+      const frame = requestAnimationFrame(() => setReferralNudgeVisible(true));
+      return () => cancelAnimationFrame(frame);
+    }
+  }, [showReferralNudge]);
 
   async function handleMarkPaid() {
     setIsMarkingPaid(true);
@@ -245,6 +262,45 @@ export function EstimateActions({
               <path d="M4 10l4.5 4.5L16 6" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
             <span className="text-green-400 font-semibold text-base">Invoice Paid</span>
+          </div>
+        )}
+
+        {showReferralNudge && (
+          <div
+            className={`relative w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3.5 pr-12 transition-all duration-300 ${
+              referralNudgeVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
+            }`}
+          >
+            <p className="text-zinc-400 text-sm text-center">
+              Know a contractor who&apos;d find this useful?
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                const url = "https://trytradepulse.com";
+                if (navigator.share) {
+                  navigator.share({ title: "TradePulse", url }).catch(() => {});
+                } else {
+                  navigator.clipboard.writeText(url).catch(() => {});
+                }
+              }}
+              className="mt-2 w-full bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-base rounded-xl py-3 transition-colors min-h-[44px]"
+            >
+              Share TradePulse
+            </button>
+            <button
+              type="button"
+              aria-label="Dismiss"
+              onClick={() => {
+                setShowReferralNudge(false);
+                setReferralNudgeVisible(false);
+              }}
+              className="absolute top-1.5 right-1.5 w-9 h-9 flex items-center justify-center text-zinc-500 hover:text-white transition-colors"
+            >
+              <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4" aria-hidden="true">
+                <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+            </button>
           </div>
         )}
 
