@@ -1,4 +1,5 @@
 import jsPDF from "jspdf";
+import { formatEstimateForDisplay } from "@/lib/estimate-summary";
 
 interface GenerateEstimatePdfOptions {
   businessName?: string;
@@ -32,56 +33,6 @@ async function loadImageAsDataUrl(url: string): Promise<string | null> {
 
 function imageFormatFromDataUrl(dataUrl: string): "PNG" | "JPEG" {
   return dataUrl.startsWith("data:image/png") ? "PNG" : "JPEG";
-}
-
-// Reorder ## sections to match the digital estimate view:
-// Scope of Work → Line Items → Pricing Summary → Assumptions & Exclusions → Payment Terms → Notes
-function reorderSections(lines: string[]): string[] {
-  const PRIORITY = [
-    "scope of work",
-    "line items",
-    "pricing summary",
-    "assumptions",
-    "payment terms",
-    "notes",
-  ];
-
-  interface Section {
-    heading: string | null;
-    content: string[];
-  }
-
-  const sections: Section[] = [];
-  let current: Section = { heading: null, content: [] };
-
-  for (const line of lines) {
-    if (/^##\s/.test(line.trim())) {
-      sections.push(current);
-      current = { heading: line.trim(), content: [line] };
-    } else {
-      current.content.push(line);
-    }
-  }
-  sections.push(current);
-
-  const preamble = sections.filter((s) => s.heading === null);
-  const rest = sections.filter((s) => s.heading !== null);
-
-  rest.sort((a, b) => {
-    const ak = (a.heading ?? "").toLowerCase();
-    const bk = (b.heading ?? "").toLowerCase();
-    const ai = PRIORITY.findIndex((p) => ak.includes(p));
-    const bi = PRIORITY.findIndex((p) => bk.includes(p));
-    if (ai === -1 && bi === -1) return 0;
-    if (ai === -1) return 1;
-    if (bi === -1) return -1;
-    return ai - bi;
-  });
-
-  return [
-    ...preamble.flatMap((s) => s.content),
-    ...rest.flatMap((s) => s.content),
-  ];
 }
 
 export async function generateEstimatePDF(
@@ -145,8 +96,8 @@ export async function generateEstimatePDF(
   doc.text(titleLines, ml, y);
   y += titleLines.length * 7.5 + 6;
 
-  const rawLines = summary.split("\n");
-  const lines = reorderSections(rawLines);
+  // Match the in-app estimate view: section order and recomputed, rounded totals
+  const lines = formatEstimateForDisplay(summary).split("\n");
 
   let tableRows: string[][] = [];
 

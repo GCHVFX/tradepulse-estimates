@@ -1,202 +1,27 @@
 'use client';
 
 import { useState, useRef, useMemo, useEffect } from 'react';
+import {
+  newId,
+  parseCost,
+  formatDollars,
+  parseSummary,
+  serializeSummary,
+} from '@/lib/estimate-summary';
+import type {
+  ScopeItem,
+  LineItem,
+  AssumptionItem,
+  BeforeSection,
+} from '@/lib/estimate-summary';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-
-interface ScopeItem {
-  id: string;
-  text: string;
-}
-
-interface LineItem {
-  id: string;
-  label: string;
-  cost: string;
-}
-
-interface AssumptionItem {
-  id: string;
-  text: string;
-}
-
-interface BeforeSection {
-  heading: string;
-  bullets: AssumptionItem[];
-  nonBullets: string;
-}
 
 interface UndoEntry {
   item: ScopeItem | LineItem | AssumptionItem;
   index: number;
   type: 'scope' | 'lineItem' | 'assumption';
   sectionHeading?: string;
-}
-
-interface ParsedSummary {
-  preamble: string;
-  scopeItems: ScopeItem[];
-  lineItems: LineItem[];
-  depositPercent: number;
-  beforePricingSections: BeforeSection[];
-  afterPricingSections: Array<{ heading: string; content: string }>;
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-const newId = () => Math.random().toString(36).slice(2, 9);
-
-function parseCost(cost: string): number {
-  return parseFloat(cost.replace(/[$,*]/g, '')) || 0;
-}
-
-function formatDollars(amount: number): string {
-  return '$' + Math.round(amount).toLocaleString('en-CA');
-}
-
-// ── Parser ────────────────────────────────────────────────────────────────────
-
-function parseSummary(rawSummary: string): ParsedSummary {
-  const filtered = rawSummary.split('\n').filter(l => !l.startsWith('# ')).join('\n');
-  const lines = filtered.split('\n');
-
-  type RawSection = { heading: string | null; lines: string[] };
-  const rawSections: RawSection[] = [];
-  let cur: RawSection = { heading: null, lines: [] };
-
-  for (const line of lines) {
-    if (line.startsWith('## ')) {
-      rawSections.push(cur);
-      cur = { heading: line.slice(3).trim(), lines: [] };
-    } else {
-      cur.lines.push(line);
-    }
-  }
-  rawSections.push(cur);
-
-  const preamble = rawSections[0].lines.join('\n').trim();
-  let scopeItems: ScopeItem[] = [];
-  let lineItems: LineItem[] = [];
-  let depositPercent = 0;
-  const beforePricingSections: BeforeSection[] = [];
-  const afterPricingSections: Array<{ heading: string; content: string }> = [];
-  let seenPricing = false;
-
-  for (const sec of rawSections.slice(1)) {
-    const h = sec.heading ?? '';
-    if (h.toLowerCase() === 'scope of work') {
-      scopeItems = sec.lines
-        .filter(l => /^[-*] /.test(l))
-        .map(l => ({ id: newId(), text: l.replace(/^[-*] /, '') }));
-    } else if (h.toLowerCase() === 'line items') {
-      lineItems = sec.lines
-        .filter(l => l.startsWith('|'))
-        .map(l =>
-          l
-            .split('|')
-            .map(c => c.trim())
-            .filter((_, i, a) => i > 0 && i < a.length - 1),
-        )
-        .filter(
-          cells =>
-            cells.length >= 2 &&
-            !cells[0].toLowerCase().startsWith('item') &&
-            !/^[-: ]+$/.test(cells[0]),
-        )
-        .map(cells => ({ id: newId(), label: cells[0], cost: cells[1] }));
-    } else if (h.toLowerCase() === 'pricing summary') {
-      seenPricing = true;
-      for (const line of sec.lines) {
-        if (/no deposit required/i.test(line)) {
-          depositPercent = 0;
-          break;
-        }
-        const m = line.match(/Deposit.*?\((\d+)%\)/i);
-        if (m) {
-          depositPercent = parseInt(m[1]);
-          break;
-        }
-      }
-    } else {
-      if (seenPricing) {
-        afterPricingSections.push({ heading: h, content: sec.lines.join('\n').trim() });
-      } else {
-        const stripBoldLabel = (text: string) => text.replace(/^\*\*[^*]+:\*\*\s*/, '').trim();
-        let bullets = sec.lines
-          .filter(l => /^[-*] /.test(l))
-          .map(l => ({ id: newId(), text: stripBoldLabel(l.replace(/^[-*] /, '')) }));
-        let nonBullets = sec.lines
-          .filter(l => !/^[-*] /.test(l))
-          .join('\n')
-          .trim();
-        if (bullets.length === 0 && nonBullets.trim()) {
-          const sentences = nonBullets
-            .split(/(?<=[.!?])\s+/)
-            .map(s => s.trim())
-            .filter(Boolean);
-          bullets = sentences.map(text => ({ id: newId(), text: stripBoldLabel(text) }));
-          nonBullets = '';
-        }
-        beforePricingSections.push({ heading: h, bullets, nonBullets });
-      }
-    }
-  }
-
-  return { preamble, scopeItems, lineItems, depositPercent, beforePricingSections, afterPricingSections };
-}
-
-// ── Serializer ────────────────────────────────────────────────────────────────
-
-function serializeSummary(
-  preamble: string,
-  scopeItems: ScopeItem[],
-  lineItems: LineItem[],
-  depositPercent: number,
-  beforePricingSections: BeforeSection[],
-  afterPricingSections: Array<{ heading: string; content: string }>,
-): string {
-  const subtotal = lineItems.reduce((sum, i) => sum + parseCost(i.cost), 0);
-  const tax = Math.round(subtotal * 0.05);
-  const total = subtotal + tax;
-  const deposit = Math.round((total * depositPercent) / 100);
-  const balance = total - deposit;
-
-  const parts: string[] = [];
-  if (preamble) parts.push(preamble);
-
-  parts.push(`## Scope of Work\n${scopeItems.map(i => `- ${i.text}`).join('\n')}`);
-
-  const liTable = [
-    '| Item | Cost |',
-    '|------|------|',
-    ...lineItems.map(i => `| ${i.label} | ${i.cost} |`),
-  ].join('\n');
-  parts.push(`## Line Items\n${liTable}`);
-
-  for (const s of beforePricingSections) {
-    const bulletLines = s.bullets.map(b => `- ${b.text}`).join('\n');
-    const sectionContent = [s.nonBullets, bulletLines].filter(Boolean).join('\n');
-    parts.push(`## ${s.heading}\n${sectionContent}`);
-  }
-
-  const prTable = [
-    '| | |',
-    '|---|---|',
-    `| Subtotal | ${formatDollars(subtotal)} |`,
-    `| Tax (GST 5%) | ${formatDollars(tax)} |`,
-    `| **Total** | **${formatDollars(total)}** |`,
-    depositPercent === 0
-      ? '| No deposit required | |'
-      : `| Deposit required (${depositPercent}%) | ${formatDollars(deposit)} |`,
-    `| Balance on completion | ${depositPercent === 0 ? formatDollars(total) : formatDollars(balance)} |`,
-  ].join('\n');
-  parts.push(`## Pricing Summary\n${prTable}`);
-
-  for (const s of afterPricingSections) {
-    parts.push(`## ${s.heading}\n${s.content}`);
-  }
-
-  return parts.join('\n\n');
 }
 
 // ── X button ──────────────────────────────────────────────────────────────────
@@ -453,12 +278,18 @@ export function EditableEstimateBody({
             {lineItems.map(item => (
               <tr key={item.id}>
                 <td className="border-t border-zinc-200">
-                  <input
-                    type="text"
+                  <textarea
+                    ref={el => {
+                      if (el) {
+                        el.style.height = 'auto';
+                        el.style.height = `${el.scrollHeight}px`;
+                      }
+                    }}
+                    rows={1}
                     value={item.label}
                     onChange={e => updateLine(item.id, 'label', e.target.value)}
                     aria-label="Item description"
-                    className="w-full bg-transparent rounded-lg border border-transparent px-3 py-2.5 text-sm text-zinc-700 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]"
+                    className="block w-full resize-none overflow-hidden bg-transparent rounded-lg border border-transparent px-3 py-2.5 text-sm text-zinc-700 leading-snug focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]"
                   />
                 </td>
                 <td className="border-t border-zinc-200">

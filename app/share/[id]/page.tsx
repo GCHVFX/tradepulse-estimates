@@ -3,6 +3,7 @@ import { EstimateMarkdown } from "@/app/components/estimate-markdown";
 import { DownloadPdfButton } from "@/app/components/download-pdf-button";
 import { CompanyEstimateHeader } from "@/app/components/company-estimate-header";
 import { supabaseAdmin } from "@/lib/supabase-server";
+import { formatEstimateForDisplay } from "@/lib/estimate-summary";
 
 export default async function ShareEstimatePage({
   params,
@@ -96,12 +97,7 @@ export default async function ShareEstimatePage({
             </span>
           </div>
 
-          <EstimateMarkdown
-            content={(estimate.summary ?? "")
-              .split("\n")
-              .filter((l: string) => !l.startsWith("# "))
-              .join("\n")}
-          />
+          <EstimateMarkdown content={formatEstimateForDisplay(estimate.summary ?? "")} />
         </div>
 
         <div className="mt-4">
