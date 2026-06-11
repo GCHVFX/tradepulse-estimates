@@ -294,7 +294,7 @@ export function EditableEstimateBody({
         className="mb-3 w-full resize-none overflow-hidden border border-zinc-200 rounded-lg px-3 py-2.5 text-sm text-zinc-700 leading-relaxed focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
       />
       {preambleTotalLine && (
-        <p className="mb-3 font-semibold text-zinc-900 text-base">{preambleTotalLine}</p>
+        <p className="mb-3 font-semibold text-zinc-900 text-base">{`Total: ${formatDollars(total)}`}</p>
       )}
 
       {/* Scope of Work */}

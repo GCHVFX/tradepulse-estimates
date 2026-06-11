@@ -48,6 +48,27 @@ export function formatDollars(amount: number): string {
   return '$' + Math.round(amount).toLocaleString('en-CA');
 }
 
+export function computeTotals(lineItems: LineItem[]): {
+  subtotal: number;
+  tax: number;
+  total: number;
+} {
+  const subtotal = lineItems.reduce((sum, i) => sum + parseCost(i.cost), 0);
+  const tax = Math.round(subtotal * 0.05);
+  return { subtotal, tax, total: subtotal + tax };
+}
+
+// The AI writes a plain "Total: $X" line at the end of the job summary.
+// Rewrite it from the line items so it always matches the Pricing Summary.
+function syncPreambleTotal(preamble: string, lineItems: LineItem[]): string {
+  if (!preamble) return preamble;
+  const { total } = computeTotals(lineItems);
+  return preamble.replace(
+    /(^|\n)Total:[^\n]*(\s*)$/i,
+    (_match, before: string, after: string) => `${before}Total: ${formatDollars(total)}${after}`,
+  );
+}
+
 // ── Parser ────────────────────────────────────────────────────────────────────
 
 export function parseSummary(rawSummary: string): ParsedSummary {
@@ -161,9 +182,7 @@ function beforeBlock(s: BeforeSection): string {
 }
 
 function pricingBlock(lineItems: LineItem[], depositPercent: number): string {
-  const subtotal = lineItems.reduce((sum, i) => sum + parseCost(i.cost), 0);
-  const tax = Math.round(subtotal * 0.05);
-  const total = subtotal + tax;
+  const { subtotal, tax, total } = computeTotals(lineItems);
   const deposit = Math.round((total * depositPercent) / 100);
   const balance = total - deposit;
 
@@ -192,7 +211,7 @@ export function serializeSummary(
   afterPricingSections: AfterSection[],
 ): string {
   const parts: string[] = [];
-  if (preamble) parts.push(preamble);
+  if (preamble) parts.push(syncPreambleTotal(preamble, lineItems));
   parts.push(scopeBlock(scopeItems));
   parts.push(lineItemsBlock(lineItems));
   for (const s of beforePricingSections) parts.push(beforeBlock(s));
@@ -207,9 +226,7 @@ export function serializeSummary(
 
 export function calculateEstimateTotal(summary: string): number {
   const p = parseSummary(summary);
-  const subtotal = p.lineItems.reduce((sum, i) => sum + parseCost(i.cost), 0);
-  const tax = Math.round(subtotal * 0.05);
-  return Math.round(subtotal + tax);
+  return Math.round(computeTotals(p.lineItems).total);
 }
 
 // ── Display formatter ─────────────────────────────────────────────────────────
@@ -221,7 +238,7 @@ export function calculateEstimateTotal(summary: string): number {
 export function formatEstimateForDisplay(summary: string): string {
   const p = parseSummary(summary);
   const parts: string[] = [];
-  if (p.preamble) parts.push(p.preamble);
+  if (p.preamble) parts.push(syncPreambleTotal(p.preamble, p.lineItems));
   parts.push(scopeBlock(p.scopeItems));
   parts.push(lineItemsBlock(p.lineItems));
   for (const s of p.beforePricingSections) parts.push(beforeBlock(s));
