@@ -27,9 +27,17 @@ const markdownComponents = {
   h3: ({ children }: { children?: React.ReactNode }) => (
     <h3 className="text-base font-semibold text-zinc-700 mt-4 mb-1.5">{children}</h3>
   ),
-  p: ({ children }: { children?: React.ReactNode }) => (
-    <p className="text-zinc-700 text-sm leading-relaxed mb-3">{children}</p>
-  ),
+  p: ({ children }: { children?: React.ReactNode }) => {
+    const text = Array.isArray(children)
+      ? children.filter((c): c is string => typeof c === "string").join("")
+      : typeof children === "string"
+        ? children
+        : "";
+    if (/^Total:/i.test(text.trim())) {
+      return <p className="font-semibold text-zinc-900 text-base mb-3">{children}</p>;
+    }
+    return <p className="text-zinc-700 text-sm leading-relaxed mb-3">{children}</p>;
+  },
   ul: ({ children }: { children?: React.ReactNode }) => (
     <ul className="mb-3 space-y-1 pl-1">{children}</ul>
   ),

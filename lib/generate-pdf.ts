@@ -275,9 +275,15 @@ export async function generateEstimatePDF(
     }
 
     const text = stripInline(trimmed);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.setTextColor(25, 25, 25);
+    if (/^Total:/i.test(text)) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(15, 15, 15);
+    } else {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(25, 25, 25);
+    }
     const pLines = doc.splitTextToSize(text, cw);
     checkBreak(pLines.length * 5.2 + 1);
     doc.text(pLines, ml, y);

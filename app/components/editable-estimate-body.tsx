@@ -89,6 +89,14 @@ export function EditableEstimateBody({
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, []);
 
+  // The AI writes a plain "Total: $X" line at the end of the job summary.
+  // Split it out of the textarea so it can render bold; rejoined on save.
+  const preambleTotalMatch = preambleText.match(/(?:^|\n)(Total:[^\n]*)\s*$/i);
+  const preambleTotalLine = preambleTotalMatch ? preambleTotalMatch[1].trim() : null;
+  const preambleBody = preambleTotalMatch
+    ? preambleText.slice(0, preambleTotalMatch.index)
+    : preambleText;
+
   const subtotal = lineItems.reduce((sum, i) => sum + parseCost(i.cost), 0);
   const tax = Math.round(subtotal * 0.05);
   const total = subtotal + tax;
@@ -266,7 +274,7 @@ export function EditableEstimateBody({
 
   return (
     <>
-      {/* Preamble (job summary) — inline editable */}
+      {/* Preamble (job summary) — inline editable; Total line rendered bold below */}
       <textarea
         ref={el => {
           if (el) {
@@ -274,11 +282,20 @@ export function EditableEstimateBody({
             el.style.height = `${el.scrollHeight}px`;
           }
         }}
-        value={preambleText}
-        onChange={e => updatePreamble(e.target.value)}
+        value={preambleBody}
+        onChange={e =>
+          updatePreamble(
+            preambleTotalLine
+              ? `${e.target.value.replace(/\n$/, '')}\n\n${preambleTotalLine}`
+              : e.target.value,
+          )
+        }
         aria-label="Edit job summary"
         className="mb-3 w-full resize-none overflow-hidden border border-zinc-200 rounded-lg px-3 py-2.5 text-sm text-zinc-700 leading-relaxed focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
       />
+      {preambleTotalLine && (
+        <p className="mb-3 font-semibold text-zinc-900 text-base">{preambleTotalLine}</p>
+      )}
 
       {/* Scope of Work */}
       <SectionHeading>Scope of Work</SectionHeading>
@@ -422,43 +439,6 @@ export function EditableEstimateBody({
         </button>
       )}
 
-      {/* Pricing Summary — always recalculated */}
-      <SectionHeading>Pricing Summary</SectionHeading>
-      <div className="mb-4 overflow-x-auto rounded-lg border border-zinc-200">
-        <table className="w-full text-sm">
-          <tbody>
-            {(
-              [
-                ['Subtotal', formatDollars(subtotal), false],
-                ['Tax (GST 5%)', formatDollars(tax), false],
-                ['Total', formatDollars(total), true],
-                depositPercent === 0
-                  ? ['No deposit required', '', false]
-                  : [`Deposit required (${depositPercent}%)`, formatDollars(deposit), false],
-                ['Balance on completion', depositPercent === 0 ? formatDollars(total) : formatDollars(balance), false],
-              ] as [string, string, boolean][]
-            ).map(([label, amount, bold]) => (
-              <tr key={label}>
-                <td
-                  className={`px-3 py-2.5 border-t border-zinc-200 ${
-                    bold ? 'font-semibold text-zinc-900' : 'text-zinc-700'
-                  }`}
-                >
-                  {label}
-                </td>
-                <td
-                  className={`px-3 py-2.5 border-t border-zinc-200 text-right ${
-                    bold ? 'font-semibold text-zinc-900' : 'text-zinc-700'
-                  }`}
-                >
-                  {amount}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
       {/* Assumptions & Exclusions (and any other sections before pricing in source) */}
       {beforeSections.map(s => (
         <div key={s.heading}>
@@ -524,6 +504,43 @@ export function EditableEstimateBody({
           </button>
         </div>
       ))}
+
+      {/* Pricing Summary — always recalculated */}
+      <SectionHeading>Pricing Summary</SectionHeading>
+      <div className="mb-4 overflow-x-auto rounded-lg border border-zinc-200">
+        <table className="w-full text-sm">
+          <tbody>
+            {(
+              [
+                ['Subtotal', formatDollars(subtotal), false],
+                ['Tax (GST 5%)', formatDollars(tax), false],
+                ['Total', formatDollars(total), true],
+                depositPercent === 0
+                  ? ['No deposit required', '', false]
+                  : [`Deposit required (${depositPercent}%)`, formatDollars(deposit), false],
+                ['Balance on completion', depositPercent === 0 ? formatDollars(total) : formatDollars(balance), false],
+              ] as [string, string, boolean][]
+            ).map(([label, amount, bold]) => (
+              <tr key={label}>
+                <td
+                  className={`px-3 py-2.5 border-t border-zinc-200 ${
+                    bold ? 'font-semibold text-zinc-900' : 'text-zinc-700'
+                  }`}
+                >
+                  {label}
+                </td>
+                <td
+                  className={`px-3 py-2.5 border-t border-zinc-200 text-right ${
+                    bold ? 'font-semibold text-zinc-900' : 'text-zinc-700'
+                  }`}
+                >
+                  {amount}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       {/* Sections after pricing (Payment Terms, Notes) — inline editable */}
       {afterSections.map(s => (
