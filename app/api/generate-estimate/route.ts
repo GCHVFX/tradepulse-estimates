@@ -28,17 +28,7 @@ Output must follow this exact structure:
 
 1. Job Title (H1 heading)
 2. Job Summary (2 to 3 sentences)
-3. Scope of Work (bullet list of specific tasks)
-4. Line Items (labour and materials, individually priced)
-   Line Items MUST be formatted as markdown pipe tables, not bullet points or plain text. Use this exact format:
-   | Item | Cost |
-   |------|------|
-   | Labour (X hours @ $X/hr) | $XXX |
-   | Item description | $XXX |
-   Never use bullet points or plain text for line items. Always use pipe table format.
-   Do not include a Subtotal, Tax, Total, Deposit, or Balance row in the Line Items table. These are handled separately in the Pricing Summary section.
-5. Assumptions and Exclusions (what is included, what is not)
-6. Pricing Summary (subtotal, tax, total, deposit, balance)
+3. Pricing Summary (subtotal, tax, total, deposit, balance)
    Pricing Summary MUST be formatted as markdown pipe tables, not bullet points or plain text. Use this exact format:
    | | |
    |---|---|
@@ -48,6 +38,16 @@ Output must follow this exact structure:
    | Deposit required | $XXX |
    | Balance on completion | $XXX |
    Never use bullet points or plain text for the pricing summary. Always use pipe table format.
+4. Scope of Work (bullet list of specific tasks)
+5. Line Items (labour and materials, individually priced)
+   Line Items MUST be formatted as markdown pipe tables, not bullet points or plain text. Use this exact format:
+   | Item | Cost |
+   |------|------|
+   | Labour (X hours @ $X/hr) | $XXX |
+   | Item description | $XXX |
+   Never use bullet points or plain text for line items. Always use pipe table format.
+   Do not include a Subtotal, Tax, Total, Deposit, or Balance row in the Line Items table. These are handled separately in the Pricing Summary section.
+6. Assumptions and Exclusions (what is included, what is not)
 7. Payment Terms (2 to 4 lines)
    Always include: "This estimate is valid for 30 days from the date above."
 8. Notes (omit if nothing relevant)`;
