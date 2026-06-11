@@ -201,6 +201,17 @@ export function serializeSummary(
   return parts.join('\n\n');
 }
 
+// ── Total calculator ──────────────────────────────────────────────────────────
+// Same math as the in-app pricing summary: subtotal from line items, 5% GST
+// rounded to whole dollars.
+
+export function calculateEstimateTotal(summary: string): number {
+  const p = parseSummary(summary);
+  const subtotal = p.lineItems.reduce((sum, i) => sum + parseCost(i.cost), 0);
+  const tax = Math.round(subtotal * 0.05);
+  return Math.round(subtotal + tax);
+}
+
 // ── Display formatter ─────────────────────────────────────────────────────────
 // Re-serializes a stored summary in the order the in-app estimate shows it
 // (Pricing Summary directly after Line Items, assumptions after pricing) with

@@ -22,6 +22,7 @@ interface EstimateActionsProps {
   reviewRequestedAt?: string | null;
   paymentStatus?: string | null;
   invoiceAmount?: number | null;
+  estimateTotal?: number;
   businessHasPaymentLink?: boolean;
 }
 
@@ -41,6 +42,7 @@ export function EstimateActions({
   reviewRequestedAt,
   paymentStatus,
   invoiceAmount,
+  estimateTotal,
   businessHasPaymentLink,
 }: EstimateActionsProps) {
   const [showSendSheet, setShowSendSheet] = useState(false);
@@ -287,7 +289,13 @@ export function EstimateActions({
         }}
         estimateId={estimateId}
         customerName={customerName ?? ""}
-        existingAmount={invoiceAmount !== null && invoiceAmount !== undefined ? String(invoiceAmount) : ""}
+        existingAmount={
+          invoiceAmount !== null && invoiceAmount !== undefined
+            ? String(invoiceAmount)
+            : estimateTotal && estimateTotal > 0
+              ? String(estimateTotal)
+              : ""
+        }
         businessHasPaymentLink={businessHasPaymentLink ?? false}
       />
     </>

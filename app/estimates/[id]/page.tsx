@@ -6,6 +6,7 @@ import { CustomerDetailsBlock } from "@/app/components/customer-details-block";
 import { EditableEstimateBody } from "@/app/components/editable-estimate-body";
 import { BottomNav } from "@/app/components/bottom-nav";
 import { supabaseAdmin, createSupabaseServerClient } from "@/lib/supabase-server";
+import { calculateEstimateTotal } from "@/lib/estimate-summary";
 
 export default async function EstimatePage({
   params,
@@ -42,6 +43,7 @@ export default async function EstimatePage({
   const businessPhone = business?.phone ?? "";
   const isPro = business?.plan === "pro";
   const googleReviewLink = business?.google_review_link ?? null;
+  const estimateTotal = calculateEstimateTotal(estimate.summary ?? "");
 
   return (
     <div className="min-h-dvh bg-zinc-950 text-white flex flex-col">
@@ -103,6 +105,7 @@ export default async function EstimatePage({
         reviewRequestedAt={estimate.review_requested_at ?? null}
         paymentStatus={estimate.payment_status ?? null}
         invoiceAmount={estimate.invoice_amount ?? null}
+        estimateTotal={estimateTotal}
         businessHasPaymentLink={Boolean(business?.payment_link?.trim())}
       />
 

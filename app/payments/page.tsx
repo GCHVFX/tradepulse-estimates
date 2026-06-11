@@ -97,6 +97,7 @@ export default async function PaymentsPage() {
     .select("id, title, customer_name, invoice_amount, due_date, last_reminder_sent_at, reminder_count")
     .eq("business_id", user.id)
     .in("payment_status", ["unpaid", "overdue"])
+    .not("invoice_amount", "is", null)
     .order("due_date", { ascending: true });
 
   const invoices = estimates ?? [];
@@ -129,13 +130,17 @@ export default async function PaymentsPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-white font-semibold text-sm truncate">
-                        {invoice.customer_name?.trim() || "No customer name"}
+                        {invoice.title?.trim() || "Untitled estimate"}
                       </p>
-                      <p className="text-zinc-400 text-xs mt-0.5 truncate">{invoice.title ?? ""}</p>
+                      <p className="text-zinc-400 text-xs mt-0.5 truncate">
+                        {invoice.customer_name?.trim() || "No customer"}
+                      </p>
                     </div>
-                    <p className="text-white font-bold text-base shrink-0">
-                      ${invoice.invoice_amount !== null ? invoice.invoice_amount.toFixed(2) : "0.00"}
-                    </p>
+                    {invoice.invoice_amount !== null && (
+                      <p className="text-white font-bold text-base shrink-0">
+                        ${invoice.invoice_amount.toFixed(2)}
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center justify-between gap-3 mt-2.5">
                     <p className={`text-xs ${overdue > 0 ? "text-red-400 font-semibold" : "text-zinc-400"}`}>
