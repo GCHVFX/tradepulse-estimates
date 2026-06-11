@@ -64,6 +64,13 @@ async function resizePhotoToJpeg(file: File): Promise<{ dataUrl: string; base64:
   }
 }
 
+interface PhotoEntry {
+  id: string;
+  base64: string;
+  preview: string;
+  note: string;
+}
+
 function CameraIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
@@ -321,32 +328,48 @@ function FormView({
 }: FormViewProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photos, setPhotos] = useState<PhotoEntry[]>([]);
   const [photoAnalysing, setPhotoAnalysing] = useState(false);
   const [photoError, setPhotoError] = useState("");
 
-  async function handlePhotoSelected(file: File) {
+  async function handlePhotoAdded(file: File) {
+    if (photos.length >= 5) return;
     setPhotoError("");
-    setPhotoAnalysing(true);
     try {
       const { dataUrl, base64 } = await resizePhotoToJpeg(file);
-      setPhotoPreview(dataUrl);
+      setPhotos((prev) =>
+        prev.length >= 5
+          ? prev
+          : [...prev, { id: crypto.randomUUID(), base64, preview: dataUrl, note: "" }]
+      );
+    } catch (err) {
+      setPhotoError(
+        err instanceof Error ? err.message : "Could not read that photo. Try again."
+      );
+    }
+  }
+
+  async function handleAnalysePhotos() {
+    setPhotoAnalysing(true);
+    setPhotoError("");
+    try {
       const res = await fetch("/api/analyze-photo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageBase64: base64, mediaType: "image/jpeg" }),
+        body: JSON.stringify({
+          photos: photos.map((p) => ({ base64: p.base64, mediaType: "image/jpeg", note: p.note })),
+        }),
       });
       const data = (await res.json().catch(() => null)) as
         | { description?: string; error?: string }
         | null;
       if (!res.ok || !data?.description) {
-        throw new Error(data?.error || "Could not analyse the photo. Try again.");
+        throw new Error(data?.error || "Could not analyse the photos. Try again.");
       }
       setJobDescription(data.description);
     } catch (err) {
-      setPhotoPreview(null);
       setPhotoError(
-        err instanceof Error ? err.message : "Could not analyse the photo. Try again."
+        err instanceof Error ? err.message : "Could not analyse the photos. Try again."
       );
     } finally {
       setPhotoAnalysing(false);
@@ -380,28 +403,68 @@ function FormView({
             onChange={(e) => {
               const file = e.target.files?.[0];
               e.target.value = "";
-              if (file) void handlePhotoSelected(file);
+              if (file) void handlePhotoAdded(file);
             }}
           />
+          {photos.length > 0 && (
+            <div className="flex flex-wrap gap-3 pt-1">
+              {photos.map((photo) => (
+                <div key={photo.id} className="flex w-20 flex-col gap-1.5">
+                  <div className="relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={photo.preview}
+                      alt="Job site photo"
+                      className="h-20 w-20 rounded-xl border border-zinc-700 object-cover"
+                    />
+                    <button
+                      type="button"
+                      aria-label="Remove photo"
+                      onClick={() =>
+                        setPhotos((prev) => prev.filter((p) => p.id !== photo.id))
+                      }
+                      className="absolute -top-1.5 -right-1.5 flex h-6 w-6 items-center justify-center rounded-full border border-zinc-600 bg-zinc-800 text-zinc-300 hover:text-white transition-colors"
+                    >
+                      <svg viewBox="0 0 12 12" fill="none" className="h-3 w-3" aria-hidden="true">
+                        <path
+                          d="M2.5 2.5l7 7M9.5 2.5l-7 7"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    maxLength={200}
+                    placeholder="Add a note..."
+                    value={photo.note}
+                    onChange={(e) =>
+                      setPhotos((prev) =>
+                        prev.map((p) =>
+                          p.id === photo.id ? { ...p, note: e.target.value } : p
+                        )
+                      )
+                    }
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
           {isPro ? (
-            <button
-              type="button"
-              disabled={photoAnalysing}
-              onClick={() => photoInputRef.current?.click()}
-              className="w-full flex items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm font-medium text-zinc-300 hover:border-zinc-500 hover:text-white disabled:opacity-60 disabled:cursor-not-allowed transition-colors min-h-[44px]"
-            >
-              {photoAnalysing ? (
-                <>
-                  <Spinner className="w-4 h-4 text-amber-500" />
-                  <span>Analysing photo...</span>
-                </>
-              ) : (
-                <>
-                  <CameraIcon className="w-5 h-5" />
-                  <span>Add a Photo of the Job</span>
-                </>
-              )}
-            </button>
+            photos.length < 5 && (
+              <button
+                type="button"
+                disabled={photoAnalysing}
+                onClick={() => photoInputRef.current?.click()}
+                className="w-full flex items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm font-medium text-zinc-300 hover:border-zinc-500 hover:text-white disabled:opacity-60 disabled:cursor-not-allowed transition-colors min-h-[44px]"
+              >
+                <CameraIcon className="w-5 h-5" />
+                <span>Add Photo</span>
+              </button>
+            )
           ) : (
             <button
               type="button"
@@ -411,19 +474,28 @@ function FormView({
               className="w-full flex items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm font-medium text-zinc-600 transition-colors min-h-[44px]"
             >
               <CameraIcon className="w-5 h-5" />
-              <span>Add a Photo of the Job</span>
+              <span>Add Photo</span>
               <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-500">
                 Pro
               </span>
             </button>
           )}
-          {photoPreview && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={photoPreview}
-              alt="Job site photo"
-              className="h-20 w-20 rounded-xl border border-zinc-700 object-cover"
-            />
+          {photos.length > 0 && (
+            <button
+              type="button"
+              disabled={photoAnalysing}
+              onClick={() => void handleAnalysePhotos()}
+              className="w-full flex items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm font-medium text-zinc-300 hover:border-zinc-500 hover:text-white disabled:opacity-60 disabled:cursor-not-allowed transition-colors min-h-[44px]"
+            >
+              {photoAnalysing ? (
+                <>
+                  <Spinner className="w-4 h-4 text-amber-500" />
+                  <span>Analysing photos...</span>
+                </>
+              ) : (
+                <span>Analyse Photos</span>
+              )}
+            </button>
           )}
           {photoError && <p className="text-red-400 text-sm">{photoError}</p>}
           {isFirstTime && (

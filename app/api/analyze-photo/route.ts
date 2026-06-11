@@ -11,16 +11,16 @@ const client = new Anthropic();
 const ALLOWED_MEDIA_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
 type AllowedMediaType = (typeof ALLOWED_MEDIA_TYPES)[number];
 
+const MAX_PHOTOS = 5;
+
 // ~6MB of base64, comfortably under the Anthropic 5MB decoded image limit
 const MAX_BASE64_LENGTH = 7_000_000;
 
-const SYSTEM_PROMPT = `You are a trades estimating assistant helping a contractor describe a job from a photo.
-Look at this job site photo and describe what work needs to be done in plain language.
-Write it the way a contractor would describe it to get a quote -- specific, direct, no fluff.
-Include: what needs to be fixed or installed, visible damage or scope, approximate size or quantity where visible.
-Flag anything unclear that the contractor should verify in person.
-Keep it under 200 words. Do not generate prices. Do not write an estimate. Just describe the visible work.
-Use Canadian English spelling.`;
+interface PhotoInput {
+  base64: string;
+  mediaType: AllowedMediaType;
+  note: string;
+}
 
 export async function POST(request: NextRequest) {
   const { supabase, applyTo } = createApiClient(request);
@@ -54,46 +54,75 @@ export async function POST(request: NextRequest) {
     return applyTo(NextResponse.json({ error: "Invalid JSON" }, { status: 400 }));
   }
 
-  const { imageBase64, mediaType } = body as { imageBase64?: unknown; mediaType?: unknown };
+  const { photos } = body as { photos?: unknown };
 
-  if (typeof imageBase64 !== "string" || !imageBase64.trim()) {
-    return applyTo(NextResponse.json({ error: "imageBase64 is required" }, { status: 400 }));
-  }
-  if (imageBase64.length > MAX_BASE64_LENGTH) {
+  if (!Array.isArray(photos) || photos.length < 1 || photos.length > MAX_PHOTOS) {
     return applyTo(
-      NextResponse.json({ error: "Photo is too large. Try a smaller photo." }, { status: 400 })
+      NextResponse.json(
+        { error: `photos must be an array of 1 to ${MAX_PHOTOS} photos` },
+        { status: 400 }
+      )
     );
   }
-  if (
-    typeof mediaType !== "string" ||
-    !ALLOWED_MEDIA_TYPES.includes(mediaType as AllowedMediaType)
-  ) {
-    return applyTo(
-      NextResponse.json({ error: "Photo must be a JPEG, PNG, WebP, or GIF" }, { status: 400 })
-    );
+
+  const validatedPhotos: PhotoInput[] = [];
+  for (const item of photos) {
+    if (typeof item !== "object" || item === null) {
+      return applyTo(NextResponse.json({ error: "Invalid photo entry" }, { status: 400 }));
+    }
+    const { base64, mediaType, note } = item as {
+      base64?: unknown;
+      mediaType?: unknown;
+      note?: unknown;
+    };
+    if (typeof base64 !== "string" || !base64.trim()) {
+      return applyTo(
+        NextResponse.json({ error: "Each photo needs image data" }, { status: 400 })
+      );
+    }
+    if (base64.length > MAX_BASE64_LENGTH) {
+      return applyTo(
+        NextResponse.json({ error: "Photo is too large. Try a smaller photo." }, { status: 400 })
+      );
+    }
+    if (
+      typeof mediaType !== "string" ||
+      !ALLOWED_MEDIA_TYPES.includes(mediaType as AllowedMediaType)
+    ) {
+      return applyTo(
+        NextResponse.json({ error: "Photo must be a JPEG, PNG, WebP, or GIF" }, { status: 400 })
+      );
+    }
+    validatedPhotos.push({
+      base64,
+      mediaType: mediaType as AllowedMediaType,
+      note: typeof note === "string" ? note : "",
+    });
   }
 
   try {
+    const content: Anthropic.ContentBlockParam[] = [];
+    for (const photo of validatedPhotos) {
+      content.push({
+        type: "image",
+        source: { type: "base64", media_type: photo.mediaType, data: photo.base64 },
+      });
+      if (photo.note.trim()) {
+        content.push({
+          type: "text",
+          text: `Contractor note for this photo: ${photo.note.trim()}`,
+        });
+      }
+    }
+    content.push({
+      type: "text",
+      text: `Analyse all ${validatedPhotos.length} photo(s) above and produce one consolidated plain-English job description covering all visible work. Write it the way a contractor would describe it to get a quote -- specific, direct, no fluff. Include what needs to be fixed or installed, visible damage or scope, approximate size or quantity where visible. Incorporate any contractor notes as additional context. Flag anything unclear that should be verified in person. Keep it under 250 words. Do not generate prices. Do not write an estimate. Just describe the work. Canadian English spelling.`,
+    });
+
     const response = await client.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 1024,
-      system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "image",
-              source: {
-                type: "base64",
-                media_type: mediaType as AllowedMediaType,
-                data: imageBase64,
-              },
-            },
-            { type: "text", text: "Describe the work shown in this job site photo." },
-          ],
-        },
-      ],
+      messages: [{ role: "user", content }],
     });
 
     const description = response.content
@@ -104,7 +133,7 @@ export async function POST(request: NextRequest) {
 
     if (!description) {
       return applyTo(
-        NextResponse.json({ error: "Could not read that photo. Try another one." }, { status: 500 })
+        NextResponse.json({ error: "Could not read those photos. Try again." }, { status: 500 })
       );
     }
 
@@ -113,7 +142,7 @@ export async function POST(request: NextRequest) {
     console.error("[analyze-photo] vision request failed:", err);
     return applyTo(
       NextResponse.json(
-        { error: "Could not analyse the photo. Try again." },
+        { error: "Could not analyse the photos. Try again." },
         { status: 500 }
       )
     );
