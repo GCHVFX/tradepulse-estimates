@@ -236,12 +236,15 @@ export function EditableEstimateBody({
   estimateId: string;
 }) {
   const parsed = useMemo(() => parseSummary(summary), [summary]);
-  const { preamble, depositPercent, afterPricingSections } = parsed;
+  const { preamble, depositPercent } = parsed;
 
   const [scopeItems, setScopeItems] = useState<ScopeItem[]>(() => parsed.scopeItems);
   const [lineItems, setLineItems] = useState<LineItem[]>(() => parsed.lineItems);
   const [beforeSections, setBeforeSections] = useState<BeforeSection[]>(
     () => parsed.beforePricingSections,
+  );
+  const [afterSections, setAfterSections] = useState<Array<{ heading: string; content: string }>>(
+    () => parsed.afterPricingSections,
   );
   const [undo, setUndo] = useState<UndoEntry | null>(null);
   const [toastVisible, setToastVisible] = useState(false);
@@ -270,6 +273,7 @@ export function EditableEstimateBody({
     nextScope: ScopeItem[],
     nextLine: LineItem[],
     nextBefore: BeforeSection[],
+    nextAfter: Array<{ heading: string; content: string }>,
   ) {
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(async () => {
@@ -282,7 +286,7 @@ export function EditableEstimateBody({
         nextLine,
         depositPercent,
         nextBefore,
-        afterPricingSections,
+        nextAfter,
       );
       setSaveStatus('saving');
       try {
@@ -307,7 +311,7 @@ export function EditableEstimateBody({
     setScopeItems(nextScope);
     setUndo({ item, index: idx, type: 'scope' });
     setToastVisible(true);
-    startCommitTimer(nextScope, lineItems, beforeSections);
+    startCommitTimer(nextScope, lineItems, beforeSections, afterSections);
   }
 
   function removeLine(id: string) {
@@ -317,7 +321,7 @@ export function EditableEstimateBody({
     setLineItems(nextLine);
     setUndo({ item, index: idx, type: 'lineItem' });
     setToastVisible(true);
-    startCommitTimer(scopeItems, nextLine, beforeSections);
+    startCommitTimer(scopeItems, nextLine, beforeSections, afterSections);
   }
 
   function handleAddItem() {
@@ -330,7 +334,7 @@ export function EditableEstimateBody({
     setNewLabel('');
     setNewCost('');
     setShowAddItem(false);
-    startCommitTimer(scopeItems, nextLine, beforeSections);
+    startCommitTimer(scopeItems, nextLine, beforeSections, afterSections);
   }
 
   function removeAssumption(sectionHeading: string, id: string) {
@@ -346,7 +350,13 @@ export function EditableEstimateBody({
     });
     setBeforeSections(nextBefore);
     setToastVisible(true);
-    startCommitTimer(scopeItems, lineItems, nextBefore);
+    startCommitTimer(scopeItems, lineItems, nextBefore, afterSections);
+  }
+
+  function updateAfterSection(heading: string, content: string) {
+    const nextAfter = afterSections.map(s => (s.heading === heading ? { ...s, content } : s));
+    setAfterSections(nextAfter);
+    startCommitTimer(scopeItems, lineItems, beforeSections, nextAfter);
   }
 
   function handleUndo() {
@@ -556,11 +566,27 @@ export function EditableEstimateBody({
         </div>
       ))}
 
-      {/* Sections after pricing (Payment Terms, Notes) */}
-      {afterPricingSections.map(s => (
+      {/* Sections after pricing (Payment Terms, Notes) — inline editable */}
+      {afterSections.map(s => (
         <div key={s.heading}>
-          <SectionHeading>{s.heading}</SectionHeading>
-          <EstimateMarkdown content={s.content} />
+          <SectionHeading>
+            {s.heading}
+            <span className="ml-1.5 text-amber-500 text-sm" aria-hidden="true">
+              {'✏︎'}
+            </span>
+          </SectionHeading>
+          <textarea
+            ref={el => {
+              if (el) {
+                el.style.height = 'auto';
+                el.style.height = `${el.scrollHeight}px`;
+              }
+            }}
+            value={s.content}
+            onChange={e => updateAfterSection(s.heading, e.target.value)}
+            aria-label={`Edit ${s.heading}`}
+            className="mb-3 w-full resize-none overflow-hidden border border-zinc-200 rounded-lg px-3 py-2.5 text-sm text-zinc-700 leading-relaxed focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+          />
         </div>
       ))}
 

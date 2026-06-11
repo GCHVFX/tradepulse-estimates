@@ -331,12 +331,14 @@ function FormView({
   const [photos, setPhotos] = useState<PhotoEntry[]>([]);
   const [photoAnalysing, setPhotoAnalysing] = useState(false);
   const [photoError, setPhotoError] = useState("");
+  const [analysed, setAnalysed] = useState(false);
 
   async function handlePhotoAdded(file: File) {
     if (photos.length >= 5) return;
     setPhotoError("");
     try {
       const { dataUrl, base64 } = await resizePhotoToJpeg(file);
+      setAnalysed(false);
       setPhotos((prev) =>
         prev.length >= 5
           ? prev
@@ -367,6 +369,7 @@ function FormView({
         throw new Error(data?.error || "Could not analyse the photos. Try again.");
       }
       setJobDescription(data.description);
+      setAnalysed(true);
     } catch (err) {
       setPhotoError(
         err instanceof Error ? err.message : "Could not analyse the photos. Try again."
@@ -407,7 +410,10 @@ function FormView({
             }}
           />
           {photos.length > 0 && (
-            <div className="flex flex-wrap gap-3 pt-1">
+            <p className="text-xs text-zinc-400 pt-1">Photos ({photos.length}/5)</p>
+          )}
+          {photos.length > 0 && (
+            <div className="flex flex-wrap gap-3">
               {photos.map((photo) => (
                 <div key={photo.id} className="flex w-20 flex-col gap-1.5">
                   <div className="relative">
@@ -420,9 +426,10 @@ function FormView({
                     <button
                       type="button"
                       aria-label="Remove photo"
-                      onClick={() =>
-                        setPhotos((prev) => prev.filter((p) => p.id !== photo.id))
-                      }
+                      onClick={() => {
+                        setAnalysed(false);
+                        setPhotos((prev) => prev.filter((p) => p.id !== photo.id));
+                      }}
                       className="absolute -top-1.5 -right-1.5 flex h-6 w-6 items-center justify-center rounded-full border border-zinc-600 bg-zinc-800 text-zinc-300 hover:text-white transition-colors"
                     >
                       <svg viewBox="0 0 12 12" fill="none" className="h-3 w-3" aria-hidden="true">
@@ -496,6 +503,11 @@ function FormView({
                 <span>Analyse Photos</span>
               )}
             </button>
+          )}
+          {analysed && photos.length > 0 && (
+            <p className="text-xs text-green-400 text-center">
+              {photos.length === 1 ? "Photo analysed." : `All ${photos.length} photos analysed.`}
+            </p>
           )}
           {photoError && <p className="text-red-400 text-sm">{photoError}</p>}
           {isFirstTime && (
