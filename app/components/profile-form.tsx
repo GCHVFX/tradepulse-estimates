@@ -14,6 +14,7 @@ interface Profile {
   logo_url: string;
   prepared_by: string;
   google_review_link: string;
+  payment_link: string;
 }
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
@@ -41,6 +42,7 @@ export function ProfileForm({
   const [email, setEmail] = useState(profile.email);
   const [preparedBy, setPreparedBy] = useState(profile.prepared_by);
   const [googleReviewLink, setGoogleReviewLink] = useState(profile.google_review_link);
+  const [paymentLink, setPaymentLink] = useState(profile.payment_link);
   const [logoUrl, setLogoUrl] = useState(profile.logo_url);
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -139,6 +141,7 @@ export function ProfileForm({
             logo_url: logoUrlRef.current,
             prepared_by: preparedBy,
             google_review_link: linkToSave,
+            payment_link: paymentLink,
           }),
         });
         if (!res.ok) throw new Error("Save failed");
@@ -152,7 +155,7 @@ export function ProfileForm({
     return () => {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     };
-  }, [name, phone, email, preparedBy, googleReviewLink]);
+  }, [name, phone, email, preparedBy, googleReviewLink, paymentLink]);
 
   async function handleCopy() {
     await navigator.clipboard.writeText(referralUrl);
@@ -217,7 +220,7 @@ export function ProfileForm({
       const res = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phone, email, logo_url: url, prepared_by: preparedBy, google_review_link: googleReviewLink }),
+        body: JSON.stringify({ name, phone, email, logo_url: url, prepared_by: preparedBy, google_review_link: googleReviewLink, payment_link: paymentLink }),
       });
 
       if (!res.ok) throw new Error("Failed to save logo.");
@@ -244,7 +247,7 @@ export function ProfileForm({
       const res = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phone, email, logo_url: "", prepared_by: preparedBy, google_review_link: googleReviewLink }),
+        body: JSON.stringify({ name, phone, email, logo_url: "", prepared_by: preparedBy, google_review_link: googleReviewLink, payment_link: paymentLink }),
       });
 
       if (!res.ok) throw new Error("Failed to remove logo.");
@@ -309,7 +312,7 @@ export function ProfileForm({
       const res = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phone, email, logo_url: logoUrlRef.current, prepared_by: preparedBy, google_review_link: linkToSave }),
+        body: JSON.stringify({ name, phone, email, logo_url: logoUrlRef.current, prepared_by: preparedBy, google_review_link: linkToSave, payment_link: paymentLink }),
       });
 
       if (!res.ok) {
@@ -599,6 +602,22 @@ export function ProfileForm({
           )}
         </div>
         )}
+
+        {/* Payment link */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-zinc-400">Payment link</label>
+          <input
+            type="text"
+            className={inputClass}
+            placeholder="e.g. paypal.me/yourbusiness or your e-transfer email"
+            value={paymentLink}
+            onChange={(e) => setPaymentLink(e.target.value)}
+            autoCorrect="off"
+            autoCapitalize="none"
+            spellCheck={false}
+          />
+          <p className="text-zinc-400 text-xs">Included in payment reminders so customers can pay you.</p>
+        </div>
 
         {status === "error" && errorMsg && (
           <div className="bg-red-950 border border-red-800 rounded-xl px-4 py-3 text-red-300 text-sm">

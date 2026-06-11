@@ -8,6 +8,7 @@ interface ProfileBody {
   logo_url?: unknown;
   prepared_by?: unknown;
   google_review_link?: unknown;
+  payment_link?: unknown;
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const { data, error } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("name, phone, email, logo_url, prepared_by, google_review_link, plan, subscription_status, trial_ends_at")
+    .select("name, phone, email, logo_url, prepared_by, google_review_link, payment_link, plan, subscription_status, trial_ends_at")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -42,6 +43,10 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     ? body.google_review_link.trim() || null
     : null;
 
+  const paymentLink = typeof body.payment_link === "string"
+    ? body.payment_link.trim() || null
+    : null;
+
   const { error } = await supabaseAdmin
     .from("tpe_businesses")
     .upsert(
@@ -53,6 +58,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         logo_url: typeof body.logo_url === "string" ? body.logo_url.trim() : "",
         prepared_by: typeof body.prepared_by === "string" ? body.prepared_by.trim() : "",
         google_review_link: googleReviewLink,
+        payment_link: paymentLink,
       },
       { onConflict: "user_id" }
     );

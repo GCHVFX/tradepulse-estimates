@@ -66,6 +66,7 @@ app/
   estimates/page.tsx             Estimate list (server)
   estimates/[id]/page.tsx        Estimate detail (server)
   share/[id]/page.tsx            Public estimate view, no auth (server)
+  payments/page.tsx              Outstanding invoices list (server, Pro-gated)
   profile/page.tsx               Business profile
   onboarding/page.tsx            Redirects to /new (stub)
   rates/page.tsx                 Price book
@@ -131,8 +132,18 @@ docs/
 - Gated by `business.plan === 'pro'` server-side; Starter sees the button greyed out with a Pro badge
 - Rate limited: 5 calls per user per 60 minutes
 
+### Payments Feature (live, Pro-gated)
+- Contractor marks a done estimate as invoiced (`invoice-sheet.tsx`, amount + due date), TradePulse sends automated reminders until marked paid. No payment processing, no Stripe Connect.
+- Reminder stages: pre-due (due minus 2 days), first overdue (due plus 1 day), second overdue (due plus 5 days), final notice (due plus 14 days). One reminder per stage, tracked via `reminder_count` on `tpe_estimates`. Reminders stop when `payment_status = 'paid'`.
+- `GET /api/cron/payment-reminders` — daily Vercel cron (17:00 UTC, `vercel.json`), secured by `Authorization: Bearer CRON_SECRET`. Sends SMS (Twilio) and email (Resend) per stage, logs each send to `tpe_payment_reminders`.
+- `PATCH /api/estimates/[id]/invoice` — sets `invoice_amount`, `due_date`, `payment_status = 'unpaid'`, resets `reminder_count`
+- `PATCH /api/estimates/[id]/mark-paid` — sets `payment_status = 'paid'`, `completed_at`
+- Estimate detail: "Mark as Invoiced" (status done, no invoice yet) and "Mark as Paid" (unpaid invoice, inline confirm) in `estimate-actions.tsx`
+- `/payments` page lists unpaid/overdue invoices, Pro-gated with upgrade prompt for Starter. Payments tab in `bottom-nav.tsx` shows a PRO badge for Starter users.
+- `payment_link` field on profile (PayPal link or e-transfer email) is included in reminders; omitted cleanly when not set
+- Requires `CRON_SECRET` env var
+
 ### Not Yet Built
-- Payments (automated invoice reminders) — schema staged: `tpe_payment_reminders` table, payment columns on `tpe_estimates`, `payment_link` on `tpe_businesses`
 - Follow-Up (scheduled customer outreach)
 - Pro upgrade flow (no Pro subscribers yet, STRIPE_PRO_PRICE_ID not set)
 
@@ -145,6 +156,7 @@ docs/
 - `/estimates` — estimate list
 - `/estimates/[id]` — estimate detail
 - `/share/[id]` — public estimate (no auth)
+- `/payments` — outstanding invoices (Pro-gated in page, upgrade prompt for Starter)
 - `/go/*` — postcard QR redirect pages (public, no auth)
 - `/plumbers`, `/electricians`, `/trades` — trade-specific landing pages (public)
 - `/plumbing-cost`, `/electrical-cost` — SEO cost guides (public)
@@ -252,6 +264,9 @@ import { stripe } from "@/lib/stripe";
   - `controller.close()` must come AFTER the `__ID__` chunk is enqueued
   - Injects price book data (labour rate, markup, common items) into the prompt
 - `POST /api/estimates/[id]/review-request` — sends Google review SMS via Twilio, Pro-gated
+- `PATCH /api/estimates/[id]/invoice` — sets invoice amount + due date, starts payment reminders
+- `PATCH /api/estimates/[id]/mark-paid` — marks invoice paid, stops reminders
+- `GET /api/cron/payment-reminders` — daily reminder cron, auth via `Authorization: Bearer CRON_SECRET` (not user auth)
 - `POST /api/analyze-photo` — vision analysis of a job site photo, Pro-gated
   - Accepts `{ imageBase64, mediaType }` (JPEG/PNG/WebP/GIF, base64 capped at ~6MB), returns `{ description }`
   - Uses `claude-sonnet-4-6`; image is never stored

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { SendEstimateSheet } from "./send-estimate-sheet";
 import { MarkJobDoneSheet } from "./mark-job-done-sheet";
+import { InvoiceSheet } from "./invoice-sheet";
 import { Spinner } from "./spinner";
 
 interface EstimateActionsProps {
@@ -19,6 +20,9 @@ interface EstimateActionsProps {
   isPro: boolean;
   googleReviewLink: string | null;
   reviewRequestedAt?: string | null;
+  paymentStatus?: string | null;
+  invoiceAmount?: number | null;
+  businessHasPaymentLink?: boolean;
 }
 
 export function EstimateActions({
@@ -35,6 +39,9 @@ export function EstimateActions({
   isPro,
   googleReviewLink,
   reviewRequestedAt,
+  paymentStatus,
+  invoiceAmount,
+  businessHasPaymentLink,
 }: EstimateActionsProps) {
   const [showSendSheet, setShowSendSheet] = useState(false);
   const [showDoneSheet, setShowDoneSheet] = useState(false);
@@ -45,6 +52,31 @@ export function EstimateActions({
   const [localReviewRequestedAt, setLocalReviewRequestedAt] = useState(reviewRequestedAt ?? null);
   const [isMarkingDone, setIsMarkingDone] = useState(false);
   const [markDoneError, setMarkDoneError] = useState("");
+  const [showInvoiceSheet, setShowInvoiceSheet] = useState(false);
+  const [localPaymentStatus, setLocalPaymentStatus] = useState(paymentStatus ?? null);
+  const [hasInvoice, setHasInvoice] = useState(invoiceAmount !== null && invoiceAmount !== undefined);
+  const [confirmingPaid, setConfirmingPaid] = useState(false);
+  const [isMarkingPaid, setIsMarkingPaid] = useState(false);
+  const [markPaidError, setMarkPaidError] = useState("");
+
+  async function handleMarkPaid() {
+    setIsMarkingPaid(true);
+    setMarkPaidError("");
+    try {
+      const res = await fetch(`/api/estimates/${estimateId}/mark-paid`, {
+        method: "PATCH",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setMarkPaidError((data as { error?: string }).error ?? `Server error ${res.status}`);
+        return;
+      }
+      setLocalPaymentStatus("paid");
+      setConfirmingPaid(false);
+    } finally {
+      setIsMarkingPaid(false);
+    }
+  }
 
   async function handleMarkDone() {
     setIsMarkingDone(true);
@@ -164,6 +196,52 @@ export function EstimateActions({
             Send Estimate
           </button>
         )}
+
+        {isDone && !hasInvoice && (localPaymentStatus === null || localPaymentStatus === "unpaid") && (
+          <button
+            type="button"
+            onClick={() => setShowInvoiceSheet(true)}
+            className="w-full bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+          >
+            Mark as Invoiced
+          </button>
+        )}
+
+        {hasInvoice && localPaymentStatus === "unpaid" && (
+          <>
+            {markPaidError && (
+              <p className="text-red-400 text-xs text-center">{markPaidError}</p>
+            )}
+            <button
+              type="button"
+              disabled={isMarkingPaid}
+              onClick={() => {
+                if (confirmingPaid) {
+                  handleMarkPaid();
+                } else {
+                  setConfirmingPaid(true);
+                }
+              }}
+              className="w-full bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px] flex items-center justify-center gap-2"
+            >
+              {isMarkingPaid && <Spinner className="w-5 h-5" />}
+              {isMarkingPaid
+                ? "Saving..."
+                : confirmingPaid
+                ? "Confirm -- mark as paid?"
+                : "Mark as Paid"}
+            </button>
+          </>
+        )}
+
+        {hasInvoice && localPaymentStatus === "paid" && (
+          <div className="w-full flex items-center justify-center gap-2 min-h-[56px] rounded-xl border border-green-800/50 bg-green-950/40">
+            <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5 text-green-400 shrink-0" aria-hidden="true">
+              <path d="M4 10l4.5 4.5L16 6" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span className="text-green-400 font-semibold text-base">Invoice Paid</span>
+          </div>
+        )}
       </div>
 
       <SendEstimateSheet
@@ -198,6 +276,19 @@ export function EstimateActions({
         businessPhone={businessPhone ?? ""}
         reviewRequestedAt={localReviewRequestedAt}
         initialPanel={doneSheetInitialPanel}
+      />
+
+      <InvoiceSheet
+        isOpen={showInvoiceSheet}
+        onClose={() => setShowInvoiceSheet(false)}
+        onInvoiced={() => {
+          setHasInvoice(true);
+          setLocalPaymentStatus("unpaid");
+        }}
+        estimateId={estimateId}
+        customerName={customerName ?? ""}
+        existingAmount={invoiceAmount !== null && invoiceAmount !== undefined ? String(invoiceAmount) : ""}
+        businessHasPaymentLink={businessHasPaymentLink ?? false}
       />
     </>
   );

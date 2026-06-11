@@ -32,7 +32,7 @@ export default async function EstimatePage({
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("logo_url, name, email, phone, plan, google_review_link")
+    .select("logo_url, name, email, phone, plan, google_review_link, payment_link")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -101,6 +101,9 @@ export default async function EstimatePage({
         isPro={isPro}
         googleReviewLink={googleReviewLink}
         reviewRequestedAt={estimate.review_requested_at ?? null}
+        paymentStatus={estimate.payment_status ?? null}
+        invoiceAmount={estimate.invoice_amount ?? null}
+        businessHasPaymentLink={Boolean(business?.payment_link?.trim())}
       />
 
       <div className="fixed bottom-0 left-0 right-0 z-40">
