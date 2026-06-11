@@ -16,7 +16,8 @@
       "PowerShell(npx next build)",
       "mcp__claude_ai_Supabase__generate_typescript_types",
       "mcp__claude_ai_Supabase__list_projects",
-      "PowerShell(node scripts/filter-db-types.cjs \"C:\\\\Users\\\\gchan\\\\.claude\\\\projects\\\\C--web-apps-tradepulse-estimates\\\\25e68bb3-ddef-4ca8-b16e-a2db236dfb3d\\\\tool-results\\\\toolu_01Y922uMgw7desjjqk6jhnud.json\")"
+      "PowerShell(node scripts/filter-db-types.cjs \"C:\\\\Users\\\\gchan\\\\.claude\\\\projects\\\\C--web-apps-tradepulse-estimates\\\\25e68bb3-ddef-4ca8-b16e-a2db236dfb3d\\\\tool-results\\\\toolu_01Y922uMgw7desjjqk6jhnud.json\")",
+      "PowerShell(git *)"
     ]
   }
 }
