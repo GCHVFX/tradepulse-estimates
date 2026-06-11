@@ -35,14 +35,14 @@ function imageFormatFromDataUrl(dataUrl: string): "PNG" | "JPEG" {
   return dataUrl.startsWith("data:image/png") ? "PNG" : "JPEG";
 }
 
-// PDF section order: Job Summary (preamble), Pricing Summary, Scope of Work,
-// Line Items, Assumptions and Exclusions, Payment Terms, Notes
+// PDF section order: Job Summary (preamble), Scope of Work, Line Items,
+// Assumptions and Exclusions, Pricing Summary, Payment Terms, Notes
 function orderPdfSections(lines: string[]): string[] {
   const PRIORITY = [
-    "pricing summary",
     "scope of work",
     "line items",
     "assumptions",
+    "pricing summary",
     "payment terms",
     "notes",
   ];

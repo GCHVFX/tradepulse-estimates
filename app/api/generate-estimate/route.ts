@@ -28,16 +28,7 @@ Output must follow this exact structure:
 
 1. Job Title (H1 heading)
 2. Job Summary (2 to 3 sentences)
-3. Pricing Summary (subtotal, tax, total, deposit, balance)
-   Pricing Summary MUST be formatted as markdown pipe tables, not bullet points or plain text. Use this exact format:
-   | | |
-   |---|---|
-   | Subtotal | $XXX |
-   | Tax (GST 5%) | $XXX |
-   | **Total** | **$XXX** |
-   | Deposit required | $XXX |
-   | Balance on completion | $XXX |
-   Never use bullet points or plain text for the pricing summary. Always use pipe table format.
+3. Total Price (after the summary, write the total price as a simple line like "Total: $1,943". This is plain text, not a heading or table.)
 4. Scope of Work (bullet list of specific tasks)
 5. Line Items (labour and materials, individually priced)
    Line Items MUST be formatted as markdown pipe tables, not bullet points or plain text. Use this exact format:
@@ -48,9 +39,19 @@ Output must follow this exact structure:
    Never use bullet points or plain text for line items. Always use pipe table format.
    Do not include a Subtotal, Tax, Total, Deposit, or Balance row in the Line Items table. These are handled separately in the Pricing Summary section.
 6. Assumptions and Exclusions (what is included, what is not)
-7. Payment Terms (2 to 4 lines)
+7. Pricing Summary (subtotal, tax, total, deposit, balance)
+   Pricing Summary MUST be formatted as markdown pipe tables, not bullet points or plain text. Use this exact format:
+   | | |
+   |---|---|
+   | Subtotal | $XXX |
+   | Tax (GST 5%) | $XXX |
+   | **Total** | **$XXX** |
+   | Deposit required | $XXX |
+   | Balance on completion | $XXX |
+   Never use bullet points or plain text for the pricing summary. Always use pipe table format.
+8. Payment Terms (2 to 4 lines)
    Always include: "This estimate is valid for 30 days from the date above."
-8. Notes (omit if nothing relevant)`;
+9. Notes (omit if nothing relevant)`;
 
 export async function POST(request: NextRequest) {
   const { supabase, applyTo } = createApiClient(request);
