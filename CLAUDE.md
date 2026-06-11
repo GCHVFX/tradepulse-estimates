@@ -134,7 +134,7 @@ docs/
 
 ### Payments Feature (live, Pro-gated)
 - Contractor marks a done estimate as invoiced (`invoice-sheet.tsx`, amount + due date), TradePulse sends automated reminders until marked paid. No payment processing, no Stripe Connect.
-- Reminder stages: pre-due (due minus 2 days), first overdue (due plus 1 day), second overdue (due plus 5 days), final notice (due plus 14 days). One reminder per stage, tracked via `reminder_count` on `tpe_estimates`. Reminders stop when `payment_status = 'paid'`.
+- Reminder stages: pre-due (due minus 2 days), first overdue (due plus 1 day), second overdue (due plus 5 days), then ongoing weekly reminders (`overdue_ongoing`) starting at due plus 14 days until paid. One reminder per stage, tracked via `reminder_count` on `tpe_estimates` (counts above 3 are weekly reminders). Reminders stop when `payment_status = 'paid'`.
 - `GET /api/cron/payment-reminders` — daily Vercel cron (17:00 UTC, `vercel.json`), secured by `Authorization: Bearer CRON_SECRET`. Sends SMS (Twilio) and email (Resend) per stage, logs each send to `tpe_payment_reminders`.
 - `PATCH /api/estimates/[id]/invoice` — sets `invoice_amount`, `due_date`, `payment_status = 'unpaid'`, resets `reminder_count`
 - `PATCH /api/estimates/[id]/mark-paid` — sets `payment_status = 'paid'`, `completed_at`

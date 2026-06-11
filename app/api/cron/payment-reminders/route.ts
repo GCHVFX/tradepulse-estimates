@@ -3,7 +3,7 @@ import twilio from "twilio";
 import { Resend } from "resend";
 import { supabaseAdmin } from "@/lib/supabase-server";
 
-type StageName = "pre_due" | "overdue_1" | "overdue_2" | "final_notice";
+type StageName = "pre_due" | "overdue_1" | "overdue_2" | "overdue_ongoing";
 
 // Offsets are days relative to the due date. A stage is eligible once
 // today >= due_date + offsetDays. reminder_count tracks how many stages
@@ -12,8 +12,13 @@ const STAGES: Array<{ name: StageName; offsetDays: number }> = [
   { name: "pre_due", offsetDays: -2 },
   { name: "overdue_1", offsetDays: 1 },
   { name: "overdue_2", offsetDays: 5 },
-  { name: "final_notice", offsetDays: 14 },
 ];
+
+// After the named stages, keep reminding weekly until paid. The first
+// ongoing reminder fires at due_date + ONGOING_START_DAYS, then every
+// ONGOING_INTERVAL_DAYS after that.
+const ONGOING_START_DAYS = 14;
+const ONGOING_INTERVAL_DAYS = 7;
 
 interface MessageContext {
   customerName: string;
@@ -40,7 +45,7 @@ function formatPhone(raw: string): string | null {
 }
 
 function buildSmsMessage(stage: StageName, ctx: MessageContext): string {
-  const { customerName, invoiceRef, amount, businessName, dueDateText, paymentLink, daysOverdue } = ctx;
+  const { customerName, invoiceRef, amount, businessName, dueDateText, paymentLink } = ctx;
   switch (stage) {
     case "pre_due":
       return `Hi ${customerName}, just a reminder that invoice #${invoiceRef} for $${amount} from ${businessName} is due on ${dueDateText}.${paymentLink ? ` Pay here: ${paymentLink}.` : ""} Reply STOP to opt out.`;
@@ -48,13 +53,13 @@ function buildSmsMessage(stage: StageName, ctx: MessageContext): string {
       return `Hi ${customerName}, your invoice of $${amount} from ${businessName} was due ${dueDateText}. ${paymentLink ? `Please arrange payment at your earliest convenience: ${paymentLink}.` : "Please arrange payment at your earliest convenience."} Reply STOP to opt out.`;
     case "overdue_2":
       return `Hi ${customerName}, invoice #${invoiceRef} for $${amount} remains outstanding as of ${dueDateText}. ${paymentLink ? `Please contact us or pay here: ${paymentLink}.` : "Please contact us."} Reply STOP to opt out.`;
-    case "final_notice":
-      return `Hi ${customerName}, this is a final notice for invoice #${invoiceRef} for $${amount} from ${businessName}. Payment is now ${daysOverdue} days overdue.${paymentLink ? ` Pay here: ${paymentLink}.` : ""} Reply STOP to opt out.`;
+    case "overdue_ongoing":
+      return `Hi ${customerName}, invoice #${invoiceRef} for $${amount} from ${businessName} remains unpaid.${paymentLink ? ` Pay here: ${paymentLink}.` : ""} Reply STOP to opt out.`;
   }
 }
 
 function buildEmailBody(stage: StageName, ctx: MessageContext): string {
-  const { customerName, dueDateText, businessName, daysOverdue } = ctx;
+  const { customerName, dueDateText, businessName } = ctx;
   switch (stage) {
     case "pre_due":
       return `Hi ${customerName}, just a reminder that the invoice below from ${businessName} is due on ${dueDateText}.`;
@@ -62,8 +67,8 @@ function buildEmailBody(stage: StageName, ctx: MessageContext): string {
       return `Hi ${customerName}, the invoice below from ${businessName} was due ${dueDateText}. Please arrange payment at your earliest convenience.`;
     case "overdue_2":
       return `Hi ${customerName}, the invoice below remains outstanding as of ${dueDateText}. Please contact us or arrange payment.`;
-    case "final_notice":
-      return `Hi ${customerName}, this is a final notice for the invoice below from ${businessName}. Payment is now ${daysOverdue} days overdue.`;
+    case "overdue_ongoing":
+      return `Hi ${customerName}, the invoice below from ${businessName} remains unpaid. Please contact us or arrange payment.`;
   }
 }
 
@@ -146,16 +151,32 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const dueUtc = Date.UTC(year, month - 1, day);
     const daysFromDue = Math.floor((todayUtc - dueUtc) / msPerDay);
 
-    let stageIndex = -1;
-    for (let i = 0; i < STAGES.length; i++) {
-      if (daysFromDue >= STAGES[i].offsetDays) stageIndex = i;
-    }
-    if (stageIndex < 0) continue;
-
     const stagesSent = estimate.reminder_count ?? 0;
-    if (stagesSent > stageIndex) continue;
 
-    const stage = STAGES[stageIndex];
+    let stageName: StageName | null = null;
+    let nextReminderCount = stagesSent;
+
+    if (stagesSent < STAGES.length) {
+      // Named stages: pre_due, overdue_1, overdue_2
+      let stageIndex = -1;
+      for (let i = 0; i < STAGES.length; i++) {
+        if (daysFromDue >= STAGES[i].offsetDays) stageIndex = i;
+      }
+      if (stageIndex >= 0 && stagesSent <= stageIndex) {
+        stageName = STAGES[stageIndex].name;
+        nextReminderCount = stageIndex + 1;
+      }
+    } else {
+      // All named stages sent. Keep reminding weekly until paid.
+      const weeklySent = stagesSent - STAGES.length;
+      if (daysFromDue >= ONGOING_START_DAYS + ONGOING_INTERVAL_DAYS * weeklySent) {
+        stageName = "overdue_ongoing";
+        nextReminderCount = stagesSent + 1;
+      }
+    }
+
+    if (!stageName) continue;
+
     const business = businessMap.get(estimate.business_id);
     const businessName = business?.name?.trim() || "your contractor";
     const paymentLink = business?.payment_link?.trim() || null;
@@ -186,7 +207,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (twilioClient && estimate.customer_phone) {
       const formattedPhone = formatPhone(estimate.customer_phone);
       if (formattedPhone) {
-        const smsBody = buildSmsMessage(stage.name, ctx);
+        const smsBody = buildSmsMessage(stageName, ctx);
         try {
           await twilioClient.messages.create({
             body: smsBody,
@@ -197,7 +218,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             estimate_id: estimate.id,
             business_id: estimate.business_id,
             channel: "sms",
-            stage: stage.name,
+            stage: stageName,
             message: smsBody,
           });
         } catch (err) {
@@ -207,7 +228,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     if (resend && estimate.customer_email?.trim()) {
-      const html = buildEmailHtml(stage.name, ctx);
+      const html = buildEmailHtml(stageName, ctx);
       try {
         const result = await resend.emails.send({
           from: "TradePulse Estimates <estimates@trytradepulse.com>",
@@ -222,8 +243,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             estimate_id: estimate.id,
             business_id: estimate.business_id,
             channel: "email",
-            stage: stage.name,
-            message: buildEmailBody(stage.name, ctx),
+            stage: stageName,
+            message: buildEmailBody(stageName, ctx),
           });
         }
       } catch (err) {
@@ -237,7 +258,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       .from("tpe_estimates")
       .update({
         last_reminder_sent_at: new Date().toISOString(),
-        reminder_count: stageIndex + 1,
+        reminder_count: nextReminderCount,
       })
       .eq("id", estimate.id);
 

@@ -254,8 +254,10 @@ export function EstimateActions({
               invoiceNudgeVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
             }`}
           >
-            <p className="text-white text-sm font-medium">
-              Reminders are on. We&apos;ll follow up with your customer until they pay.
+            <p className="text-white text-sm font-semibold">Reminders are on.</p>
+            <p className="text-white/90 text-xs mt-0.5">
+              We&apos;ll send your customer a reminder 2 days before the due date, then follow
+              up at 1 day, 5 days, and every week after until they pay.
             </p>
             <button
               type="button"
@@ -318,6 +320,8 @@ export function EstimateActions({
         }}
         estimateId={estimateId}
         customerName={customerName ?? ""}
+        customerPhone={localCustomerPhone}
+        customerEmail={customerEmail ?? ""}
         existingAmount={
           invoiceAmount !== null && invoiceAmount !== undefined
             ? String(invoiceAmount)

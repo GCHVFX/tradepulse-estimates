@@ -10,6 +10,8 @@ interface InvoiceSheetProps {
   onInvoiced: () => void;
   estimateId: string;
   customerName: string;
+  customerPhone: string;
+  customerEmail: string;
   existingAmount: string;
   businessHasPaymentLink: boolean;
 }
@@ -37,6 +39,8 @@ export function InvoiceSheet({
   onInvoiced,
   estimateId,
   customerName,
+  customerPhone,
+  customerEmail,
   existingAmount,
   businessHasPaymentLink,
 }: InvoiceSheetProps) {
@@ -156,6 +160,13 @@ export function InvoiceSheet({
               onChange={(e) => setDueDate(e.target.value)}
             />
           </div>
+
+          {!customerPhone.trim() && !customerEmail.trim() && (
+            <p className="text-amber-400 text-sm">
+              No contact info on this estimate. Add a phone number or email to send payment
+              reminders.
+            </p>
+          )}
 
           {!businessHasPaymentLink && (
             <div className="bg-amber-950/40 border border-amber-800/50 rounded-xl px-4 py-3 text-amber-300 text-sm">
