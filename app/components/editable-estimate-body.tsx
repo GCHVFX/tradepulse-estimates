@@ -324,6 +324,12 @@ export function EditableEstimateBody({
     startCommitTimer(scopeItems, nextLine, beforeSections, afterSections);
   }
 
+  function updateLine(id: string, field: 'label' | 'cost', value: string) {
+    const nextLine = lineItems.map(i => (i.id === id ? { ...i, [field]: value } : i));
+    setLineItems(nextLine);
+    startCommitTimer(scopeItems, nextLine, beforeSections, afterSections);
+  }
+
   function handleAddItem() {
     if (!newLabel.trim() || !newCost.trim()) return;
     const rawCost = parseFloat(newCost.replace(/[^0-9.]/g, ''));
@@ -431,9 +437,23 @@ export function EditableEstimateBody({
           <tbody>
             {lineItems.map(item => (
               <tr key={item.id}>
-                <td className="px-3 py-2.5 text-zinc-700 border-t border-zinc-200">{item.label}</td>
-                <td className="px-3 py-2.5 text-zinc-700 border-t border-zinc-200 whitespace-nowrap">
-                  {item.cost}
+                <td className="border-t border-zinc-200">
+                  <input
+                    type="text"
+                    value={item.label}
+                    onChange={e => updateLine(item.id, 'label', e.target.value)}
+                    aria-label="Item description"
+                    className="w-full bg-transparent rounded-lg border border-transparent px-3 py-2.5 text-sm text-zinc-700 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]"
+                  />
+                </td>
+                <td className="border-t border-zinc-200">
+                  <input
+                    type="text"
+                    value={item.cost}
+                    onChange={e => updateLine(item.id, 'cost', e.target.value)}
+                    aria-label="Item cost"
+                    className="w-24 bg-transparent rounded-lg border border-transparent px-3 py-2.5 text-sm text-zinc-700 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]"
+                  />
                 </td>
                 <td className="border-t border-zinc-200 pr-1" style={{ width: 40, minWidth: 40 }}>
                   <XBtn onClick={() => removeLine(item.id)} />

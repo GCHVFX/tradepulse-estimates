@@ -413,10 +413,10 @@ function FormView({
             <p className="text-xs text-zinc-400 pt-1">Photos ({photos.length}/5)</p>
           )}
           {photos.length > 0 && (
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-col gap-3">
               {photos.map((photo) => (
-                <div key={photo.id} className="flex w-20 flex-col gap-1.5">
-                  <div className="relative">
+                <div key={photo.id} className="flex items-start gap-3">
+                  <div className="relative shrink-0">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={photo.preview}
@@ -454,7 +454,7 @@ function FormView({
                         )
                       )
                     }
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-amber-500"
+                    className="flex-1 min-w-0 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]"
                   />
                 </div>
               ))}
@@ -505,7 +505,7 @@ function FormView({
             </button>
           )}
           {analysed && photos.length > 0 && (
-            <p className="text-xs text-green-400 text-center">
+            <p className="text-sm text-green-400 text-center">
               {photos.length === 1 ? "Photo analysed." : `All ${photos.length} photos analysed.`}
             </p>
           )}
