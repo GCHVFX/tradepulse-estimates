@@ -36,6 +36,7 @@ Output must follow this exact structure:
    | Labour (X hours @ $X/hr) | $XXX |
    | Item description | $XXX |
    Never use bullet points or plain text for line items. Always use pipe table format.
+   Do not include a Subtotal, Tax, Total, Deposit, or Balance row in the Line Items table. These are handled separately in the Pricing Summary section.
 5. Assumptions and Exclusions (what is included, what is not)
 6. Pricing Summary (subtotal, tax, total, deposit, balance)
    Pricing Summary MUST be formatted as markdown pipe tables, not bullet points or plain text. Use this exact format:

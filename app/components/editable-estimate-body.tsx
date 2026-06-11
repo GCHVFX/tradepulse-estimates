@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useRef, useMemo, useEffect } from 'react';
-import { EstimateMarkdown } from '@/app/components/estimate-markdown';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -236,8 +235,9 @@ export function EditableEstimateBody({
   estimateId: string;
 }) {
   const parsed = useMemo(() => parseSummary(summary), [summary]);
-  const { preamble, depositPercent } = parsed;
+  const { depositPercent } = parsed;
 
+  const [preambleText, setPreambleText] = useState<string>(() => parsed.preamble);
   const [scopeItems, setScopeItems] = useState<ScopeItem[]>(() => parsed.scopeItems);
   const [lineItems, setLineItems] = useState<LineItem[]>(() => parsed.lineItems);
   const [beforeSections, setBeforeSections] = useState<BeforeSection[]>(
@@ -274,6 +274,7 @@ export function EditableEstimateBody({
     nextLine: LineItem[],
     nextBefore: BeforeSection[],
     nextAfter: Array<{ heading: string; content: string }>,
+    nextPreamble: string,
   ) {
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(async () => {
@@ -281,7 +282,7 @@ export function EditableEstimateBody({
       setToastVisible(false);
       setUndo(null);
       const newSummary = serializeSummary(
-        preamble,
+        nextPreamble,
         nextScope,
         nextLine,
         depositPercent,
@@ -311,7 +312,7 @@ export function EditableEstimateBody({
     setScopeItems(nextScope);
     setUndo({ item, index: idx, type: 'scope' });
     setToastVisible(true);
-    startCommitTimer(nextScope, lineItems, beforeSections, afterSections);
+    startCommitTimer(nextScope, lineItems, beforeSections, afterSections, preambleText);
   }
 
   function removeLine(id: string) {
@@ -321,13 +322,13 @@ export function EditableEstimateBody({
     setLineItems(nextLine);
     setUndo({ item, index: idx, type: 'lineItem' });
     setToastVisible(true);
-    startCommitTimer(scopeItems, nextLine, beforeSections, afterSections);
+    startCommitTimer(scopeItems, nextLine, beforeSections, afterSections, preambleText);
   }
 
   function updateLine(id: string, field: 'label' | 'cost', value: string) {
     const nextLine = lineItems.map(i => (i.id === id ? { ...i, [field]: value } : i));
     setLineItems(nextLine);
-    startCommitTimer(scopeItems, nextLine, beforeSections, afterSections);
+    startCommitTimer(scopeItems, nextLine, beforeSections, afterSections, preambleText);
   }
 
   function handleAddItem() {
@@ -340,7 +341,7 @@ export function EditableEstimateBody({
     setNewLabel('');
     setNewCost('');
     setShowAddItem(false);
-    startCommitTimer(scopeItems, nextLine, beforeSections, afterSections);
+    startCommitTimer(scopeItems, nextLine, beforeSections, afterSections, preambleText);
   }
 
   function removeAssumption(sectionHeading: string, id: string) {
@@ -356,13 +357,18 @@ export function EditableEstimateBody({
     });
     setBeforeSections(nextBefore);
     setToastVisible(true);
-    startCommitTimer(scopeItems, lineItems, nextBefore, afterSections);
+    startCommitTimer(scopeItems, lineItems, nextBefore, afterSections, preambleText);
   }
 
   function updateAfterSection(heading: string, content: string) {
     const nextAfter = afterSections.map(s => (s.heading === heading ? { ...s, content } : s));
     setAfterSections(nextAfter);
-    startCommitTimer(scopeItems, lineItems, beforeSections, nextAfter);
+    startCommitTimer(scopeItems, lineItems, beforeSections, nextAfter, preambleText);
+  }
+
+  function updatePreamble(value: string) {
+    setPreambleText(value);
+    startCommitTimer(scopeItems, lineItems, beforeSections, afterSections, value);
   }
 
   function handleUndo() {
@@ -402,10 +408,19 @@ export function EditableEstimateBody({
 
   return (
     <>
-      {/* Preamble */}
-      {preamble && (
-        <EstimateMarkdown content={preamble} />
-      )}
+      {/* Preamble (job summary) — inline editable */}
+      <textarea
+        ref={el => {
+          if (el) {
+            el.style.height = 'auto';
+            el.style.height = `${el.scrollHeight}px`;
+          }
+        }}
+        value={preambleText}
+        onChange={e => updatePreamble(e.target.value)}
+        aria-label="Edit job summary"
+        className="mb-3 w-full resize-none overflow-hidden border border-zinc-200 rounded-lg px-3 py-2.5 text-sm text-zinc-700 leading-relaxed focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+      />
 
       {/* Scope of Work */}
       <SectionHeading>Scope of Work</SectionHeading>
