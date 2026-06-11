@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { SendEstimateSheet } from "./send-estimate-sheet";
 import { MarkJobDoneSheet } from "./mark-job-done-sheet";
 import { InvoiceSheet } from "./invoice-sheet";
@@ -60,6 +60,16 @@ export function EstimateActions({
   const [confirmingPaid, setConfirmingPaid] = useState(false);
   const [isMarkingPaid, setIsMarkingPaid] = useState(false);
   const [markPaidError, setMarkPaidError] = useState("");
+  // One-time confirmation after marking invoiced; shown once per session
+  const [showInvoiceNudge, setShowInvoiceNudge] = useState(false);
+  const [invoiceNudgeVisible, setInvoiceNudgeVisible] = useState(false);
+
+  useEffect(() => {
+    if (showInvoiceNudge) {
+      const frame = requestAnimationFrame(() => setInvoiceNudgeVisible(true));
+      return () => cancelAnimationFrame(frame);
+    }
+  }, [showInvoiceNudge]);
 
   async function handleMarkPaid() {
     setIsMarkingPaid(true);
@@ -244,6 +254,32 @@ export function EstimateActions({
             <span className="text-green-400 font-semibold text-base">Invoice Paid</span>
           </div>
         )}
+
+        {showInvoiceNudge && (
+          <div
+            className={`relative w-full rounded-xl border border-green-800/50 bg-green-950/40 px-4 py-3 pr-12 transition-all duration-300 ${
+              invoiceNudgeVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
+            }`}
+          >
+            <p className="text-green-400 font-semibold text-sm">Payment reminders are on.</p>
+            <p className="text-zinc-300 text-xs mt-0.5">
+              We&apos;ll follow up with your customer automatically until they pay.
+            </p>
+            <button
+              type="button"
+              aria-label="Dismiss"
+              onClick={() => {
+                setShowInvoiceNudge(false);
+                setInvoiceNudgeVisible(false);
+              }}
+              className="absolute top-1.5 right-1.5 w-9 h-9 flex items-center justify-center text-green-400/70 hover:text-green-300 transition-colors"
+            >
+              <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4" aria-hidden="true">
+                <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
+        )}
       </div>
 
       <SendEstimateSheet
@@ -286,6 +322,7 @@ export function EstimateActions({
         onInvoiced={() => {
           setHasInvoice(true);
           setLocalPaymentStatus("unpaid");
+          setShowInvoiceNudge(true);
         }}
         estimateId={estimateId}
         customerName={customerName ?? ""}
