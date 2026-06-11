@@ -120,13 +120,6 @@ export function EstimateActions({
   return (
     <>
       <div className="fixed bottom-[72px] left-0 right-0 px-5 pb-4 pt-4 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent flex flex-col gap-3 z-30">
-        <a
-          href="/new"
-          className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px] flex items-center justify-center"
-        >
-          New Estimate
-        </a>
-
         {isDone ? (
           <>
             <div className="w-full flex items-center justify-center gap-2 min-h-[56px] rounded-xl border border-green-800/50 bg-green-950/40">
@@ -215,7 +208,7 @@ export function EstimateActions({
             onClick={() => setShowInvoiceSheet(true)}
             className="w-full bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px]"
           >
-            Mark as Invoiced
+            Send Payment Reminder
           </button>
         )}
 
@@ -257,13 +250,12 @@ export function EstimateActions({
 
         {showInvoiceNudge && (
           <div
-            className={`relative w-full rounded-xl border border-green-800/50 bg-green-950/40 px-4 py-3 pr-12 transition-all duration-300 ${
+            className={`relative w-full rounded-xl bg-green-600 px-4 py-3.5 pr-12 transition-all duration-300 ${
               invoiceNudgeVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
             }`}
           >
-            <p className="text-green-400 font-semibold text-sm">Payment reminders are on.</p>
-            <p className="text-zinc-300 text-xs mt-0.5">
-              We&apos;ll follow up with your customer automatically until they pay.
+            <p className="text-white text-sm font-medium">
+              Reminders are on. We&apos;ll follow up with your customer until they pay.
             </p>
             <button
               type="button"
@@ -272,7 +264,7 @@ export function EstimateActions({
                 setShowInvoiceNudge(false);
                 setInvoiceNudgeVisible(false);
               }}
-              className="absolute top-1.5 right-1.5 w-9 h-9 flex items-center justify-center text-green-400/70 hover:text-green-300 transition-colors"
+              className="absolute top-1.5 right-1.5 w-9 h-9 flex items-center justify-center text-white/80 hover:text-white transition-colors"
             >
               <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4" aria-hidden="true">
                 <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
