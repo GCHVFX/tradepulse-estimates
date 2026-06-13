@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { createSupabaseServerClient, supabaseAdmin } from "@/lib/supabase-server";
 import { EstimateDemo } from "@/app/components/EstimateDemo";
 
@@ -130,6 +131,10 @@ export default async function LandingPage() {
       new Date(business.trial_ends_at) > new Date();
     const isActive = business?.subscription_status === "active";
     hasAccess = isTrialing || isActive;
+
+    // Logged-in users never see the marketing homepage. Send them to the app,
+    // or to the paywall if their trial has lapsed.
+    redirect(hasAccess ? "/estimates" : "/subscribe");
   }
 
   const ctaHref = user ? (hasAccess ? "/new" : "/subscribe") : "/signup";
