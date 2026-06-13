@@ -7,13 +7,13 @@ import { JsonLd } from "@/app/components/json-ld";
 export const metadata: Metadata = {
   title: "Plumbing Estimates in 30 Seconds | TradePulse",
   description: "Type what the job is. Get a ready-to-send plumbing estimate. Works from your phone. 14-day free trial, no card required.",
-  alternates: { canonical: "https://www.trytradepulse.com/plumbers" },
+  alternates: { canonical: "https://trytradepulse.com/plumbers" },
   openGraph: {
     title: "Plumbing Estimates in 30 Seconds | TradePulse",
     description: "Type what the job is. Get a ready-to-send plumbing estimate. Works from your phone. 14-day free trial, no card required.",
-    url: "https://www.trytradepulse.com/plumbers",
+    url: "https://trytradepulse.com/plumbers",
     siteName: "TradePulse",
-    images: [{ url: "https://www.trytradepulse.com/opengraph-image.png", width: 1200, height: 630, alt: "TradePulse Estimates" }],
+    images: [{ url: "https://trytradepulse.com/opengraph-image.png", width: 1200, height: 630, alt: "TradePulse Estimates" }],
     locale: "en_CA",
     type: "website",
   },
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Plumbing Estimates in 30 Seconds | TradePulse",
     description: "Type what the job is. Get a ready-to-send plumbing estimate. Works from your phone.",
-    images: ["https://www.trytradepulse.com/opengraph-image.png"],
+    images: ["https://trytradepulse.com/opengraph-image.png"],
   },
 };
 
@@ -34,7 +34,7 @@ export default function PlumbersPage() {
         "name": "TradePulse Estimates",
         "applicationCategory": "BusinessApplication",
         "description": "Create and send professional trade estimates in seconds from your phone.",
-        "url": "https://www.trytradepulse.com",
+        "url": "https://trytradepulse.com",
         "operatingSystem": "Web, iOS, Android",
         "offers": {
           "@type": "Offer",

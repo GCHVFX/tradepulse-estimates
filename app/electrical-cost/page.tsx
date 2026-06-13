@@ -5,13 +5,13 @@ import { JsonLd } from "@/app/components/json-ld";
 export const metadata: Metadata = {
   title: "How Much Does an Electrician Cost in 2026? Real Pricing Guide",
   description: "Real electrical costs for common jobs in Canada. Panel upgrades, outlet installs, EV chargers, and more. Prices include labour and materials.",
-  alternates: { canonical: "https://www.trytradepulse.com/electrical-cost" },
+  alternates: { canonical: "https://trytradepulse.com/electrical-cost" },
   openGraph: {
     title: "How Much Does an Electrician Cost in 2026? Real Pricing Guide",
     description: "Real electrical costs for common jobs in Canada. Panel upgrades, outlet installs, EV chargers, and more. Prices include labour and materials.",
-    url: "https://www.trytradepulse.com/electrical-cost",
+    url: "https://trytradepulse.com/electrical-cost",
     siteName: "TradePulse",
-    images: [{ url: "https://www.trytradepulse.com/opengraph-image.png", width: 1200, height: 630, alt: "TradePulse Estimates" }],
+    images: [{ url: "https://trytradepulse.com/opengraph-image.png", width: 1200, height: 630, alt: "TradePulse Estimates" }],
     locale: "en_CA",
     type: "website",
   },
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "How Much Does an Electrician Cost in 2026? Real Pricing Guide",
     description: "Real electrical costs for common jobs in Canada. Panel upgrades, outlet installs, EV chargers, and more. Prices include labour and materials.",
-    images: ["https://www.trytradepulse.com/opengraph-image.png"],
+    images: ["https://trytradepulse.com/opengraph-image.png"],
   },
 };
 

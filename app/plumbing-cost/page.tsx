@@ -5,13 +5,13 @@ import { JsonLd } from "@/app/components/json-ld";
 export const metadata: Metadata = {
   title: "How Much Does a Plumber Cost in 2026? Real Pricing Guide",
   description: "Real plumbing costs for common jobs in Canada. Water heaters, drain repairs, fixture installs, and more. Prices include labour and materials.",
-  alternates: { canonical: "https://www.trytradepulse.com/plumbing-cost" },
+  alternates: { canonical: "https://trytradepulse.com/plumbing-cost" },
   openGraph: {
     title: "How Much Does a Plumber Cost in 2026? Real Pricing Guide",
     description: "Real plumbing costs for common jobs in Canada. Water heaters, drain repairs, fixture installs, and more. Prices include labour and materials.",
-    url: "https://www.trytradepulse.com/plumbing-cost",
+    url: "https://trytradepulse.com/plumbing-cost",
     siteName: "TradePulse",
-    images: [{ url: "https://www.trytradepulse.com/opengraph-image.png", width: 1200, height: 630, alt: "TradePulse Estimates" }],
+    images: [{ url: "https://trytradepulse.com/opengraph-image.png", width: 1200, height: 630, alt: "TradePulse Estimates" }],
     locale: "en_CA",
     type: "website",
   },
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "How Much Does a Plumber Cost in 2026? Real Pricing Guide",
     description: "Real plumbing costs for common jobs in Canada. Water heaters, drain repairs, fixture installs, and more. Prices include labour and materials.",
-    images: ["https://www.trytradepulse.com/opengraph-image.png"],
+    images: ["https://trytradepulse.com/opengraph-image.png"],
   },
 };
 

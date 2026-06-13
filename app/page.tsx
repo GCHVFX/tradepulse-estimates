@@ -4,17 +4,17 @@ import { createSupabaseServerClient, supabaseAdmin } from "@/lib/supabase-server
 import { EstimateDemo } from "@/app/components/EstimateDemo";
 
 export const metadata: Metadata = {
-  title: "TradePulse Estimates, Professional Quotes in Seconds",
-  description: "Turn a job description into a professional estimate in seconds. Send it from your phone before you leave the driveway. Built for contractors. $39/month.",
-  alternates: { canonical: "https://www.trytradepulse.com" },
+  title: "Estimate Software for Contractors & Trades | TradePulse",
+  description: "Generate professional estimates in seconds. Send quotes from the job site via text or email. Built for Canadian plumbers, electricians, and trades. $39/month.",
+  alternates: { canonical: "https://trytradepulse.com" },
   openGraph: {
-    title: "TradePulse Estimates — Professional Quotes in Seconds",
+    title: "Professional Estimates in Seconds | TradePulse",
     description: "Create and send professional estimates from the job site in seconds. Built for Canadian contractors.",
-    url: "https://www.trytradepulse.com",
+    url: "https://trytradepulse.com",
     siteName: "TradePulse",
     images: [
       {
-        url: "https://www.trytradepulse.com/social-card.png",
+        url: "https://trytradepulse.com/social-card.png",
         width: 1200,
         height: 630,
         alt: "TradePulse Estimates",
@@ -25,9 +25,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "TradePulse Estimates — Professional Quotes in Seconds",
+    title: "Professional Estimates in Seconds | TradePulse",
     description: "Create and send professional estimates from the job site in seconds.",
-    images: ["https://www.trytradepulse.com/social-card.png"],
+    images: ["https://trytradepulse.com/social-card.png"],
   },
 };
 

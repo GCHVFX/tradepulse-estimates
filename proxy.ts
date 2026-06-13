@@ -14,6 +14,7 @@ const PUBLIC_PATHS = [
   "/trades",
   "/plumbing-cost",
   "/electrical-cost",
+  "/plumbing-estimate-template",
   "/demo",
   "/go",
 ];

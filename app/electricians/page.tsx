@@ -8,13 +8,13 @@ import { JsonLd } from "@/app/components/json-ld";
 export const metadata: Metadata = {
   title: "Estimating Software for Electricians | TradePulse",
   description: "Send professional electrical estimates in seconds. Built for solo electricians and small electrical contractors in Canada.",
-  alternates: { canonical: "https://www.trytradepulse.com/electricians" },
+  alternates: { canonical: "https://trytradepulse.com/electricians" },
   openGraph: {
     title: "Estimating Software for Electricians | TradePulse",
     description: "Send professional electrical estimates in seconds. Built for solo electricians and small electrical contractors in Canada.",
-    url: "https://www.trytradepulse.com/electricians",
+    url: "https://trytradepulse.com/electricians",
     siteName: "TradePulse",
-    images: [{ url: "https://www.trytradepulse.com/opengraph-image.png", width: 1200, height: 630, alt: "TradePulse Estimates" }],
+    images: [{ url: "https://trytradepulse.com/opengraph-image.png", width: 1200, height: 630, alt: "TradePulse Estimates" }],
     locale: "en_CA",
     type: "website",
   },
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Estimating Software for Electricians | TradePulse",
     description: "Send professional electrical estimates in seconds. Built for solo electricians and small electrical contractors in Canada.",
-    images: ["https://www.trytradepulse.com/opengraph-image.png"],
+    images: ["https://trytradepulse.com/opengraph-image.png"],
   },
 };
 
@@ -35,7 +35,7 @@ export default function ElectriciansPage() {
         "name": "TradePulse Estimates",
         "applicationCategory": "BusinessApplication",
         "description": "Create and send professional trade estimates in seconds from your phone.",
-        "url": "https://www.trytradepulse.com",
+        "url": "https://trytradepulse.com",
         "operatingSystem": "Web, iOS, Android",
         "offers": {
           "@type": "Offer",
