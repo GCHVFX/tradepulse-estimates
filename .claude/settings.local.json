@@ -17,7 +17,12 @@
       "mcp__claude_ai_Supabase__generate_typescript_types",
       "mcp__claude_ai_Supabase__list_projects",
       "PowerShell(node scripts/filter-db-types.cjs \"C:\\\\Users\\\\gchan\\\\.claude\\\\projects\\\\C--web-apps-tradepulse-estimates\\\\25e68bb3-ddef-4ca8-b16e-a2db236dfb3d\\\\tool-results\\\\toolu_01Y922uMgw7desjjqk6jhnud.json\")",
-      "PowerShell(git *)"
+      "PowerShell(git *)",
+      "PowerShell(npm run *)",
+      "PowerShell($ready=$false; for\\($i=0;$i -lt 40;$i++\\){ try { $r=Invoke-WebRequest -Uri 'http://localhost:3000/login' -MaximumRedirection 0 -SkipHttpErrorCheck -TimeoutSec 5; if\\($r.StatusCode\\){ $ready=$true; break } } catch { Start-Sleep -Seconds 2 } }; if\\($ready\\){ Write-Output \"SERVER UP \\(status $\\($r.StatusCode\\) on /login\\)\" } else { Write-Output \"NOT READY\" })",
+      "mcp__claude_ai_Vercel__list_teams",
+      "mcp__claude_ai_Vercel__get_project",
+      "mcp__claude_ai_Vercel__deploy_to_vercel"
     ]
   }
 }

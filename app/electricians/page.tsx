@@ -155,6 +155,13 @@ export default function ElectriciansPage() {
           trytradepulse.com
         </a>
       </footer>
+
+      <footer className="border-t border-zinc-800 mt-16 py-6 px-5 text-center">
+        <div className="flex items-center justify-center gap-6 text-xs text-zinc-600">
+          <a href="/terms" className="hover:text-zinc-400 transition-colors">Terms of Service</a>
+          <a href="/privacy" className="hover:text-zinc-400 transition-colors">Privacy Policy</a>
+        </div>
+      </footer>
     </div>
   );
 }
