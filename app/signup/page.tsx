@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Logo } from "@/app/components/logo";
+import { GoogleAuth } from "@/app/components/google-auth";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 
 const inputClass =
@@ -165,6 +166,8 @@ export default function SignupPage() {
             </div>
           )}
         </div>
+
+        <GoogleAuth />
 
         <p className="text-sm text-zinc-500">
           Already have an account?{" "}

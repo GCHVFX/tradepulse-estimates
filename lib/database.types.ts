@@ -148,12 +148,14 @@ export type Database = {
           deposit_amount: string | null
           due_date: string | null
           id: string
+          include_photos: boolean
           invoice_amount: number | null
           last_reminder_sent_at: string | null
           line_items: Json | null
           notes: string | null
           payment_status: string | null
           payment_terms: string | null
+          photo_urls: string[]
           prepared_by: string
           pricing: Json | null
           reminder_count: number | null
@@ -179,12 +181,14 @@ export type Database = {
           deposit_amount?: string | null
           due_date?: string | null
           id?: string
+          include_photos?: boolean
           invoice_amount?: number | null
           last_reminder_sent_at?: string | null
           line_items?: Json | null
           notes?: string | null
           payment_status?: string | null
           payment_terms?: string | null
+          photo_urls?: string[]
           prepared_by?: string
           pricing?: Json | null
           reminder_count?: number | null
@@ -210,12 +214,14 @@ export type Database = {
           deposit_amount?: string | null
           due_date?: string | null
           id?: string
+          include_photos?: boolean
           invoice_amount?: number | null
           last_reminder_sent_at?: string | null
           line_items?: Json | null
           notes?: string | null
           payment_status?: string | null
           payment_terms?: string | null
+          photo_urls?: string[]
           prepared_by?: string
           pricing?: Json | null
           reminder_count?: number | null

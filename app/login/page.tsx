@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Logo } from "@/app/components/logo";
+import { GoogleAuth } from "@/app/components/google-auth";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 
 const inputClass =
@@ -221,6 +222,8 @@ export default function LoginPage() {
                   Forgot password?
                 </button>
               </div>
+
+              <GoogleAuth />
             </div>
           </main>
 

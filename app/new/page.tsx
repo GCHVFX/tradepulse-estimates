@@ -128,7 +128,7 @@ interface FormViewProps {
   needsProfileSetup: boolean;
   isPro: boolean;
   error: string;
-  onGenerate: () => void;
+  onGenerate: (photos: PhotoEntry[]) => void;
   onViewEstimate: () => void;
 }
 
@@ -469,7 +469,7 @@ function FormView({
                 className="w-full flex items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm font-medium text-zinc-300 hover:border-zinc-500 hover:text-white disabled:opacity-60 disabled:cursor-not-allowed transition-colors min-h-[44px]"
               >
                 <CameraIcon className="w-5 h-5" />
-                <span>Add Photo</span>
+                <span>Add Photos for AI Analysis</span>
               </button>
             )
           ) : (
@@ -481,7 +481,7 @@ function FormView({
               className="w-full flex items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm font-medium text-zinc-600 transition-colors min-h-[44px]"
             >
               <CameraIcon className="w-5 h-5" />
-              <span>Add Photo</span>
+              <span>Add Photos for AI Analysis</span>
               <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-500">
                 Pro
               </span>
@@ -545,7 +545,7 @@ function FormView({
         <button
           type="button"
           disabled={!jobDescription.trim()}
-          onClick={onGenerate}
+          onClick={() => onGenerate(photos)}
           className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
         >
           {saved ? "Regenerate Estimate" : "Generate Estimate"}
@@ -739,7 +739,7 @@ function NewPageInner() {
     router.refresh();
   }
 
-  async function handleGenerate() {
+  async function handleGenerate(photos: PhotoEntry[]) {
     setView("estimate");
     setGenerating(true);
     setEstimate("");
@@ -773,6 +773,7 @@ function NewPageInner() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let createdEstimateId: string | null = null;
 
       while (true) {
         let readResult;
@@ -805,6 +806,7 @@ function NewPageInner() {
         const idMarkerIndex = buffer.indexOf("\n__ID__:");
         if (idMarkerIndex !== -1) {
           const id = buffer.slice(idMarkerIndex + "\n__ID__:".length).trim();
+          createdEstimateId = id;
           setSavedEstimateId(id);
           buffer = buffer.slice(0, idMarkerIndex);
         }
@@ -813,6 +815,22 @@ function NewPageInner() {
         if (h1Line) setJobTitle(h1Line.replace(/^# /, ""));
         setEstimateStarted(true);
         setEstimate(buffer);
+      }
+
+      // Save any job photos onto the estimate (Pro only). They stay hidden
+      // until the contractor turns them on from the estimate view.
+      if (isPro && createdEstimateId && photos.length > 0) {
+        try {
+          await fetch(`/api/estimates/${createdEstimateId}/photos`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              photos: photos.map((p) => ({ base64: p.base64, note: p.note })),
+            }),
+          });
+        } catch {
+          // Photos are optional; never block the estimate on a failed upload.
+        }
       }
 
       setSaved(true);

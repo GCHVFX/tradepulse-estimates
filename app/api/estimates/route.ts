@@ -32,6 +32,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     status?: unknown;
     completed_at?: unknown;
     copied_at?: unknown;
+    include_photos?: unknown;
   };
   try {
     body = await request.json();
@@ -73,6 +74,9 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   if ("copied_at" in body) {
     updateFields.copied_at = typeof body.copied_at === "string" ? body.copied_at : null;
   }
+  if ("include_photos" in body) {
+    updateFields.include_photos = body.include_photos === true;
+  }
 
   if (Object.keys(updateFields).length === 0) {
     return applyTo(NextResponse.json({ error: "No fields to update" }, { status: 400 }));
@@ -110,5 +114,15 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
     .eq("business_id", user.id);
 
   if (error) return applyTo(NextResponse.json({ error: error.message }, { status: 500 }));
+
+  // Best-effort: remove any attached photos so they don't outlive the estimate.
+  const folder = `${user.id}/${id}`;
+  const { data: files } = await supabaseAdmin.storage.from("estimate-photos").list(folder);
+  if (files && files.length > 0) {
+    await supabaseAdmin.storage
+      .from("estimate-photos")
+      .remove(files.map((f) => `${folder}/${f.name}`));
+  }
+
   return applyTo(NextResponse.json({ success: true }));
 }

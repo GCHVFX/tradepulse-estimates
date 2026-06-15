@@ -4,6 +4,7 @@ import { EstimateActions } from "@/app/components/estimate-actions";
 import { DeleteEstimateLink } from "@/app/components/delete-estimate-link";
 import { CustomerDetailsBlock } from "@/app/components/customer-details-block";
 import { EditableEstimateBody } from "@/app/components/editable-estimate-body";
+import { EstimatePhotos } from "@/app/components/estimate-photos";
 import { BottomNav } from "@/app/components/bottom-nav";
 import { supabaseAdmin, createSupabaseServerClient } from "@/lib/supabase-server";
 import { calculateEstimateTotal } from "@/lib/estimate-summary";
@@ -62,7 +63,7 @@ export default async function EstimatePage({
         </a>
       </header>
 
-      <main className="flex-1 px-4 sm:px-5 overflow-auto pb-[18.5rem]">
+      <main className="flex-1 px-4 sm:px-5 overflow-auto pb-[14rem]">
         <div className="bg-white rounded-2xl p-5 mt-2">
           <CompanyEstimateHeader logoUrl={logoUrl} businessName={businessName} />
           <span className="mt-3 inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-500">
@@ -87,6 +88,13 @@ export default async function EstimatePage({
           <EditableEstimateBody
             summary={estimate.summary ?? ""}
             estimateId={estimate.id}
+          />
+
+          <EstimatePhotos
+            estimateId={estimate.id}
+            photoUrls={estimate.photo_urls ?? []}
+            includePhotos={estimate.include_photos ?? false}
+            isPro={isPro}
           />
         </div>
         <DeleteEstimateLink estimateId={estimate.id} />

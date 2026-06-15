@@ -603,21 +603,23 @@ export function ProfileForm({
         </div>
         )}
 
-        {/* Payment link */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-zinc-400">Payment link</label>
-          <input
-            type="text"
-            className={inputClass}
-            placeholder="e.g. paypal.me/yourbusiness or your e-transfer email"
-            value={paymentLink}
-            onChange={(e) => setPaymentLink(e.target.value)}
-            autoCorrect="off"
-            autoCapitalize="none"
-            spellCheck={false}
-          />
-          <p className="text-zinc-400 text-xs">Included in payment reminders so customers can pay you.</p>
-        </div>
+        {/* Payment link (Pro only) */}
+        {plan === "pro" && (
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-zinc-400">Payment link</label>
+            <input
+              type="text"
+              className={inputClass}
+              placeholder="e.g. paypal.me/yourbusiness or your e-transfer email"
+              value={paymentLink}
+              onChange={(e) => setPaymentLink(e.target.value)}
+              autoCorrect="off"
+              autoCapitalize="none"
+              spellCheck={false}
+            />
+            <p className="text-zinc-400 text-xs">Included in payment reminders so customers can pay you.</p>
+          </div>
+        )}
 
         {status === "error" && errorMsg && (
           <div className="bg-red-950 border border-red-800 rounded-xl px-4 py-3 text-red-300 text-sm">
