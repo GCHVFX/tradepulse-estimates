@@ -17,6 +17,8 @@ const PUBLIC_PATHS = [
   "/plumbing-estimate-template",
   "/demo",
   "/go",
+  "/privacy",
+  "/terms",
 ];
 
 function isPublic(pathname: string): boolean {
