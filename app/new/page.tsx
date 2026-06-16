@@ -171,6 +171,23 @@ function EstimateView({
     return () => cancelAnimationFrame(frame);
   }, [estimate, generating]);
 
+  // When generation finishes, jump back to the top so the contractor sees the
+  // start of the estimate, not the middle of a wall of text.
+  useEffect(() => {
+    if (generating || !estimate || error) return;
+
+    const frame = requestAnimationFrame(() => {
+      const el = estimateScrollRef.current;
+      if (el) {
+        el.scrollTo({ top: 0, behavior: "smooth" });
+      } else {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [generating, estimate, error]);
+
   return (
     <div className="h-dvh bg-zinc-950 text-white flex flex-col">
       <header className="px-5 pt-10 pb-4 shrink-0" />

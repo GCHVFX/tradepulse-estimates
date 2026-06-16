@@ -13,11 +13,13 @@ export function EstimatePhotos({
   includePhotos: boolean;
   isPro: boolean;
 }) {
+  const [urls, setUrls] = useState<string[]>(photoUrls);
   const [include, setInclude] = useState(includePhotos);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const [error, setError] = useState("");
 
-  if (photoUrls.length === 0) return null;
+  if (urls.length === 0) return null;
 
   async function toggle() {
     const next = !include;
@@ -39,20 +41,57 @@ export function EstimatePhotos({
     }
   }
 
+  async function removePhoto(url: string) {
+    setDeleting(url);
+    setError("");
+    try {
+      const res = await fetch(`/api/estimates/${estimateId}/photos`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      if (!res.ok) throw new Error();
+      setUrls((prev) => prev.filter((u) => u !== url));
+    } catch {
+      setError("Could not remove that photo. Try again.");
+    } finally {
+      setDeleting(null);
+    }
+  }
+
   return (
     <div className="mt-6">
       {include && (
         <div className="mt-2">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Photos</h2>
           <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {photoUrls.map((url) => (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                key={url}
-                src={url}
-                alt="Job site photo"
-                className="aspect-square w-full rounded-xl border border-zinc-200 object-cover"
-              />
+            {urls.map((url) => (
+              <div key={url} className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={url}
+                  alt="Job site photo"
+                  className="aspect-square w-full rounded-xl border border-zinc-200 object-cover"
+                />
+                {isPro && (
+                  <button
+                    type="button"
+                    aria-label="Remove photo"
+                    onClick={() => removePhoto(url)}
+                    disabled={deleting === url}
+                    className="absolute -top-2 -right-2 flex h-7 w-7 items-center justify-center rounded-full border border-zinc-300 bg-white text-zinc-700 shadow-sm hover:text-zinc-950 disabled:opacity-50 transition-colors"
+                  >
+                    <svg viewBox="0 0 12 12" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
+                      <path
+                        d="M2.5 2.5l7 7M9.5 2.5l-7 7"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </button>
+                )}
+              </div>
             ))}
           </div>
         </div>

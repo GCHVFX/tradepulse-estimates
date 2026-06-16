@@ -102,3 +102,80 @@ export async function POST(
 
   return applyTo(NextResponse.json({ photoUrls }));
 }
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+): Promise<NextResponse> {
+  const { supabase, applyTo } = createApiClient(request);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return applyTo(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
+
+  const { id } = await params;
+
+  const { data: estimate } = await supabaseAdmin
+    .from("tpe_estimates")
+    .select("id, business_id, photo_urls")
+    .eq("id", id)
+    .eq("business_id", user.id)
+    .maybeSingle();
+
+  if (!estimate) {
+    return applyTo(NextResponse.json({ error: "Estimate not found or access denied" }, { status: 404 }));
+  }
+
+  const { data: business } = await supabaseAdmin
+    .from("tpe_businesses")
+    .select("plan")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!business || business.plan !== "pro") {
+    return applyTo(NextResponse.json({ error: "Pro plan required" }, { status: 403 }));
+  }
+
+  let body: { url?: unknown };
+  try {
+    body = await request.json();
+  } catch {
+    return applyTo(NextResponse.json({ error: "Invalid request body" }, { status: 400 }));
+  }
+
+  const url = typeof body.url === "string" ? body.url : null;
+  if (!url) {
+    return applyTo(NextResponse.json({ error: "No photo url provided" }, { status: 400 }));
+  }
+
+  const current = estimate.photo_urls ?? [];
+  if (!current.includes(url)) {
+    return applyTo(NextResponse.json({ error: "Photo not found on this estimate" }, { status: 404 }));
+  }
+
+  const remaining = current.filter((u) => u !== url);
+
+  // Remove the file from storage. Path is everything after the bucket name.
+  const marker = "/estimate-photos/";
+  const markerIndex = url.indexOf(marker);
+  if (markerIndex !== -1) {
+    const path = url.slice(markerIndex + marker.length);
+    const { error: removeError } = await supabaseAdmin.storage
+      .from("estimate-photos")
+      .remove([path]);
+    if (removeError) {
+      // Drop the reference anyway so the contractor's delete still takes effect.
+      console.error("[estimate-photos] storage remove failed:", removeError.message);
+    }
+  }
+
+  const { error: updateError } = await supabaseAdmin
+    .from("tpe_estimates")
+    .update({ photo_urls: remaining })
+    .eq("id", id)
+    .eq("business_id", user.id);
+
+  if (updateError) {
+    return applyTo(NextResponse.json({ error: "Failed to remove photo. Please try again." }, { status: 500 }));
+  }
+
+  return applyTo(NextResponse.json({ photoUrls: remaining }));
+}

@@ -15,7 +15,7 @@ export default async function ShareEstimatePage({
   const { data: estimate } = await supabaseAdmin
     .from("tpe_estimates")
     .select(
-      "title, summary, customer_name, customer_phone, customer_email, customer_address, prepared_by, created_at, business_id"
+      "title, summary, customer_name, customer_phone, customer_email, customer_address, prepared_by, created_at, business_id, photo_urls, include_photos"
     )
     .eq("id", id)
     .maybeSingle();
@@ -98,6 +98,23 @@ export default async function ShareEstimatePage({
           </div>
 
           <EstimateMarkdown content={formatEstimateForDisplay(estimate.summary ?? "")} />
+
+          {estimate.include_photos && (estimate.photo_urls?.length ?? 0) > 0 && (
+            <div className="mt-6">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Photos</h2>
+              <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {estimate.photo_urls?.map((url) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    key={url}
+                    src={url}
+                    alt="Job site photo"
+                    className="aspect-square w-full rounded-xl border border-slate-200 object-cover"
+                  />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="mt-4">
