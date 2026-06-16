@@ -123,6 +123,7 @@ export default async function ShareEstimatePage({
             summary={estimate.summary ?? ""}
             businessName={businessName}
             logoUrl={logoUrl}
+            photoUrls={estimate.include_photos ? estimate.photo_urls ?? [] : []}
           />
         </div>
       </main>

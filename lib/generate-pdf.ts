@@ -4,6 +4,7 @@ import { formatEstimateForDisplay } from "@/lib/estimate-summary";
 interface GenerateEstimatePdfOptions {
   businessName?: string;
   logoUrl?: string | null;
+  photoUrls?: string[];
 }
 
 function stripInline(text: string): string {
@@ -33,6 +34,15 @@ async function loadImageAsDataUrl(url: string): Promise<string | null> {
 
 function imageFormatFromDataUrl(dataUrl: string): "PNG" | "JPEG" {
   return dataUrl.startsWith("data:image/png") ? "PNG" : "JPEG";
+}
+
+function imageSize(dataUrl: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    img.onerror = () => resolve({ width: 0, height: 0 });
+    img.src = dataUrl;
+  });
 }
 
 // PDF section order: Job Summary (preamble), Scope of Work, Line Items,
@@ -291,6 +301,72 @@ export async function generateEstimatePDF(
   }
 
   if (tableRows.length > 0) flushTable();
+
+  // --- Photos ---
+  const photoUrls = options.photoUrls ?? [];
+  if (photoUrls.length > 0) {
+    const photos = await Promise.all(
+      photoUrls.map(async (url) => {
+        const dataUrl = await loadImageAsDataUrl(url);
+        if (!dataUrl) return null;
+        const { width, height } = await imageSize(dataUrl);
+        if (!width || !height) return null;
+        return { dataUrl, width, height };
+      })
+    );
+
+    const valid = photos.filter((p): p is { dataUrl: string; width: number; height: number } => p !== null);
+
+    if (valid.length > 0) {
+      y += 4;
+      checkBreak(12);
+      doc.setFillColor(245, 158, 11);
+      doc.rect(ml, y - 6, 2.5, 9, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8.5);
+      doc.setTextColor(80, 80, 80);
+      doc.text("PHOTOS", ml + 5, y);
+      y += 6;
+
+      // Two photos per row
+      const gap = 5;
+      const colW = (cw - gap) / 2;
+      let colIndex = 0;
+      let rowMaxH = 0;
+      let rowStartY = y;
+
+      const maxH = 80;
+      for (const photo of valid) {
+        let drawW = colW;
+        let drawH = (photo.height / photo.width) * drawW;
+        if (drawH > maxH) {
+          drawH = maxH;
+          drawW = (photo.width / photo.height) * drawH;
+        }
+
+        if (colIndex === 0) {
+          checkBreak(drawH + 4);
+          rowStartY = y;
+          rowMaxH = 0;
+        }
+
+        const x = ml + colIndex * (colW + gap);
+        doc.addImage(photo.dataUrl, imageFormatFromDataUrl(photo.dataUrl), x, rowStartY, drawW, drawH);
+        rowMaxH = Math.max(rowMaxH, drawH);
+
+        if (colIndex === 1) {
+          y = rowStartY + rowMaxH + gap;
+          colIndex = 0;
+        } else {
+          colIndex = 1;
+        }
+      }
+
+      if (colIndex === 1) {
+        y = rowStartY + rowMaxH + gap;
+      }
+    }
+  }
 
   const footerName = businessName || "TradePulse";
   const totalPages = (doc.internal as unknown as { getNumberOfPages: () => number }).getNumberOfPages();

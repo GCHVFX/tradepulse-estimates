@@ -7,6 +7,7 @@ interface DownloadPdfButtonProps {
   summary: string;
   businessName?: string;
   logoUrl?: string | null;
+  photoUrls?: string[];
 }
 
 export function DownloadPdfButton({
@@ -14,11 +15,12 @@ export function DownloadPdfButton({
   summary,
   businessName,
   logoUrl,
+  photoUrls,
 }: DownloadPdfButtonProps) {
   return (
     <button
       type="button"
-      onClick={() => generateEstimatePDF(title, summary, { businessName, logoUrl })}
+      onClick={() => generateEstimatePDF(title, summary, { businessName, logoUrl, photoUrls })}
       className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px]"
     >
       Download PDF

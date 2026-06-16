@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Spinner } from "@/app/components/spinner";
 
 export function EstimatePhotos({
   estimateId,
@@ -73,6 +74,11 @@ export function EstimatePhotos({
                   alt="Job site photo"
                   className="aspect-square w-full rounded-xl border border-zinc-200 object-cover"
                 />
+                {deleting === url && (
+                  <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/40">
+                    <Spinner className="h-6 w-6 text-white" />
+                  </div>
+                )}
                 {isPro && (
                   <button
                     type="button"
