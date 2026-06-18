@@ -24,5 +24,9 @@
       "mcp__claude_ai_Vercel__get_project",
       "mcp__claude_ai_Vercel__deploy_to_vercel"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "vercel"
+  ],
+  "enableAllProjectMcpServers": true
 }
