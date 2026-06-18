@@ -84,7 +84,7 @@ export async function proxy(request: NextRequest) {
   const { data: business } = await supabase
     .from("tpe_businesses")
     .select("subscription_status, trial_ends_at")
-    .eq("user_id", user.id)
+    .eq("owner_user_id", user.id)
     .maybeSingle();
 
   if (!business) {

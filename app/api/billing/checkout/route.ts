@@ -16,7 +16,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
     .select("stripe_customer_id, stripe_subscription_id, name, email")
-    .eq("user_id", user.id)
+    .eq("owner_user_id", user.id)
     .maybeSingle();
 
   if (!business) {
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       await supabaseAdmin
         .from("tpe_businesses")
         .update({ stripe_customer_id: customerId })
-        .eq("user_id", user.id);
+        .eq("owner_user_id", user.id);
     }
 
     // If the user has a trial subscription in Stripe, cancel it before creating a paid subscription
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           await supabaseAdmin
             .from("tpe_businesses")
             .update({ stripe_subscription_id: null })
-            .eq("user_id", user.id);
+            .eq("owner_user_id", user.id);
 
           await stripe.subscriptions.cancel(business.stripe_subscription_id);
         }

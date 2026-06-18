@@ -10,7 +10,7 @@ interface Estimate {
   id: string;
   title: string;
   customer_name: string;
-  customer_address: string;
+  job_address: string;
   created_at: string;
   status: string;
   sent_via?: string | null;
@@ -27,11 +27,19 @@ export default async function EstimatesPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: estimates } = await supabaseAdmin
-    .from("tpe_estimates")
-    .select("id, title, customer_name, customer_address, created_at, status, sent_via, sent_at, copied_at, completed_at")
-    .eq("business_id", user.id)
-    .order("created_at", { ascending: false });
+  const { data: business } = await supabaseAdmin
+    .from("tpe_businesses")
+    .select("id")
+    .eq("owner_user_id", user.id)
+    .maybeSingle();
+
+  const { data: estimates } = business
+    ? await supabaseAdmin
+        .from("tpe_estimates")
+        .select("id, title, customer_name, job_address, created_at, status, sent_via, sent_at, copied_at, completed_at")
+        .eq("business_id", business.id)
+        .order("created_at", { ascending: false })
+    : { data: null };
 
   const items = (estimates ?? []) as Estimate[];
 
@@ -86,9 +94,9 @@ export default async function EstimatesPage() {
                   <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-xl min-h-[88px] active:bg-zinc-800 transition-colors overflow-hidden">
                     <Link href={`/estimates/${estimate.id}`} className="flex-1 px-4 py-4 min-w-0">
                       <span className="text-white font-medium text-sm leading-snug block truncate">{estimate.title}</span>
-                      {(estimate.customer_name || estimate.customer_address) && (
+                      {(estimate.customer_name || estimate.job_address) && (
                         <span className="text-zinc-400 text-xs mt-0.5 block truncate">
-                          {[estimate.customer_name, estimate.customer_address].filter(Boolean).join(" · ")}
+                          {[estimate.customer_name, estimate.job_address].filter(Boolean).join(" · ")}
                         </span>
                       )}
 

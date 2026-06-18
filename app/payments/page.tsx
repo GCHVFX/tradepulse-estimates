@@ -36,8 +36,8 @@ export default async function PaymentsPage() {
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("plan")
-    .eq("user_id", user.id)
+    .select("id, plan")
+    .eq("owner_user_id", user.id)
     .maybeSingle();
 
   const isPro = business?.plan === "pro";
@@ -95,7 +95,7 @@ export default async function PaymentsPage() {
   const { data: estimates } = await supabaseAdmin
     .from("tpe_estimates")
     .select("id, title, customer_name, invoice_amount, due_date, last_reminder_sent_at, reminder_count")
-    .eq("business_id", user.id)
+    .eq("business_id", business.id)
     .in("payment_status", ["unpaid", "overdue"])
     .not("invoice_amount", "is", null)
     .order("due_date", { ascending: true });

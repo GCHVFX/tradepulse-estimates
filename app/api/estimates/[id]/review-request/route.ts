@@ -45,22 +45,26 @@ export async function POST(
     // Body is optional
   }
 
+  const { data: business } = await supabaseAdmin
+    .from("tpe_businesses")
+    .select("id, plan, google_review_link, name, phone")
+    .eq("owner_user_id", user.id)
+    .maybeSingle();
+
+  if (!business) {
+    return applyTo(NextResponse.json({ error: "Business not found" }, { status: 404 }));
+  }
+
   const { data: estimate } = await supabaseAdmin
     .from("tpe_estimates")
     .select("id, business_id, customer_name, customer_phone, review_requested_at")
     .eq("id", id)
-    .eq("business_id", user.id)
+    .eq("business_id", business.id)
     .maybeSingle();
 
   if (!estimate) {
     return applyTo(NextResponse.json({ error: "Estimate not found or access denied" }, { status: 404 }));
   }
-
-  const { data: business } = await supabaseAdmin
-    .from("tpe_businesses")
-    .select("plan, google_review_link, name, phone")
-    .eq("user_id", user.id)
-    .maybeSingle();
 
   if (!business || business.plan !== "pro") {
     return applyTo(NextResponse.json({ error: "Pro plan required" }, { status: 403 }));
@@ -114,7 +118,7 @@ export async function POST(
     .from("tpe_estimates")
     .update({ review_requested_at: new Date().toISOString() })
     .eq("id", id)
-    .eq("business_id", user.id);
+    .eq("business_id", business.id);
 
   if (updateError) {
     return applyTo(NextResponse.json({ error: "SMS sent but failed to record timestamp" }, { status: 500 }));

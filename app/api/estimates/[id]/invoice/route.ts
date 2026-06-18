@@ -44,11 +44,21 @@ export async function PATCH(
     return applyTo(NextResponse.json({ error: "Due date must be today or later" }, { status: 400 }));
   }
 
+  const { data: business } = await supabaseAdmin
+    .from("tpe_businesses")
+    .select("id")
+    .eq("owner_user_id", user.id)
+    .maybeSingle();
+
+  if (!business) {
+    return applyTo(NextResponse.json({ error: "Business not found" }, { status: 404 }));
+  }
+
   const { data: estimate } = await supabaseAdmin
     .from("tpe_estimates")
     .select("id")
     .eq("id", id)
-    .eq("business_id", user.id)
+    .eq("business_id", business.id)
     .maybeSingle();
 
   if (!estimate) {
@@ -65,7 +75,7 @@ export async function PATCH(
       last_reminder_sent_at: null,
     })
     .eq("id", id)
-    .eq("business_id", user.id)
+    .eq("business_id", business.id)
     .select("*")
     .maybeSingle();
 

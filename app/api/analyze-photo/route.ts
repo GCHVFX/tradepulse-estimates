@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
     .select("plan")
-    .eq("user_id", user.id)
+    .eq("owner_user_id", user.id)
     .maybeSingle();
 
   if (!business || business.plan !== "pro") {

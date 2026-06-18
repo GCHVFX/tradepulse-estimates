@@ -49,8 +49,8 @@ export async function GET(request: NextRequest) {
 async function ensureBusiness(userId: string, email?: string): Promise<boolean> {
   const { data: existing } = await supabaseAdmin
     .from('tpe_businesses')
-    .select('user_id')
-    .eq('user_id', userId)
+    .select('id')
+    .eq('owner_user_id', userId)
     .maybeSingle();
 
   if (existing) return true;
@@ -78,8 +78,9 @@ async function ensureBusiness(userId: string, email?: string): Promise<boolean> 
       .from('tpe_businesses')
       .upsert(
         {
-          user_id: userId,
+          owner_user_id: userId,
           name: '',
+          slug: userId,
           plan: 'starter',
           subscription_status: 'trial',
           trial_ends_at: trialEndsAt,
@@ -87,7 +88,7 @@ async function ensureBusiness(userId: string, email?: string): Promise<boolean> 
           stripe_subscription_id: subscription.id,
           signup_source: 'google',
         },
-        { onConflict: 'user_id' }
+        { onConflict: 'owner_user_id' }
       );
 
     if (dbError) {

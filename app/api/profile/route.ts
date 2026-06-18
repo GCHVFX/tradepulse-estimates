@@ -19,7 +19,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const { data, error } = await supabaseAdmin
     .from("tpe_businesses")
     .select("name, phone, email, logo_url, prepared_by, google_review_link, payment_link, plan, subscription_status, trial_ends_at")
-    .eq("user_id", user.id)
+    .eq("owner_user_id", user.id)
     .maybeSingle();
 
   if (error) return applyTo(NextResponse.json({ error: error.message }, { status: 500 }));
@@ -49,9 +49,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
 
   const { error } = await supabaseAdmin
     .from("tpe_businesses")
-    .upsert(
-      {
-        user_id: user.id,
+    .update({
         name: typeof body.name === "string" ? body.name.trim() : "",
         phone: typeof body.phone === "string" ? body.phone.trim() : "",
         email: typeof body.email === "string" ? body.email.trim() : "",
@@ -59,9 +57,8 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         prepared_by: typeof body.prepared_by === "string" ? body.prepared_by.trim() : "",
         google_review_link: googleReviewLink,
         payment_link: paymentLink,
-      },
-      { onConflict: "user_id" }
-    );
+      })
+    .eq("owner_user_id", user.id);
 
   if (error) return applyTo(NextResponse.json({ error: error.message }, { status: 500 }));
 

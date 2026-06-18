@@ -59,24 +59,28 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const { hasAccess } = await checkUserSubscriptionAccess(user.id, supabaseAdmin);
   if (!hasAccess) return applyTo(NextResponse.json({ error: "Subscription required" }, { status: 403 }));
 
+  // Get business info
+  const { data: business } = await supabaseAdmin
+    .from("tpe_businesses")
+    .select("id, name, email")
+    .eq("owner_user_id", user.id)
+    .maybeSingle();
+
+  if (!business) {
+    return applyTo(NextResponse.json({ error: "Business not found" }, { status: 404 }));
+  }
+
   // Verify ownership of estimate
   const { data: estimate } = await supabaseAdmin
     .from("tpe_estimates")
     .select("id, customer_name")
     .eq("id", estimateId)
-    .eq("business_id", user.id)
+    .eq("business_id", business.id)
     .maybeSingle();
 
   if (!estimate) {
     return applyTo(NextResponse.json({ error: "Estimate not found" }, { status: 404 }));
   }
-
-  // Get business info
-  const { data: business } = await supabaseAdmin
-    .from("tpe_businesses")
-    .select("name, email")
-    .eq("user_id", user.id)
-    .maybeSingle();
 
   const origin =
     request.headers.get("origin") ??
@@ -135,7 +139,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         sent_at: new Date().toISOString(),
       })
       .eq("id", estimateId)
-      .eq("business_id", user.id);
+      .eq("business_id", business.id);
 
     if (updateError) {
       console.error("[send-email] update failed:", updateError.message);

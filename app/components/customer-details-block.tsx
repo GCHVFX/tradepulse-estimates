@@ -76,7 +76,7 @@ export function CustomerDetailsBlock({
             customer_name: name,
             customer_phone: phone,
             customer_email: email,
-            customer_address: address,
+            job_address: address,
           }),
         });
         if (!res.ok) throw new Error("Failed to save");

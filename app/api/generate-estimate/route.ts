@@ -66,8 +66,8 @@ export async function POST(request: NextRequest) {
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("name, prepared_by, subscription_status, trial_ends_at")
-    .eq("user_id", user.id)
+    .select("id, name, prepared_by, subscription_status, trial_ends_at, labour_rate, markup_percent, deposit_percent, deposit_threshold")
+    .eq("owner_user_id", user.id)
     .maybeSingle();
 
   const isActive = business?.subscription_status === "active";
@@ -82,18 +82,11 @@ export async function POST(request: NextRequest) {
   const contentTypeError = validateContentType(request);
   if (contentTypeError) return applyTo(contentTypeError);
 
-  const [priceBookResult, priceItemsResult] = await Promise.all([
-    supabaseAdmin
-      .from("tpe_price_book")
-      .select("labour_rate, markup_percent, deposit_percent, deposit_threshold")
-      .eq("user_id", user.id)
-      .maybeSingle(),
-    supabaseAdmin
-      .from("tpe_price_book_items")
-      .select("name, unit_price")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: true }),
-  ]);
+  const { data: priceItemsData } = await supabaseAdmin
+    .from("tpe_pricebook_items")
+    .select("name, labour_price")
+    .eq("business_id", business.id)
+    .order("created_at", { ascending: true });
 
   let body: unknown;
   try {
@@ -130,23 +123,22 @@ export async function POST(request: NextRequest) {
     lines.push(`Job address (for context only, do not include in output): ${jobAddress.trim()}`);
   }
 
-  // Inject price book data
-  const priceBook = priceBookResult.data;
-  if (priceBook?.labour_rate) {
-    lines.push(`Labour rate: $${priceBook.labour_rate}/hr. Use this rate for all labour line items`);
+  // Inject price book data from tpe_businesses columns
+  if (business.labour_rate) {
+    lines.push(`Labour rate: $${business.labour_rate}/hr. Use this rate for all labour line items`);
   }
-  if (priceBook?.markup_percent) {
-    lines.push(`Materials markup: ${priceBook.markup_percent}%. Apply this markup on top of all material costs`);
+  if (business.markup_percent) {
+    lines.push(`Materials markup: ${business.markup_percent}%. Apply this markup on top of all material costs`);
   }
-  const priceItems = priceItemsResult.data ?? [];
+  const priceItems = priceItemsData ?? [];
   if (priceItems.length > 0) {
     lines.push(`Common line items from contractor's price book (use these prices when applicable):`);
     priceItems.forEach((item) => {
-      lines.push(`  - ${item.name}: $${item.unit_price}`);
+      lines.push(`  - ${item.name}: $${item.labour_price}`);
     });
   }
-  if (priceBook?.deposit_percent && priceBook?.deposit_threshold) {
-    lines.push(`Deposit rule: if the job total exceeds $${priceBook.deposit_threshold}, include a deposit row in the Pricing Summary table showing ${priceBook.deposit_percent}% of the total. Calculate the exact dollar amount. If the total is under $${priceBook.deposit_threshold}, write "No deposit required" in the deposit row.`);
+  if (business.deposit_percent && business.deposit_threshold) {
+    lines.push(`Deposit rule: if the job total exceeds $${business.deposit_threshold}, include a deposit row in the Pricing Summary table showing ${business.deposit_percent}% of the total. Calculate the exact dollar amount. If the total is under $${business.deposit_threshold}, write "No deposit required" in the deposit row.`);
   } else {
     lines.push("Deposit: write 'No deposit required' in the deposit row of the Pricing Summary.");
   }
@@ -222,11 +214,16 @@ export async function POST(request: NextRequest) {
             title,
             summary: fullText,
             status: "draft",
-            business_id: user.id,
+            source: "ai_generated",
+            business_id: business.id,
             customer_name: safeCustomerName,
             customer_phone: safeCustomerPhone,
             customer_email: safeCustomerEmail,
-            customer_address: safeJobAddress,
+            job_address: safeJobAddress,
+            description: safeJobAddress,
+            service_type: "estimate",
+            location: "",
+            urgency: "flexible",
             prepared_by: safePreparedBy,
             deposit_amount: null,
           })

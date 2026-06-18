@@ -84,8 +84,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       .from("tpe_businesses")
       .upsert(
         {
-          user_id: userId,
+          owner_user_id: userId,
           name: "",
+          slug: userId,
           plan: "starter",
           subscription_status: "trial",
           trial_ends_at: trialEndsAt,
@@ -93,7 +94,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           stripe_subscription_id: subscription.id,
           ...(signupSource ? { signup_source: signupSource } : {}),
         },
-        { onConflict: "user_id" }
+        { onConflict: "owner_user_id" }
       );
 
     if (dbError) {

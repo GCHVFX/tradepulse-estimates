@@ -6,10 +6,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return applyTo(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
 
+  const { data: business } = await supabaseAdmin
+    .from("tpe_businesses")
+    .select("id")
+    .eq("owner_user_id", user.id)
+    .maybeSingle();
+
+  if (!business) return applyTo(NextResponse.json({ error: "Business not found" }, { status: 404 }));
+
   const { data, error } = await supabaseAdmin
     .from("tpe_estimates")
     .select("id, title, status, customer_name, created_at")
-    .eq("business_id", user.id)
+    .eq("business_id", business.id)
     .order("created_at", { ascending: false });
 
   if (error) return applyTo(NextResponse.json({ error: error.message }, { status: 500 }));
@@ -21,11 +29,19 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return applyTo(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
 
+  const { data: business } = await supabaseAdmin
+    .from("tpe_businesses")
+    .select("id")
+    .eq("owner_user_id", user.id)
+    .maybeSingle();
+
+  if (!business) return applyTo(NextResponse.json({ error: "Business not found" }, { status: 404 }));
+
   let body: {
     id?: unknown;
     customer_name?: unknown;
     customer_phone?: unknown;
-    customer_address?: unknown;
+    job_address?: unknown;
     customer_email?: unknown;
     deposit_amount?: unknown;
     summary?: unknown;
@@ -53,8 +69,8 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   if ("customer_phone" in body) {
     updateFields.customer_phone = typeof body.customer_phone === "string" ? body.customer_phone.trim() : "";
   }
-  if ("customer_address" in body) {
-    updateFields.customer_address = typeof body.customer_address === "string" ? body.customer_address.trim() : "";
+  if ("job_address" in body) {
+    updateFields.job_address = typeof body.job_address === "string" ? body.job_address.trim() : "";
   }
   if ("customer_email" in body) {
     updateFields.customer_email = typeof body.customer_email === "string" ? body.customer_email.trim() : "";
@@ -86,7 +102,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     .from("tpe_estimates")
     .update(updateFields)
     .eq("id", body.id)
-    .eq("business_id", user.id)
+    .eq("business_id", business.id)
     .select("id");
 
   if (error) return applyTo(NextResponse.json({ error: error.message }, { status: 500 }));
@@ -103,6 +119,14 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return applyTo(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
 
+  const { data: business } = await supabaseAdmin
+    .from("tpe_businesses")
+    .select("id")
+    .eq("owner_user_id", user.id)
+    .maybeSingle();
+
+  if (!business) return applyTo(NextResponse.json({ error: "Business not found" }, { status: 404 }));
+
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
   if (!id) return applyTo(NextResponse.json({ error: "id is required" }, { status: 400 }));
@@ -111,17 +135,24 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
     .from("tpe_estimates")
     .delete()
     .eq("id", id)
-    .eq("business_id", user.id);
+    .eq("business_id", business.id);
 
   if (error) return applyTo(NextResponse.json({ error: error.message }, { status: 500 }));
 
   // Best-effort: remove any attached photos so they don't outlive the estimate.
-  const folder = `${user.id}/${id}`;
-  const { data: files } = await supabaseAdmin.storage.from("estimate-photos").list(folder);
-  if (files && files.length > 0) {
+  const { data: photoRecords } = await supabaseAdmin
+    .from("tpe_estimate_photos")
+    .select("id, storage_path")
+    .eq("estimate_id", id);
+
+  if (photoRecords && photoRecords.length > 0) {
     await supabaseAdmin.storage
-      .from("estimate-photos")
-      .remove(files.map((f) => `${folder}/${f.name}`));
+      .from("tpe-estimate-photos")
+      .remove(photoRecords.map((p) => p.storage_path));
+    await supabaseAdmin
+      .from("tpe_estimate_photos")
+      .delete()
+      .eq("estimate_id", id);
   }
 
   return applyTo(NextResponse.json({ success: true }));

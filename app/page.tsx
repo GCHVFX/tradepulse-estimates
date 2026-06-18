@@ -123,7 +123,7 @@ export default async function LandingPage() {
     const { data: business } = await supabaseAdmin
       .from("tpe_businesses")
       .select("subscription_status, trial_ends_at")
-      .eq("user_id", user.id)
+      .eq("owner_user_id", user.id)
       .maybeSingle();
 
     const isTrialing = business?.subscription_status === "trial" &&

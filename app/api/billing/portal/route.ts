@@ -10,7 +10,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
     .select("stripe_customer_id")
-    .eq("user_id", user.id)
+    .eq("owner_user_id", user.id)
     .maybeSingle();
 
   if (!business?.stripe_customer_id) {

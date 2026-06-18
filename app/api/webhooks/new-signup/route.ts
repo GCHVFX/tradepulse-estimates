@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     from: 'estimates@trytradepulse.com',
     to: process.env.NOTIFY_EMAIL!,
     subject: 'New TradePulse signup',
-    text: `New signup\n\nEmail: ${email}\nTime: ${createdAt}\n\nView in Supabase:\nhttps://supabase.com/dashboard/project/hmkkuyznyumhajjqbxpu/auth/users`,
+    text: `New signup\n\nEmail: ${email}\nTime: ${createdAt}\n\nView in Supabase:\nhttps://supabase.com/dashboard/project/fctequqcwxyhmnjgxixg/auth/users`,
   });
 
   return NextResponse.json({ ok: true });

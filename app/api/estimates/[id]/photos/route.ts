@@ -14,25 +14,25 @@ export async function POST(
 
   const { id } = await params;
 
-  const { data: estimate } = await supabaseAdmin
-    .from("tpe_estimates")
-    .select("id, business_id")
-    .eq("id", id)
-    .eq("business_id", user.id)
-    .maybeSingle();
-
-  if (!estimate) {
-    return applyTo(NextResponse.json({ error: "Estimate not found or access denied" }, { status: 404 }));
-  }
-
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("plan")
-    .eq("user_id", user.id)
+    .select("id, plan")
+    .eq("owner_user_id", user.id)
     .maybeSingle();
 
   if (!business || business.plan !== "pro") {
     return applyTo(NextResponse.json({ error: "Pro plan required" }, { status: 403 }));
+  }
+
+  const { data: estimate } = await supabaseAdmin
+    .from("tpe_estimates")
+    .select("id, business_id")
+    .eq("id", id)
+    .eq("business_id", business.id)
+    .maybeSingle();
+
+  if (!estimate) {
+    return applyTo(NextResponse.json({ error: "Estimate not found or access denied" }, { status: 404 }));
   }
 
   let body: { photos?: unknown };
@@ -74,30 +74,41 @@ export async function POST(
       return applyTo(NextResponse.json({ error: "Each photo must be under 2MB" }, { status: 400 }));
     }
 
-    const path = `${user.id}/${id}/${crypto.randomUUID()}.jpg`;
+    const filename = `${crypto.randomUUID()}.jpg`;
+    const storagePath = `${user.id}/${id}/${filename}`;
     const { error: uploadError } = await supabaseAdmin.storage
-      .from("estimate-photos")
-      .upload(path, buffer, { contentType: "image/jpeg", upsert: false });
+      .from("tpe-estimate-photos")
+      .upload(storagePath, buffer, { contentType: "image/jpeg", upsert: false });
 
     if (uploadError) {
       console.error("[estimate-photos] upload failed:", uploadError.message);
       return applyTo(NextResponse.json({ error: "Failed to upload photo. Please try again." }, { status: 500 }));
     }
 
-    const { data } = supabaseAdmin.storage.from("estimate-photos").getPublicUrl(path);
-    photoUrls.push(data.publicUrl);
-  }
+    // Insert record into tpe_estimate_photos table
+    const { error: insertError } = await supabaseAdmin
+      .from("tpe_estimate_photos")
+      .insert({
+        estimate_id: id,
+        storage_path: storagePath,
+        original_filename: filename,
+        mime_type: "image/jpeg",
+        file_size: buffer.byteLength,
+      });
 
-  // Save the URLs. include_photos stays at its default (false): photos are
-  // saved but hidden until the contractor turns them on from the estimate.
-  const { error: updateError } = await supabaseAdmin
-    .from("tpe_estimates")
-    .update({ photo_urls: photoUrls })
-    .eq("id", id)
-    .eq("business_id", user.id);
+    if (insertError) {
+      console.error("[estimate-photos] DB insert failed:", insertError.message);
+      return applyTo(NextResponse.json({ error: "Failed to save photo record. Please try again." }, { status: 500 }));
+    }
 
-  if (updateError) {
-    return applyTo(NextResponse.json({ error: "Photos uploaded but failed to save" }, { status: 500 }));
+    // Generate a signed URL for the photo
+    const { data: signedUrlData } = await supabaseAdmin.storage
+      .from("tpe-estimate-photos")
+      .createSignedUrl(storagePath, 60 * 60 * 24 * 365); // 1 year
+
+    if (signedUrlData?.signedUrl) {
+      photoUrls.push(signedUrlData.signedUrl);
+    }
   }
 
   return applyTo(NextResponse.json({ photoUrls }));
@@ -113,69 +124,68 @@ export async function DELETE(
 
   const { id } = await params;
 
-  const { data: estimate } = await supabaseAdmin
-    .from("tpe_estimates")
-    .select("id, business_id, photo_urls")
-    .eq("id", id)
-    .eq("business_id", user.id)
-    .maybeSingle();
-
-  if (!estimate) {
-    return applyTo(NextResponse.json({ error: "Estimate not found or access denied" }, { status: 404 }));
-  }
-
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("plan")
-    .eq("user_id", user.id)
+    .select("id, plan")
+    .eq("owner_user_id", user.id)
     .maybeSingle();
 
   if (!business || business.plan !== "pro") {
     return applyTo(NextResponse.json({ error: "Pro plan required" }, { status: 403 }));
   }
 
-  let body: { url?: unknown };
+  const { data: estimate } = await supabaseAdmin
+    .from("tpe_estimates")
+    .select("id, business_id")
+    .eq("id", id)
+    .eq("business_id", business.id)
+    .maybeSingle();
+
+  if (!estimate) {
+    return applyTo(NextResponse.json({ error: "Estimate not found or access denied" }, { status: 404 }));
+  }
+
+  let body: { storage_path?: unknown };
   try {
     body = await request.json();
   } catch {
     return applyTo(NextResponse.json({ error: "Invalid request body" }, { status: 400 }));
   }
 
-  const url = typeof body.url === "string" ? body.url : null;
-  if (!url) {
-    return applyTo(NextResponse.json({ error: "No photo url provided" }, { status: 400 }));
+  const storagePath = typeof body.storage_path === "string" ? body.storage_path : null;
+  if (!storagePath) {
+    return applyTo(NextResponse.json({ error: "No photo storage_path provided" }, { status: 400 }));
   }
 
-  const current = estimate.photo_urls ?? [];
-  if (!current.includes(url)) {
+  // Verify the photo belongs to this estimate
+  const { data: photoRecord } = await supabaseAdmin
+    .from("tpe_estimate_photos")
+    .select("id, storage_path")
+    .eq("estimate_id", id)
+    .eq("storage_path", storagePath)
+    .maybeSingle();
+
+  if (!photoRecord) {
     return applyTo(NextResponse.json({ error: "Photo not found on this estimate" }, { status: 404 }));
   }
 
-  const remaining = current.filter((u) => u !== url);
-
-  // Remove the file from storage. Path is everything after the bucket name.
-  const marker = "/estimate-photos/";
-  const markerIndex = url.indexOf(marker);
-  if (markerIndex !== -1) {
-    const path = url.slice(markerIndex + marker.length);
-    const { error: removeError } = await supabaseAdmin.storage
-      .from("estimate-photos")
-      .remove([path]);
-    if (removeError) {
-      // Drop the reference anyway so the contractor's delete still takes effect.
-      console.error("[estimate-photos] storage remove failed:", removeError.message);
-    }
+  // Remove from storage
+  const { error: removeError } = await supabaseAdmin.storage
+    .from("tpe-estimate-photos")
+    .remove([storagePath]);
+  if (removeError) {
+    console.error("[estimate-photos] storage remove failed:", removeError.message);
   }
 
-  const { error: updateError } = await supabaseAdmin
-    .from("tpe_estimates")
-    .update({ photo_urls: remaining })
-    .eq("id", id)
-    .eq("business_id", user.id);
+  // Remove from tpe_estimate_photos table
+  const { error: deleteError } = await supabaseAdmin
+    .from("tpe_estimate_photos")
+    .delete()
+    .eq("id", photoRecord.id);
 
-  if (updateError) {
-    return applyTo(NextResponse.json({ error: "Failed to remove photo. Please try again." }, { status: 500 }));
+  if (deleteError) {
+    return applyTo(NextResponse.json({ error: "Failed to remove photo record. Please try again." }, { status: 500 }));
   }
 
-  return applyTo(NextResponse.json({ photoUrls: remaining }));
+  return applyTo(NextResponse.json({ success: true }));
 }

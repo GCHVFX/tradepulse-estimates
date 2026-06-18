@@ -15,7 +15,7 @@ export default async function ShareEstimatePage({
   const { data: estimate } = await supabaseAdmin
     .from("tpe_estimates")
     .select(
-      "title, summary, customer_name, customer_phone, customer_email, customer_address, prepared_by, created_at, business_id, photo_urls, include_photos"
+      "id, title, summary, customer_name, customer_phone, customer_email, job_address, prepared_by, created_at, business_id, include_photos"
     )
     .eq("id", id)
     .maybeSingle();
@@ -41,12 +41,30 @@ export default async function ShareEstimatePage({
     ? await supabaseAdmin
         .from("tpe_businesses")
         .select("name, logo_url")
-        .eq("user_id", estimate.business_id)
+        .eq("id", estimate.business_id)
         .maybeSingle()
     : { data: null };
 
   const businessName = business?.name ?? "";
   const logoUrl = business?.logo_url ?? null;
+
+  // Fetch photos from tpe_estimate_photos table
+  const { data: photoRecords } = await supabaseAdmin
+    .from("tpe_estimate_photos")
+    .select("storage_path")
+    .eq("estimate_id", id);
+
+  const photoUrls: string[] = [];
+  if (photoRecords && photoRecords.length > 0) {
+    for (const record of photoRecords) {
+      const { data: signedUrlData } = await supabaseAdmin.storage
+        .from("tpe-estimate-photos")
+        .createSignedUrl(record.storage_path, 60 * 60 * 24); // 24 hours
+      if (signedUrlData?.signedUrl) {
+        photoUrls.push(signedUrlData.signedUrl);
+      }
+    }
+  }
 
   return (
     <div className="min-h-dvh bg-slate-50 flex flex-col">
@@ -84,8 +102,8 @@ export default async function ShareEstimatePage({
             {estimate.customer_email && (
               <span className="block">Email: {estimate.customer_email}</span>
             )}
-            {estimate.customer_address && (
-              <span className="block">Address: {estimate.customer_address}</span>
+            {estimate.job_address && (
+              <span className="block">Address: {estimate.job_address}</span>
             )}
             <span className="block">
               Date:{" "}
@@ -99,11 +117,11 @@ export default async function ShareEstimatePage({
 
           <EstimateMarkdown content={formatEstimateForDisplay(estimate.summary ?? "")} />
 
-          {estimate.include_photos && (estimate.photo_urls?.length ?? 0) > 0 && (
+          {estimate.include_photos && photoUrls.length > 0 && (
             <div className="mt-6">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Photos</h2>
               <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
-                {estimate.photo_urls?.map((url) => (
+                {photoUrls.map((url) => (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     key={url}
@@ -123,7 +141,7 @@ export default async function ShareEstimatePage({
             summary={estimate.summary ?? ""}
             businessName={businessName}
             logoUrl={logoUrl}
-            photoUrls={estimate.include_photos ? estimate.photo_urls ?? [] : []}
+            photoUrls={estimate.include_photos ? photoUrls : []}
           />
         </div>
       </main>

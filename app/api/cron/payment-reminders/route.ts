@@ -120,11 +120,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const businessIds = [...new Set(estimates.map((e) => e.business_id).filter((id): id is string => Boolean(id)))];
   const { data: businesses } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("user_id, name, payment_link")
-    .in("user_id", businessIds);
+    .select("id, name, payment_link")
+    .in("id", businessIds);
 
   const businessMap = new Map(
-    (businesses ?? []).map((b) => [b.user_id, b])
+    (businesses ?? []).map((b) => [b.id, b])
   );
 
   const smsConfigured = Boolean(

@@ -8,7 +8,7 @@ export async function checkUserSubscriptionAccess(
   const { data: sub } = await supabaseAdmin
     .from("tpe_businesses")
     .select("subscription_status, trial_ends_at")
-    .eq("user_id", userId)
+    .eq("owner_user_id", userId)
     .maybeSingle();
 
   const isActive = sub?.subscription_status === "active";

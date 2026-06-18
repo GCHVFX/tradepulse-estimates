@@ -25,21 +25,44 @@ export default async function EstimatePage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const { data: business } = await supabaseAdmin
+    .from("tpe_businesses")
+    .select("id, logo_url, name, email, phone, plan, google_review_link, payment_link")
+    .eq("owner_user_id", user.id)
+    .maybeSingle();
+
+  if (!business) {
+    redirect("/estimates");
+  }
+
   const { data: estimate } = await supabaseAdmin
     .from("tpe_estimates")
     .select("*")
     .eq("id", id)
+    .eq("business_id", business.id)
     .maybeSingle();
 
-  if (!estimate || estimate.business_id !== user.id) {
+  if (!estimate) {
     redirect("/estimates");
   }
 
-  const { data: business } = await supabaseAdmin
-    .from("tpe_businesses")
-    .select("logo_url, name, email, phone, plan, google_review_link, payment_link")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  // Fetch photos from tpe_estimate_photos table
+  const { data: photoRecords } = await supabaseAdmin
+    .from("tpe_estimate_photos")
+    .select("storage_path")
+    .eq("estimate_id", id);
+
+  const photoUrls: string[] = [];
+  if (photoRecords && photoRecords.length > 0) {
+    for (const record of photoRecords) {
+      const { data: signedUrlData } = await supabaseAdmin.storage
+        .from("tpe-estimate-photos")
+        .createSignedUrl(record.storage_path, 60 * 60 * 24); // 24 hours
+      if (signedUrlData?.signedUrl) {
+        photoUrls.push(signedUrlData.signedUrl);
+      }
+    }
+  }
 
   const logoUrl = business?.logo_url ?? null;
   const businessName = business?.name ?? "";
@@ -78,7 +101,7 @@ export default async function EstimatePage({
             initialName={estimate.customer_name ?? ""}
             initialPhone={estimate.customer_phone ?? ""}
             initialEmail={estimate.customer_email ?? ""}
-            initialAddress={estimate.customer_address ?? ""}
+            initialAddress={estimate.job_address ?? ""}
             preparedBy={estimate.prepared_by ?? ""}
             companyName={businessName || undefined}
             businessEmail={businessEmail || undefined}
@@ -92,7 +115,7 @@ export default async function EstimatePage({
 
           <EstimatePhotos
             estimateId={estimate.id}
-            photoUrls={estimate.photo_urls ?? []}
+            photoUrls={photoUrls}
             includePhotos={estimate.include_photos ?? false}
             isPro={isPro}
           />

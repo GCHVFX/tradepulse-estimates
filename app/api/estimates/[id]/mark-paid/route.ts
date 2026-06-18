@@ -11,11 +11,21 @@ export async function PATCH(
 
   const { id } = await params;
 
+  const { data: business } = await supabaseAdmin
+    .from("tpe_businesses")
+    .select("id")
+    .eq("owner_user_id", user.id)
+    .maybeSingle();
+
+  if (!business) {
+    return applyTo(NextResponse.json({ error: "Business not found" }, { status: 404 }));
+  }
+
   const { data: estimate } = await supabaseAdmin
     .from("tpe_estimates")
     .select("id")
     .eq("id", id)
-    .eq("business_id", user.id)
+    .eq("business_id", business.id)
     .maybeSingle();
 
   if (!estimate) {
@@ -29,7 +39,7 @@ export async function PATCH(
       completed_at: new Date().toISOString(),
     })
     .eq("id", id)
-    .eq("business_id", user.id)
+    .eq("business_id", business.id)
     .select("*")
     .maybeSingle();
 

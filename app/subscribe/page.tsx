@@ -15,7 +15,7 @@ export default async function SubscribePage({ searchParams }: { searchParams: Pr
     ? await supabaseAdmin
         .from("tpe_businesses")
         .select("subscription_status, trial_ends_at, name")
-        .eq("user_id", user.id)
+        .eq("owner_user_id", user.id)
         .maybeSingle()
     : { data: null };
 
