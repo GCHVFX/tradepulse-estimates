@@ -94,10 +94,9 @@ export async function proxy(request: NextRequest) {
     .maybeSingle();
 
   if (!business) {
-    if (pathname !== "/subscribe") {
-      return withSessionCookies(NextResponse.redirect(new URL("/subscribe", request.url)), response);
-    }
-    return response;
+    const onboardingUrl = new URL("/onboarding", request.url);
+    onboardingUrl.searchParams.set("next", pathname);
+    return withSessionCookies(NextResponse.redirect(onboardingUrl), response);
   }
 
   const isActive = business.subscription_status === "active";

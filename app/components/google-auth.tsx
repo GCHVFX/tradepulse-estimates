@@ -26,7 +26,7 @@ function GoogleIcon({ className }: { className?: string }) {
   );
 }
 
-export function GoogleAuth() {
+export function GoogleAuth({ defaultNext = "/new" }: { defaultNext?: string } = {}) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -36,7 +36,7 @@ export function GoogleAuth() {
     try {
       const params = new URLSearchParams(window.location.search);
       const nextParam = params.get("next");
-      const next = nextParam && nextParam.startsWith("/") ? nextParam : "/new";
+      const next = nextParam && nextParam.startsWith("/") ? nextParam : defaultNext;
 
       const supabase = createSupabaseBrowserClient();
       const { error: oauthError } = await supabase.auth.signInWithOAuth({

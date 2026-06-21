@@ -27,6 +27,7 @@ export function ProfileForm({
   trialEndsAt,
   plan,
   openSection,
+  businessId,
 }: {
   profile: Profile;
   userId: string;
@@ -35,6 +36,7 @@ export function ProfileForm({
   trialEndsAt?: string | null;
   plan?: string;
   openSection?: string;
+  businessId?: string | null;
 }) {
   const router = useRouter();
   const [name, setName] = useState(profile.name);
@@ -654,6 +656,16 @@ export function ProfileForm({
               {status === "saving" ? "Saving..." : status === "saved" ? "✓ Saved" : "Could not save"}
             </p>
           )
+        )}
+
+        {businessId && (
+          <div className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3.5">
+            <p className="text-sm font-medium text-white">TradePulse Business ID</p>
+            <p className="mt-2 break-all rounded-lg bg-zinc-950 px-3 py-2 font-mono text-xs text-zinc-300">
+              {businessId}
+            </p>
+            <p className="mt-2 text-xs text-zinc-400">Use this as TP_BUSINESS_ID when connecting a standalone contractor website.</p>
+          </div>
         )}
 
         <a

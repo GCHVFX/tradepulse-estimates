@@ -69,7 +69,7 @@ export default function SignupPage() {
 
     const params = new URLSearchParams(window.location.search);
     const next = params.get("next");
-    const destination = next && next.startsWith("/") ? next : "/new";
+    const destination = next && next.startsWith("/") ? next : "/onboarding";
 
     router.push(destination);
     router.refresh();
@@ -167,7 +167,7 @@ export default function SignupPage() {
           )}
         </div>
 
-        <GoogleAuth />
+        <GoogleAuth defaultNext="/onboarding" />
 
         <p className="text-sm text-zinc-500">
           Already have an account?{" "}

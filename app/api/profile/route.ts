@@ -18,7 +18,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const { data, error } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("name, phone, email, logo_url, prepared_by, google_review_link, payment_link, plan, subscription_status, trial_ends_at")
+    .select("id, name, phone, email, logo_url, prepared_by, google_review_link, payment_link, plan, subscription_status, trial_ends_at")
     .eq("owner_user_id", user.id)
     .maybeSingle();
 

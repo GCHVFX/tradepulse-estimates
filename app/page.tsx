@@ -122,18 +122,29 @@ export default async function LandingPage() {
   if (user) {
     const { data: business } = await supabaseAdmin
       .from("tpe_businesses")
-      .select("subscription_status, trial_ends_at")
+      .select("subscription_status, trial_ends_at, name, phone, email, logo_url, prepared_by")
       .eq("owner_user_id", user.id)
       .maybeSingle();
 
-    const isTrialing = business?.subscription_status === "trial" &&
-      business?.trial_ends_at &&
-      new Date(business.trial_ends_at) > new Date();
-    const isActive = business?.subscription_status === "active";
-    hasAccess = isTrialing || isActive;
+    if (!business) redirect("/onboarding");
 
-    // Logged-in users never see the marketing homepage. Send them to the app,
-    // or to the paywall if their trial has lapsed.
+    const isTrialing = business.subscription_status === "trial" &&
+      business.trial_ends_at &&
+      new Date(business.trial_ends_at) > new Date();
+    const isActive = business.subscription_status === "active";
+    const isComplimentary = business.subscription_status === "complimentary";
+    hasAccess = isTrialing || isActive || isComplimentary;
+
+    const needsBusinessSetup = business &&
+      !business.name &&
+      !business.phone &&
+      !business.email &&
+      !business.logo_url &&
+      !business.prepared_by;
+
+    // Logged-in users never see the marketing homepage. Send them to setup,
+    // the app, or the paywall depending on their account state.
+    if (hasAccess && needsBusinessSetup) redirect("/onboarding");
     redirect(hasAccess ? "/estimates" : "/subscribe");
   }
 

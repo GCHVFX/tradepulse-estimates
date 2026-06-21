@@ -68,7 +68,7 @@ app/
   share/[id]/page.tsx            Public estimate view, no auth (server)
   payments/page.tsx              Outstanding invoices list (server, Pro-gated)
   profile/page.tsx               Business profile
-  onboarding/page.tsx            Redirects to /new (stub)
+  onboarding/page.tsx            First-run business setup; creates missing starter trial business row if needed
   rates/page.tsx                 Price book
   subscribe/page.tsx             Paywall / trial expired
   demo/page.tsx                  Public demo page
