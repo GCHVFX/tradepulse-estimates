@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Logo } from "@/app/components/logo";
 import { GoogleAuth } from "@/app/components/google-auth";
-import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 
 const inputClass =
   "w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3.5 text-white placeholder-zinc-600 text-base focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]";
@@ -45,19 +44,6 @@ export default function SignupPage() {
 
       if (!res.ok) {
         setError(data.error ?? "Something went wrong. Try again.");
-        setLoading(false);
-        return;
-      }
-
-      // Sign in via browser client to set session cookies properly
-      const supabase = createSupabaseBrowserClient();
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (signInError) {
-        setError("Account created but sign in failed. Please sign in manually.");
         setLoading(false);
         return;
       }

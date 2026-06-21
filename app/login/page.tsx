@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Logo } from "@/app/components/logo";
 import { GoogleAuth } from "@/app/components/google-auth";
-import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 
 const inputClass =
   "w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3.5 text-white placeholder-zinc-600 text-base focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]";
@@ -33,13 +32,26 @@ export default function LoginPage() {
   async function handleSignIn() {
     setError("");
     setLoading(true);
-    const supabase = createSupabaseBrowserClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      setError(error.message);
+
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+
+      if (!res.ok) {
+        setError(data.error ?? "Sign in failed. Try again.");
+        setLoading(false);
+        return;
+      }
+    } catch {
+      setError("Sign in failed. Try again.");
       setLoading(false);
       return;
     }
+
     router.push(getNextPath());
     router.refresh();
   }

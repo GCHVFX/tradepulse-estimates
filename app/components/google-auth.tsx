@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 
 function GoogleIcon({ className }: { className?: string }) {
   return (
@@ -38,17 +37,7 @@ export function GoogleAuth({ defaultNext = "/new" }: { defaultNext?: string } = 
       const nextParam = params.get("next");
       const next = nextParam && nextParam.startsWith("/") ? nextParam : defaultNext;
 
-      const supabase = createSupabaseBrowserClient();
-      const { error: oauthError } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
-        },
-      });
-      if (oauthError) {
-        setError(oauthError.message);
-        setLoading(false);
-      }
+      window.location.href = `/auth/google?next=${encodeURIComponent(next)}`;
       // On success the browser redirects to Google, so nothing else runs here.
     } catch {
       setError("Could not start Google sign in. Try again.");
