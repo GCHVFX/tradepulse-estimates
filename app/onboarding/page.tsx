@@ -10,13 +10,12 @@ type BusinessSetup = {
   email: string | null;
   logo_url: string | null;
   prepared_by: string;
-  google_review_link: string | null;
 };
 
 async function getOrCreateBusiness(userId: string): Promise<BusinessSetup | null> {
   const { data: existing, error: existingError } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("id, name, phone, email, logo_url, prepared_by, google_review_link")
+    .select("id, name, phone, email, logo_url, prepared_by")
     .eq("owner_user_id", userId)
     .maybeSingle();
 
@@ -39,7 +38,7 @@ async function getOrCreateBusiness(userId: string): Promise<BusinessSetup | null
       subscription_status: "trial",
       trial_ends_at: trialEndsAt,
     })
-    .select("id, name, phone, email, logo_url, prepared_by, google_review_link")
+    .select("id, name, phone, email, logo_url, prepared_by")
     .single();
 
   if (createError) {
@@ -93,7 +92,6 @@ export default async function OnboardingPage({
             email: business.email ?? "",
             logo_url: business.logo_url ?? "",
             prepared_by: business.prepared_by ?? "",
-            google_review_link: business.google_review_link ?? "",
           }}
         />
       </main>

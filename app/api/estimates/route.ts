@@ -39,6 +39,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
 
   let body: {
     id?: unknown;
+    title?: unknown;
     customer_name?: unknown;
     customer_phone?: unknown;
     job_address?: unknown;
@@ -63,6 +64,9 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   // Only include fields present in the body — never overwrite with defaults
   const updateFields: Record<string, unknown> = {};
 
+  if ("title" in body) {
+    updateFields.title = typeof body.title === "string" ? body.title.trim() : null;
+  }
   if ("customer_name" in body) {
     updateFields.customer_name = typeof body.customer_name === "string" ? body.customer_name.trim() : "";
   }

@@ -13,6 +13,8 @@ interface Estimate {
   job_address: string;
   created_at: string;
   status: string;
+  source?: string | null;
+  description?: string | null;
   sent_via?: string | null;
   sent_at?: string | null;
   copied_at?: string | null;
@@ -36,7 +38,7 @@ export default async function EstimatesPage() {
   const { data: estimates } = business
     ? await supabaseAdmin
         .from("tpe_estimates")
-        .select("id, title, customer_name, job_address, created_at, status, sent_via, sent_at, copied_at, completed_at")
+        .select("id, title, customer_name, job_address, created_at, status, source, description, sent_via, sent_at, copied_at, completed_at")
         .eq("business_id", business.id)
         .order("created_at", { ascending: false })
     : { data: null };
@@ -79,8 +81,10 @@ export default async function EstimatesPage() {
         ) : (
           <ul className="flex flex-col gap-3">
             {items.map((estimate) => {
+              const isQuoteRequest = estimate.status === "needs_review" && estimate.source === "website_quote";
               const isSent = estimate.status === "sent";
               const isDone = estimate.status === "done";
+              const displayTitle = estimate.title || estimate.description || "Untitled";
 
               const deliveryLabel =
                 estimate.sent_via === "sms" ? "SMS"
@@ -93,7 +97,7 @@ export default async function EstimatesPage() {
                 <li key={estimate.id}>
                   <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-xl min-h-[88px] active:bg-zinc-800 transition-colors overflow-hidden">
                     <Link href={`/estimates/${estimate.id}`} className="flex-1 px-4 py-4 min-w-0">
-                      <span className="text-white font-medium text-sm leading-snug block truncate">{estimate.title}</span>
+                      <span className="text-white font-medium text-sm leading-snug block truncate">{displayTitle}</span>
                       {(estimate.customer_name || estimate.job_address) && (
                         <span className="text-zinc-400 text-xs mt-0.5 block truncate">
                           {[estimate.customer_name, estimate.job_address].filter(Boolean).join(" · ")}
@@ -108,14 +112,16 @@ export default async function EstimatesPage() {
                         />
                         <span
                           className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                            isDone
+                            isQuoteRequest
+                              ? "bg-amber-500/15 text-amber-400"
+                              : isDone
                               ? "bg-green-500/10 text-green-500/70"
                               : isSent
                               ? "bg-blue-500/15 text-blue-300"
                               : "bg-zinc-800 text-zinc-300"
                           }`}
                         >
-                          {isDone ? "Done" : isSent ? "Sent" : "Draft"}
+                          {isQuoteRequest ? "Quote Request" : isDone ? "Done" : isSent ? "Sent" : "Draft"}
                         </span>
                       </div>
 

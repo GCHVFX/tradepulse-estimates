@@ -71,6 +71,7 @@ export default async function EstimatePage({
   const isPro = business?.plan === "pro";
   const googleReviewLink = business?.google_review_link ?? null;
   const estimateTotal = calculateEstimateTotal(estimate.summary ?? "");
+  const isQuoteRequest = estimate.status === "needs_review" && estimate.source === "website_quote";
 
   return (
     <div className="min-h-dvh bg-zinc-950 text-white flex flex-col">
@@ -87,40 +88,103 @@ export default async function EstimatePage({
       </header>
 
       <main className="flex-1 px-4 sm:px-5 overflow-auto pb-[14rem]">
-        <div className="bg-white rounded-2xl p-5 mt-2">
-          <CompanyEstimateHeader logoUrl={logoUrl} businessName={businessName} />
-          <span className="mt-3 inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-500">
-            Estimate
-          </span>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight leading-tight text-zinc-900 break-words">
-            {estimate.title}
-          </h1>
+        {isQuoteRequest ? (
+          <>
+            <div className="bg-white rounded-2xl p-5 mt-2">
+              <CompanyEstimateHeader logoUrl={logoUrl} businessName={businessName} />
+              <span className="mt-3 inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-500">
+                Website Quote Request
+              </span>
 
-          <CustomerDetailsBlock
-            estimateId={estimate.id}
-            initialName={estimate.customer_name ?? ""}
-            initialPhone={estimate.customer_phone ?? ""}
-            initialEmail={estimate.customer_email ?? ""}
-            initialAddress={estimate.job_address ?? ""}
-            preparedBy={estimate.prepared_by ?? ""}
-            companyName={businessName || undefined}
-            businessEmail={businessEmail || undefined}
-            dateStr={estimate.created_at ?? ""}
-          />
+              <CustomerDetailsBlock
+                estimateId={estimate.id}
+                initialName={estimate.customer_name ?? ""}
+                initialPhone={estimate.customer_phone ?? ""}
+                initialEmail={estimate.customer_email ?? ""}
+                initialAddress={estimate.job_address ?? ""}
+                preparedBy={estimate.prepared_by ?? ""}
+                companyName={businessName || undefined}
+                businessEmail={businessEmail || undefined}
+                dateStr={estimate.created_at ?? ""}
+              />
 
-          <EditableEstimateBody
-            summary={estimate.summary ?? ""}
-            estimateId={estimate.id}
-          />
+              <div className="mt-4 border-t border-zinc-200 pt-4">
+                <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wide mb-2">Customer Request</h2>
+                <p className="text-zinc-900 text-sm leading-relaxed whitespace-pre-wrap">
+                  {estimate.description || "No description provided."}
+                </p>
+                {(estimate.service_type || estimate.urgency || estimate.location) && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {estimate.service_type && estimate.service_type !== "unknown" && (
+                      <span className="inline-flex items-center rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-700 capitalize">
+                        {estimate.service_type}
+                      </span>
+                    )}
+                    {estimate.location && estimate.location !== "unknown" && (
+                      <span className="inline-flex items-center rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-700 capitalize">
+                        {estimate.location}
+                      </span>
+                    )}
+                    {estimate.urgency && estimate.urgency !== "unknown" && (
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium capitalize ${
+                        estimate.urgency === "emergency" ? "bg-red-100 text-red-700" :
+                        estimate.urgency === "urgent" ? "bg-amber-100 text-amber-700" :
+                        "bg-zinc-100 text-zinc-700"
+                      }`}>
+                        {estimate.urgency}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
 
-          <EstimatePhotos
-            estimateId={estimate.id}
-            photoUrls={photoUrls}
-            includePhotos={estimate.include_photos ?? false}
-            isPro={isPro}
-          />
-        </div>
-        <DeleteEstimateLink estimateId={estimate.id} />
+              <EstimatePhotos
+                estimateId={estimate.id}
+                photoUrls={photoUrls}
+                includePhotos={estimate.include_photos ?? false}
+                isPro={isPro}
+              />
+            </div>
+            <DeleteEstimateLink estimateId={estimate.id} />
+          </>
+        ) : (
+          <>
+            <div className="bg-white rounded-2xl p-5 mt-2">
+              <CompanyEstimateHeader logoUrl={logoUrl} businessName={businessName} />
+              <span className="mt-3 inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-500">
+                Estimate
+              </span>
+              <h1 className="mt-1 text-3xl font-bold tracking-tight leading-tight text-zinc-900 break-words">
+                {estimate.title}
+              </h1>
+
+              <CustomerDetailsBlock
+                estimateId={estimate.id}
+                initialName={estimate.customer_name ?? ""}
+                initialPhone={estimate.customer_phone ?? ""}
+                initialEmail={estimate.customer_email ?? ""}
+                initialAddress={estimate.job_address ?? ""}
+                preparedBy={estimate.prepared_by ?? ""}
+                companyName={businessName || undefined}
+                businessEmail={businessEmail || undefined}
+                dateStr={estimate.created_at ?? ""}
+              />
+
+              <EditableEstimateBody
+                summary={estimate.summary ?? ""}
+                estimateId={estimate.id}
+              />
+
+              <EstimatePhotos
+                estimateId={estimate.id}
+                photoUrls={photoUrls}
+                includePhotos={estimate.include_photos ?? false}
+                isPro={isPro}
+              />
+            </div>
+            <DeleteEstimateLink estimateId={estimate.id} />
+          </>
+        )}
       </main>
 
       <EstimateActions
@@ -128,6 +192,8 @@ export default async function EstimatePage({
         title={estimate.title ?? ""}
         summary={estimate.summary ?? ""}
         status={estimate.status}
+        source={estimate.source ?? null}
+        description={estimate.description ?? null}
         customerPhone={estimate.customer_phone ?? ""}
         customerEmail={estimate.customer_email ?? ""}
         customerName={estimate.customer_name ?? ""}

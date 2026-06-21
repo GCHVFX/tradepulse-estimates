@@ -4,8 +4,8 @@
 
 Do not delete, rename, or migrate any Supabase tables without checking BOTH repos:
 
-- D:\Work\web-apps\tradepulse-estimates (this repo)
-- D:\Work\web-apps\clearwater-plumbing
+- C:\Work\web-apps\tradepulse-estimates (this repo)
+- C:\Work\web-apps\clearwater-plumbing
 
 Both apps share the same TradePulse Supabase project.
 
@@ -78,7 +78,11 @@ Multi-tenant SaaS. Supabase Auth (email/password + Google OAuth). Each auth.user
 
 ## Contractor Website Integration Pattern
 
-Clearwater Plumbing is the first standalone contractor website using TradePulse as a backend. Future contractor websites should follow the same pattern:
+Clearwater Plumbing is the first standalone contractor website using TradePulse as a backend.
+
+**Active Clearwater business ID:** `273169f5-f119-424a-8949-1731ee560f81` (subscription_status = complimentary)
+
+Future contractor websites should follow the same pattern:
 
 - Standalone Next.js site deployed on Vercel
 - Same unified TradePulse Supabase project

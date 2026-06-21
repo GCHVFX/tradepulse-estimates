@@ -11,7 +11,6 @@ interface OnboardingProfile {
   email: string;
   logo_url: string;
   prepared_by: string;
-  google_review_link: string;
 }
 
 export function OnboardingForm({
@@ -30,7 +29,6 @@ export function OnboardingForm({
   const [phone, setPhone] = useState(formatPhoneInput(profile.phone));
   const [email, setEmail] = useState(profile.email);
   const [preparedBy, setPreparedBy] = useState(profile.prepared_by);
-  const [googleReviewLink, setGoogleReviewLink] = useState(profile.google_review_link);
   const [logoUrl, setLogoUrl] = useState(profile.logo_url);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
@@ -101,7 +99,6 @@ export function OnboardingForm({
           email,
           logo_url: logoUrl,
           prepared_by: preparedBy,
-          google_review_link: googleReviewLink,
         }),
       });
 
@@ -229,22 +226,6 @@ export function OnboardingForm({
           autoCapitalize="none"
           spellCheck={false}
         />
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium text-zinc-400">Google review link <span className="text-zinc-600">optional</span></label>
-        <input
-          type="url"
-          className={inputClass}
-          placeholder="https://search.google.com/local/writereview?..."
-          value={googleReviewLink}
-          onChange={(e) => setGoogleReviewLink(e.target.value)}
-          autoComplete="url"
-          autoCorrect="off"
-          autoCapitalize="none"
-          spellCheck={false}
-        />
-        <p className="text-zinc-500 text-xs">Saved now so review requests are ready if this business moves to Pro later.</p>
       </div>
 
       {error && (

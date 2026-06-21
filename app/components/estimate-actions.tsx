@@ -1,16 +1,54 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { SendEstimateSheet } from "./send-estimate-sheet";
 import { MarkJobDoneSheet } from "./mark-job-done-sheet";
 import { InvoiceSheet } from "./invoice-sheet";
 import { Spinner } from "./spinner";
+
+function buildDraftSummary(description: string): string {
+  const lines = [
+    `Website quote request received.`,
+    ``,
+    `## Scope of Work`,
+    ``,
+    `- ${description.split(/[.\n]/)[0].trim() || "Review customer request"}`,
+    ``,
+    `## Line Items`,
+    ``,
+    `| Item | Cost |`,
+    `|------|------|`,
+    `| Review and complete work described in website quote request | $0 |`,
+    ``,
+    `## Assumptions and Exclusions`,
+    ``,
+    `- Final pricing subject to on-site assessment`,
+    ``,
+    `## Pricing Summary`,
+    ``,
+    `| | |`,
+    `|---|---|`,
+    `| Subtotal | $0 |`,
+    `| Tax (GST 5%) | $0 |`,
+    `| **Total** | **$0** |`,
+    `| No deposit required | |`,
+    `| Balance on completion | $0 |`,
+    ``,
+    `## Payment Terms`,
+    ``,
+    `This estimate is valid for 30 days.`,
+  ];
+  return lines.join("\n");
+}
 
 interface EstimateActionsProps {
   estimateId: string;
   title: string;
   summary: string;
   status?: string | null;
+  source?: string | null;
+  description?: string | null;
   customerPhone?: string;
   customerEmail?: string;
   customerName?: string;
@@ -32,6 +70,8 @@ export function EstimateActions({
   title,
   summary,
   status,
+  source,
+  description,
   customerPhone,
   customerEmail,
   customerName,
@@ -47,6 +87,10 @@ export function EstimateActions({
   businessHasPaymentLink,
   justSent,
 }: EstimateActionsProps) {
+  const router = useRouter();
+  const isQuoteRequest = status === "needs_review" && source === "website_quote";
+  const [isConverting, setIsConverting] = useState(false);
+  const [convertError, setConvertError] = useState("");
   const [showSendSheet, setShowSendSheet] = useState(false);
   const [showDoneSheet, setShowDoneSheet] = useState(false);
   const [doneSheetInitialPanel, setDoneSheetInitialPanel] = useState<"review-ready" | "needs-link">("review-ready");
@@ -134,10 +178,55 @@ export function EstimateActions({
     }
   }
 
+  async function handleCreateEstimate() {
+    setIsConverting(true);
+    setConvertError("");
+    try {
+      const desc = description ?? "";
+      const firstSentence = desc.split(/[.\n]/)[0].trim();
+      const draftTitle = firstSentence
+        ? firstSentence.length > 80 ? firstSentence.slice(0, 77) + "..." : firstSentence
+        : "Website Quote Request";
+      const res = await fetch("/api/estimates", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: estimateId,
+          title: draftTitle,
+          summary: buildDraftSummary(desc),
+          status: "draft",
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setConvertError((data as { error?: string }).error ?? `Server error ${res.status}`);
+        return;
+      }
+      router.refresh();
+    } finally {
+      setIsConverting(false);
+    }
+  }
+
   return (
     <>
       <div className="fixed bottom-[72px] left-0 right-0 px-5 pb-4 pt-4 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent flex flex-col gap-3 z-30">
-        {isDone ? (
+        {isQuoteRequest ? (
+          <>
+            {convertError && (
+              <p className="text-red-400 text-xs text-center">{convertError}</p>
+            )}
+            <button
+              type="button"
+              disabled={isConverting}
+              onClick={handleCreateEstimate}
+              className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px] flex items-center justify-center gap-2"
+            >
+              {isConverting && <Spinner className="w-5 h-5" />}
+              {isConverting ? "Creating..." : "Create Estimate"}
+            </button>
+          </>
+        ) : isDone ? (
           <>
             <div className="w-full flex items-center justify-center gap-2 min-h-[56px] rounded-xl border border-green-800/50 bg-green-950/40">
               <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5 text-green-400 shrink-0" aria-hidden="true">
