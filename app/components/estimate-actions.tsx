@@ -6,41 +6,7 @@ import { SendEstimateSheet } from "./send-estimate-sheet";
 import { MarkJobDoneSheet } from "./mark-job-done-sheet";
 import { InvoiceSheet } from "./invoice-sheet";
 import { Spinner } from "./spinner";
-
-function buildDraftSummary(description: string): string {
-  const lines = [
-    `Website quote request received.`,
-    ``,
-    `## Scope of Work`,
-    ``,
-    `- ${description.split(/[.\n]/)[0].trim() || "Review customer request"}`,
-    ``,
-    `## Line Items`,
-    ``,
-    `| Item | Cost |`,
-    `|------|------|`,
-    `| Review and complete work described in website quote request | $0 |`,
-    ``,
-    `## Assumptions and Exclusions`,
-    ``,
-    `- Final pricing subject to on-site assessment`,
-    ``,
-    `## Pricing Summary`,
-    ``,
-    `| | |`,
-    `|---|---|`,
-    `| Subtotal | $0 |`,
-    `| Tax (GST 5%) | $0 |`,
-    `| **Total** | **$0** |`,
-    `| No deposit required | |`,
-    `| Balance on completion | $0 |`,
-    ``,
-    `## Payment Terms`,
-    ``,
-    `This estimate is valid for 30 days.`,
-  ];
-  return lines.join("\n");
-}
+import { matchTemplate, buildDraftSummary } from "@/lib/quote-templates";
 
 interface EstimateActionsProps {
   estimateId: string;
@@ -91,6 +57,8 @@ export function EstimateActions({
   const isQuoteRequest = status === "needs_review" && source === "website_quote";
   const [isConverting, setIsConverting] = useState(false);
   const [convertError, setConvertError] = useState("");
+  const [confirmZeroSend, setConfirmZeroSend] = useState(false);
+  const isZeroTotal = !estimateTotal || estimateTotal <= 0;
   const [showSendSheet, setShowSendSheet] = useState(false);
   const [showDoneSheet, setShowDoneSheet] = useState(false);
   const [doneSheetInitialPanel, setDoneSheetInitialPanel] = useState<"review-ready" | "needs-link">("review-ready");
@@ -183,17 +151,14 @@ export function EstimateActions({
     setConvertError("");
     try {
       const desc = description ?? "";
-      const firstSentence = desc.split(/[.\n]/)[0].trim();
-      const draftTitle = firstSentence
-        ? firstSentence.length > 80 ? firstSentence.slice(0, 77) + "..." : firstSentence
-        : "Website Quote Request";
+      const template = matchTemplate(desc);
       const res = await fetch("/api/estimates", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: estimateId,
-          title: draftTitle,
-          summary: buildDraftSummary(desc),
+          title: template.title,
+          summary: buildDraftSummary(template, desc),
           status: "draft",
         }),
       });
@@ -206,6 +171,15 @@ export function EstimateActions({
     } finally {
       setIsConverting(false);
     }
+  }
+
+  function handleSendClick() {
+    if (isZeroTotal && !confirmZeroSend) {
+      setConfirmZeroSend(true);
+      return;
+    }
+    setConfirmZeroSend(false);
+    setShowSendSheet(true);
   }
 
   return (
@@ -292,20 +266,25 @@ export function EstimateActions({
             )}
             <button
               type="button"
-              onClick={() => setShowSendSheet(true)}
+              onClick={handleSendClick}
               className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
             >
-              Send Estimate
+              {confirmZeroSend ? "Total is $0 — send anyway?" : "Send Estimate"}
             </button>
           </>
         ) : (
-          <button
-            type="button"
-            onClick={() => setShowSendSheet(true)}
-            className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
-          >
-            Send Estimate
-          </button>
+          <>
+            {confirmZeroSend && (
+              <p className="text-amber-400 text-xs text-center">This estimate total is $0. Add pricing before sending, or tap again to send anyway.</p>
+            )}
+            <button
+              type="button"
+              onClick={handleSendClick}
+              className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+            >
+              {confirmZeroSend ? "Total is $0 — send anyway?" : "Send Estimate"}
+            </button>
+          </>
         )}
 
         {isDone && !hasInvoice && (localPaymentStatus === null || localPaymentStatus === "unpaid") && (
