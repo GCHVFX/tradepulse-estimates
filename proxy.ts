@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 const PUBLIC_PATHS = [
   "/",
@@ -81,7 +87,7 @@ export async function proxy(request: NextRequest) {
     return withSessionCookies(NextResponse.redirect(loginUrl), response);
   }
 
-  const { data: business } = await supabase
+  const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
     .select("subscription_status, trial_ends_at")
     .eq("owner_user_id", user.id)

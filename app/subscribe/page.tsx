@@ -19,8 +19,15 @@ export default async function SubscribePage({ searchParams }: { searchParams: Pr
         .maybeSingle()
     : { data: null };
 
-  // Already active, send to app (skip in preview)
-  if (!isPreview && business?.subscription_status === "active") redirect("/new");
+  const isActive = business?.subscription_status === "active";
+  const isTrialing =
+    business?.subscription_status === "trial" &&
+    business?.trial_ends_at &&
+    new Date(business.trial_ends_at) > new Date();
+  const isComplimentary = business?.subscription_status === "complimentary";
+  const hasAccess = isActive || isTrialing || isComplimentary;
+
+  if (!isPreview && hasAccess) redirect("/estimates");
 
   const trialExpired = business?.trial_ends_at
     ? new Date(business.trial_ends_at) < new Date()

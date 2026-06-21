@@ -4,10 +4,10 @@
 
 Do not delete, rename, or migrate any Supabase tables without checking BOTH repos:
 
-- C:\web-apps\tradepulse-estimates (this repo)
-- C:\web-apps\clearwater-plumbing
+- D:\Work\web-apps\tradepulse-estimates (this repo)
+- D:\Work\web-apps\clearwater-plumbing
 
-Both apps will share the same TradePulse Supabase project after migration.
+Both apps share the same TradePulse Supabase project.
 
 ---
 
@@ -15,71 +15,38 @@ Both apps will share the same TradePulse Supabase project after migration.
 
 **Name:** TradePulse Estimates (standalone SaaS)
 **Purpose:** AI-powered estimate generation for contractors. Multi-tenant SaaS with auth, billing, SMS/email sending, payment reminders.
-**Live URL:** trytradepulse.com
+**Live URL:** https://www.trytradepulse.com
 
 ## Supabase Project
 
-**Current:** Web Apps (https://hmkkuyznyumhajjqbxpu.supabase.co)
-**Long-term:** TradePulse (https://fctequqcwxyhmnjgxixg.supabase.co) — shared with clearwater-plumbing
+**Current:** TradePulse (https://fctequqcwxyhmnjgxixg.supabase.co) — shared with clearwater-plumbing
 
-## Tables Used (current — Web Apps project)
+## Tables Used
 
-| Table | Usage | Status |
-|---|---|---|
-| tpe_businesses | Tenant/business record (PK=user_id) | Active, 0 rows (recovered) |
-| tpe_estimates | AI-generated estimates (31 columns, full lifecycle) | Active, 0 rows (recovered) |
-| tpe_price_book | Per-user pricing settings (labour_rate, markup) | Active, 0 rows |
-| tpe_price_book_items | Per-user custom line items (name, unit_price) | Active, 0 rows |
-| tpe_estimate_changes | Audit log (INSERT-only) | Active, 0 rows |
-| tpe_payment_reminders | Payment reminder log (INSERT-only, cron) | Active, 0 rows |
-| tpe_rate_limits | DB-backed rate limiting | Active, 0 rows |
-| tpe_customers | Customer records | UNUSED in code |
-
-## Tables Used (target — after migration to TradePulse project)
-
-| Table | Usage | Migration notes |
-|---|---|---|
-| tpe_businesses | Unified business table (PK=id, owner_user_id for auth) | Schema expansion: add SaaS columns to Clearwater table |
-| tpe_estimates | Unified estimates (Clearwater fields + lifecycle fields) | Schema expansion: add 17 lifecycle columns |
-| tpe_estimate_photos | Photo metadata (replaces photo_urls array) | New pattern for this app |
-| tpe_pricebook_items | Pricebook items (replaces tpe_price_book_items) | Different schema: category, labour_price, material_price |
-| tpe_estimate_line_items | Relational line items (replaces line_items JSONB) | New pattern for this app |
-| tpe_estimate_changes | Audit log | Create in new project |
-| tpe_payment_reminders | Payment reminder log | Create in new project |
-| tpe_rate_limits | Rate limiting | Create in new project |
-
-## Legacy Tables to Retire
-
-| Table | Replacement |
+| Table | Usage |
 |---|---|
-| tpe_price_book | Fold settings into tpe_businesses columns |
-| tpe_price_book_items | Replace with tpe_pricebook_items |
-| tpe_customers | Never used — drop |
-
-## Legacy Columns to Retire (on tpe_estimates)
-
-| Column | Replacement |
-|---|---|
-| photo_urls (text[]) | tpe_estimate_photos table |
-| line_items (jsonb) | tpe_estimate_line_items table |
-| pricing (jsonb) | Computed from line items |
-| customer_address | Use job_address instead |
+| tpe_businesses | Tenant/business record (PK=id, owner_user_id links to auth.users) |
+| tpe_estimates | AI-generated estimates + website quote submissions |
+| tpe_estimate_photos | Photo metadata (private storage, signed URLs) |
+| tpe_pricebook_items | Per-business pricebook items (category, labour_price, material_price) |
+| tpe_estimate_line_items | Relational line items for estimates |
+| tpe_estimate_changes | Audit log (INSERT-only) |
+| tpe_payment_reminders | Payment reminder log (INSERT-only, cron) |
+| tpe_rate_limits | DB-backed rate limiting |
 
 ## Storage Buckets
 
-**Current (Web Apps project):**
-
 | Bucket | Usage |
 |---|---|
-| estimate-photos | Public photo storage for estimates |
+| tpe-estimate-photos | Private photo storage for estimates (signed URLs) |
 | logos | Business logo storage |
 
-**Target (TradePulse project):**
+## Ownership Model
 
-| Bucket | Usage |
-|---|---|
-| tpe-estimate-photos | Unified photo storage (private, signed URLs) |
-| logos | Business logo storage |
+- `tpe_businesses.id` is the business primary key (uuid)
+- `tpe_businesses.owner_user_id` links to `auth.users` for SaaS login
+- `tpe_estimates.business_id` references `tpe_businesses.id` (not auth.users)
+- Contractor websites use `TP_BUSINESS_ID` env var to scope quote submissions to a specific `tpe_businesses.id`
 
 ## Environment Variables
 
@@ -107,24 +74,23 @@ Both apps will share the same TradePulse Supabase project after migration.
 
 ## Auth Model
 
-Multi-tenant SaaS. Supabase Auth (email/password + Google OAuth). Each auth.users row maps to one tpe_businesses row via owner_user_id (currently user_id as PK). Subscription gating via proxy.ts middleware.
+Multi-tenant SaaS. Supabase Auth (email/password + Google OAuth). Each auth.users row maps to one tpe_businesses row via owner_user_id. Subscription gating via proxy.ts (Next.js 16 proxy, not middleware.ts).
 
-## Long-Term Direction
+## Contractor Website Integration Pattern
 
-Migrate to the TradePulse Supabase project (shared with Clearwater). Adopt the newer Clearwater schema as the canonical architecture:
+Clearwater Plumbing is the first standalone contractor website using TradePulse as a backend. Future contractor websites should follow the same pattern:
 
-- tpe_businesses with id PK + owner_user_id for auth
-- tpe_estimates with both quote intake and full lifecycle columns
-- tpe_pricebook_items replacing tpe_price_book + tpe_price_book_items
-- tpe_estimate_photos replacing photo_urls array
-- tpe_estimate_line_items available for structured line items
-
-The standalone app's existing features (auth, billing, SMS, email, cron, rate limiting, audit log) will be ported to work with the new schema.
+- Standalone Next.js site deployed on Vercel
+- Same unified TradePulse Supabase project
+- Own `TP_BUSINESS_ID` env var scoping all writes to that business
+- Quote form creates `tpe_estimates` rows with `source = 'website_quote'`, `status = 'needs_review'`
+- Photos upload to `tpe-estimate-photos` bucket, metadata to `tpe_estimate_photos` table
+- Quotes appear in the TradePulse app for the contractor to review and edit into real estimates
 
 ## Migration Status
 
-- Schema expansion: Not started
-- Code migration: Not started (35-40 files to update)
-- Env var update: Not started
-- Verification: Not started
-- Web Apps cleanup: Not started (old tables preserved until migration verified)
+- Schema migration to dedicated TradePulse Supabase project: **Complete**
+- Code migration (35-40 files updated to new schema): **Complete**
+- Old Web Apps Supabase tpe_* tables: **Gone** (legacy/historical only)
+- Clearwater production integration: **Complete and verified end-to-end**
+- Production fixes: **Complete** (complimentary subscription access, redirect loop, proxy.ts admin client)

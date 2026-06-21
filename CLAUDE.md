@@ -161,7 +161,8 @@ docs/
 - `/plumbers`, `/electricians`, `/trades` — trade-specific landing pages (public)
 - `/plumbing-cost`, `/electrical-cost` — SEO cost guides (public)
 - `/demo` — public demo page
-- All app routes gated by `proxy.ts` (not `middleware.ts`), exported function must be named `proxy`
+- All app routes gated by `proxy.ts` (Next.js 16 proxy file, not `middleware.ts`), exported function must be named `proxy`
+- `/subscribe` redirects users with access to `/estimates` (not `/new`)
 
 Public paths are listed in `proxy.ts PUBLIC_PATHS`. Every `/api/` path is already public via the `isPublic()` function — do not add individual API routes to PUBLIC_PATHS.
 
@@ -170,37 +171,38 @@ Public paths are listed in `proxy.ts PUBLIC_PATHS`. Every `/api/` path is alread
 ## Database Tables (Supabase, `tpe_` prefix)
 
 **`tpe_businesses`**
-`user_id` (FK to auth.users, PK), `name`, `phone`, `email`, `logo_url`, `prepared_by`, `google_review_link`, `payment_link` (not yet used — for Payments feature), `plan` ('starter'|'pro', default 'starter'), `subscription_status`, `trial_ends_at`, `stripe_customer_id`, `stripe_subscription_id`, `signup_source`
+`id` (uuid PK), `owner_user_id` (FK to auth.users), `name`, `phone`, `email`, `logo_url`, `prepared_by`, `google_review_link`, `payment_link`, `plan` ('starter'|'pro', default 'starter'), `subscription_status`, `trial_ends_at`, `stripe_customer_id`, `stripe_subscription_id`, `signup_source`
 
 **`tpe_estimates`**
-`id`, `business_id` (FK to auth.users), `title`, `summary` (full markdown content), `status` ('draft'|'sent'|'done'), `customer_name`, `customer_phone`, `customer_email`, `customer_address`, `customer_id`, `prepared_by`, `deposit_amount`, `sent_via`, `sent_at`, `copied_at`, `completed_at`, `review_requested_at`, `created_at`
-Columns in schema but not yet used in queries: `assumptions`, `scope`, `notes`, `line_items`, `pricing`, `payment_terms` (structured estimate fields), and `payment_status`, `invoice_amount`, `due_date`, `last_reminder_sent_at`, `reminder_count` (for Payments feature)
+`id`, `business_id` (FK to tpe_businesses.id), `title`, `summary` (full markdown content), `status` ('draft'|'sent'|'done'|'needs_review'), `source` ('app'|'website_quote'), `customer_name`, `customer_phone`, `customer_email`, `job_address`, `customer_id`, `prepared_by`, `deposit_amount`, `sent_via`, `sent_at`, `copied_at`, `completed_at`, `review_requested_at`, `created_at`
+Additional columns: `payment_status`, `invoice_amount`, `due_date`, `last_reminder_sent_at`, `reminder_count` (Payments feature)
+
+**`tpe_estimate_photos`**
+`id`, `estimate_id` (FK to tpe_estimates), `storage_path`, `file_name`, `note`, `created_at` — photo metadata, files in `tpe-estimate-photos` bucket
+
+**`tpe_pricebook_items`**
+`id`, `business_id` (FK to tpe_businesses.id), `name`, `category`, `labour_price`, `material_price`, `created_at`
+
+**`tpe_estimate_line_items`**
+`id`, `estimate_id` (FK to tpe_estimates), `description`, `quantity`, `unit_price`, `line_type`, `created_at`
 
 **`tpe_estimate_changes`**
 `id`, `estimate_id` (FK to tpe_estimates), `user_id`, `change_type` ('created'|'edited'|'sent'|'deleted'), `old_value`, `new_value`, `changed_at`, `created_at` — audit log, written by `lib/audit-log.ts logEstimateChange()`
 
 **`tpe_payment_reminders`**
-`id`, `estimate_id` (FK to tpe_estimates), `business_id`, `channel`, `stage`, `message`, `sent_at` — exists in schema, not yet used (for Payments feature)
-
-**`tpe_price_book`**
-`user_id`, `labour_rate`, `markup_percent`, `deposit_percent`, `deposit_threshold`
-
-**`tpe_price_book_items`**
-`user_id`, `name`, `unit`, `unit_price`, `created_at`
+`id`, `estimate_id` (FK to tpe_estimates), `business_id`, `channel`, `stage`, `message`, `sent_at`
 
 **`tpe_rate_limits`**
 `key`, `action`, `count`, `expires_at`, `created_at` — used by `lib/rate-limit.ts`
 
-**`tpe_customers`**
-`id`, `business_id`, `name`, `phone`, `email`, `address` — exists in schema, not yet used in queries
-
 All tables: uuid primary keys, RLS enabled.
 
 **Critical field names:**
-- `tpe_businesses` uses `user_id` not `id` as the PK/FK
+- `tpe_businesses` uses `id` as PK and `owner_user_id` to link to auth.users
 - Business name field is `name` not `company_name`
-- `tpe_estimates` uses `business_id` not `user_id` as the ownership FK
+- `tpe_estimates` uses `business_id` referencing `tpe_businesses.id` (not auth.users)
 - Estimate content column is `summary` not `content`
+- Address field is `job_address` not `customer_address`
 
 `lib/database.types.ts` is generated from the live schema. Do not edit manually.
 To regenerate: use the Supabase MCP tool `Supabase:generate_typescript_types` (do not use CLI — it hangs on interactive auth). Filter output to `tpe_` prefixed tables only before writing to `lib/database.types.ts`.
@@ -232,6 +234,10 @@ if (!user) return applyTo(NextResponse.json({ error: "Unauthorized" }, { status:
 const supabase = await createSupabaseServerClient();
 const { data: { user } } = await supabase.auth.getUser();
 ```
+
+### proxy.ts (request interceptor)
+
+proxy.ts uses its own `supabaseAdmin` (service role, created inline via `createClient`) for the business/subscription query. This bypasses RLS to avoid null-business results that caused a redirect loop when using the anon client. The anon client (with user cookies) is still used for `getUser()` to handle session token refresh.
 
 ---
 

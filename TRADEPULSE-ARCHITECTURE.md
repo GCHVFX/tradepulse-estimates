@@ -82,12 +82,14 @@
 
 ```
 tpe_businesses
-  user_id (FK → auth.users, PK)
+  id (uuid PK)
+  owner_user_id (FK → auth.users)
   name
   phone
   email
   logo_url
   prepared_by
+  plan                  ('starter' | 'pro')
   stripe_customer_id
   stripe_subscription_id
   subscription_status   ('trial' | 'active' | 'canceled' | 'complimentary')
@@ -96,40 +98,53 @@ tpe_businesses
 
 tpe_estimates
   id (uuid)
-  business_id (FK → auth.users)
+  business_id (FK → tpe_businesses.id)
   title
   summary               (full markdown content)
-  status                ('draft' | 'sent')
+  status                ('draft' | 'sent' | 'done' | 'needs_review')
+  source                ('app' | 'website_quote')
   customer_name
   customer_phone
   customer_email
-  customer_address
+  job_address
   prepared_by
   deposit_amount
+  payment_status, invoice_amount, due_date (Payments feature)
   created_at
 
-tpe_price_book
-  user_id (FK → auth.users)
-  labour_rate
-  markup_percent
-  deposit_percent
-  deposit_threshold
-
-tpe_price_book_items
-  id
-  user_id (FK → auth.users)
-  name
-  unit_price
+tpe_estimate_photos
+  id (uuid)
+  estimate_id (FK → tpe_estimates)
+  storage_path, file_name, note
   created_at
+
+tpe_pricebook_items
+  id (uuid)
+  business_id (FK → tpe_businesses.id)
+  name, category
+  labour_price, material_price
+  created_at
+
+tpe_estimate_line_items
+  id (uuid)
+  estimate_id (FK → tpe_estimates)
+  description, quantity, unit_price, line_type
+  created_at
+
+tpe_estimate_changes     (audit log)
+tpe_payment_reminders    (payment reminder log)
+tpe_rate_limits          (DB-backed rate limiting)
 ```
 
 ### Auth & Access Control
 
-- `proxy.ts` runs on every non-static request
-- Checks: authenticated → has `tpe_businesses` row → subscription active or trialing
+- `proxy.ts` runs on every non-static request (Next.js 16 proxy file, not middleware.ts)
+- proxy.ts uses its own inline `supabaseAdmin` (service role) for the business query to bypass RLS
+- Checks: authenticated → has `tpe_businesses` row → subscription active, trialing, or complimentary
 - Missing business row → `/subscribe`
 - Expired/canceled → `/subscribe`
-- All API routes independently verify `getUser()` — no trust in middleware for data access
+- `/subscribe` redirects users with access to `/estimates`
+- All API routes independently verify `getUser()` — no trust in proxy for data access
 - `supabaseAdmin` used for all data writes (bypasses RLS) — appropriate for server-only routes
 
 ### Subscription Gating
@@ -430,7 +445,7 @@ Each feature owns its tables. All share `tpe_businesses` for identity.
 -- Reviews
 create table tpe_review_requests (
   id uuid primary key default gen_random_uuid(),
-  business_id uuid references auth.users not null,
+  business_id uuid references tpe_businesses(id) not null,
   estimate_id uuid references tpe_estimates(id),
   customer_name text,
   customer_phone text,
@@ -445,7 +460,7 @@ create table tpe_review_requests (
 -- Payments
 create table tpe_invoices (
   id uuid primary key default gen_random_uuid(),
-  business_id uuid references auth.users not null,
+  business_id uuid references tpe_businesses(id) not null,
   estimate_id uuid references tpe_estimates(id),
   customer_name text,
   customer_phone text,
@@ -462,7 +477,7 @@ create table tpe_invoices (
 -- Follow-Up
 create table tpe_follow_ups (
   id uuid primary key default gen_random_uuid(),
-  business_id uuid references auth.users not null,
+  business_id uuid references tpe_businesses(id) not null,
   estimate_id uuid references tpe_estimates(id),
   customer_name text,
   customer_phone text,
