@@ -157,9 +157,10 @@ export function EstimateActions({
       try {
         const pbRes = await fetch("/api/price-book");
         if (pbRes.ok) {
-          const pbData = await pbRes.json() as { items?: Array<{ name: string; unit_price: number }> };
+          const pbData = await pbRes.json() as { items?: Array<{ name: string; description?: string; unit_price: number }> };
           pricebookItems = (pbData.items ?? []).map((i) => ({
             name: i.name,
+            description: i.description ?? "",
             price: i.unit_price,
           }));
         }

@@ -6,6 +6,7 @@ interface ImportItem {
   description?: string;
   category?: string;
   price?: number;
+  material_price?: number;
   taxable?: boolean;
   active?: boolean;
 }
@@ -65,6 +66,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const price = typeof raw.price === "number" ? raw.price : 0;
+    const matPrice = typeof raw.material_price === "number" ? raw.material_price : 0;
     const description = typeof raw.description === "string" ? raw.description.trim() || null : null;
     const category = typeof raw.category === "string" && raw.category.trim() ? raw.category.trim() : "General";
     const taxable = raw.taxable !== false;
@@ -74,7 +76,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (existingId) {
       const { error } = await supabaseAdmin
         .from("tpe_pricebook_items")
-        .update({ name, description, category, labour_price: price, taxable, active })
+        .update({ name, description, category, labour_price: price, material_price: matPrice, taxable, active })
         .eq("id", existingId)
         .eq("business_id", business.id);
       if (error) {
@@ -85,7 +87,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     } else {
       const { error } = await supabaseAdmin
         .from("tpe_pricebook_items")
-        .insert({ business_id: business.id, name, description, category, labour_price: price, material_price: 0, taxable, active });
+        .insert({ business_id: business.id, name, description, category, labour_price: price, material_price: matPrice, taxable, active });
       if (error) {
         errors.push(`Row ${i + 1} ("${name}"): ${error.message}`);
       } else {

@@ -122,27 +122,56 @@ const GENERIC_TEMPLATE: QuoteTemplate = {
 
 export interface PricebookItem {
   name: string;
+  description: string;
   price: number;
 }
 
-const STOP_WORDS = new Set(["and", "or", "the", "a", "of", "for", "as", "to", "in", "on", "is", "if"]);
+const STOP_WORDS = new Set(["and", "or", "the", "a", "of", "for", "as", "to", "in", "on", "is", "if", "be", "an", "at", "by"]);
+
+function stem(word: string): string {
+  return word
+    .replace(/ment$/, "")
+    .replace(/tion$/, "")
+    .replace(/sion$/, "")
+    .replace(/ing$/, "")
+    .replace(/ance$/, "")
+    .replace(/ence$/, "")
+    .replace(/able$/, "")
+    .replace(/ible$/, "")
+    .replace(/ness$/, "")
+    .replace(/ous$/, "")
+    .replace(/ive$/, "")
+    .replace(/ful$/, "")
+    .replace(/ed$/, "")
+    .replace(/er$/, "")
+    .replace(/ly$/, "")
+    .replace(/al$/, "")
+    .replace(/s$/, "");
+}
 
 function tokenize(text: string): string[] {
-  return text.toLowerCase().split(/\W+/).filter((w) => w.length > 1 && !STOP_WORDS.has(w));
+  return text
+    .toLowerCase()
+    .split(/\W+/)
+    .filter((w) => w.length > 1 && !STOP_WORDS.has(w))
+    .map(stem);
 }
 
 function findBestMatch(
   templateLabel: string,
   pricebookItems: PricebookItem[],
 ): PricebookItem | null {
-  const templateTokens = new Set(tokenize(templateLabel));
+  const templateStems = new Set(tokenize(templateLabel));
   let bestItem: PricebookItem | null = null;
   let bestScore = 0;
 
   for (const item of pricebookItems) {
-    const itemTokens = tokenize(item.name);
-    const overlap = itemTokens.filter((t) => templateTokens.has(t)).length;
-    if (overlap > bestScore && overlap >= 2) {
+    const itemText = [item.name, item.description].filter(Boolean).join(" ");
+    const itemStems = tokenize(itemText);
+    const uniqueItemStems = new Set(itemStems);
+    const overlap = [...uniqueItemStems].filter((s) => templateStems.has(s)).length;
+    const minRequired = uniqueItemStems.size <= 2 ? 1 : 2;
+    if (overlap >= minRequired && overlap > bestScore) {
       bestScore = overlap;
       bestItem = item;
     }
@@ -166,11 +195,13 @@ export function buildDraftSummary(
   customerDescription: string,
   pricebookItems?: PricebookItem[],
 ): string {
-  const pb = pricebookItems ?? [];
+  const remaining = [...(pricebookItems ?? [])];
   const lineItemRows = template.lineItems
     .map((label) => {
-      const match = pb.length > 0 ? findBestMatch(label, pb) : null;
+      const match = remaining.length > 0 ? findBestMatch(label, remaining) : null;
       if (match && match.price > 0) {
+        const idx = remaining.indexOf(match);
+        if (idx !== -1) remaining.splice(idx, 1);
         return `| ${match.name} | $${match.price.toFixed(2)} |`;
       }
       return `| ${label} | — |`;

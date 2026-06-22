@@ -23,7 +23,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const { data: items } = await supabaseAdmin
     .from("tpe_pricebook_items")
-    .select("id, name, labour_price")
+    .select("id, name, description, labour_price")
     .eq("business_id", business!.id)
     .order("created_at", { ascending: true });
 
@@ -37,6 +37,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     items: (items ?? []).map((item) => ({
       id: item.id,
       name: item.name,
+      description: item.description ?? "",
       unit_price: item.labour_price,
     })),
   }));

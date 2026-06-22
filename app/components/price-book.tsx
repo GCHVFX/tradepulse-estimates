@@ -46,6 +46,7 @@ export function PriceBook() {
     description: string;
     category: string;
     price: number;
+    materialPrice: number;
     taxable: boolean;
     active: boolean;
     error: string;
@@ -155,10 +156,12 @@ export function PriceBook() {
 
   function downloadTemplate() {
     const csv = [
-      "name,description,category,price,taxable,active",
-      '"Toilet replacement labour","Remove existing toilet and install replacement",Toilets,450,true,true',
-      '"Faucet cartridge replacement","Replace faucet cartridge and test for leaks",Faucets,225,true,true',
-      '"Drain clearing","Clear blocked drain where accessible",Drains,250,true,true',
+      "name,description,category,price,taxable,active,keywords",
+      '"Toilet replacement labour","Remove existing toilet and install replacement",Toilets,450,true,true,"toilet replace install removal"',
+      '"Toilet materials allowance","Wax ring bolts supply line basic materials",Toilets,65,true,true,"wax ring toilet bolts supply line materials"',
+      '"Old toilet disposal","Haul away and dispose of old toilet",Toilets,85,true,true,"toilet disposal haul away"',
+      '"Faucet cartridge replacement","Replace faucet cartridge and test for leaks",Faucets,225,true,true,"faucet cartridge repair replace leak dripping"',
+      '"Drain clearing","Clear blocked drain where accessible",Drains,250,true,true,"clog blocked slow drain clearing"',
     ].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -169,31 +172,71 @@ export function PriceBook() {
     URL.revokeObjectURL(url);
   }
 
+  function resolveCol(headers: string[], aliases: string[]): string | null {
+    for (const alias of aliases) {
+      if (headers.includes(alias)) return alias;
+    }
+    return null;
+  }
+
+  function csvVal(row: Record<string, string>, col: string | null): string {
+    return col ? (row[col] ?? "").trim() : "";
+  }
+
+  function csvBool(row: Record<string, string>, col: string | null, fallback: boolean): boolean {
+    const v = csvVal(row, col).toLowerCase();
+    if (!v) return fallback;
+    if (v === "false" || v === "0" || v === "no" || v === "inactive" || v === "disabled") return false;
+    return true;
+  }
+
   function handleCSVFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
       const { headers, rows } = parseCSV(reader.result as string);
-      const nameCol = headers.includes("item_name") ? "item_name" : "name";
+
+      const nameCol = resolveCol(headers, ["item_name", "name", "service", "service_name", "item", "item_description", "task"]);
+      const descCol = resolveCol(headers, ["description", "details", "notes", "scope"]);
+      const catCol = resolveCol(headers, ["category", "type", "group", "section"]);
+      const priceCol = resolveCol(headers, ["price", "unit_price", "rate", "cost", "total", "amount"]);
+      const labourCol = resolveCol(headers, ["labour_price", "labor_price", "labour", "labor", "labour_rate", "labor_rate"]);
+      const materialCol = resolveCol(headers, ["material_price", "materials", "parts", "parts_price", "material_cost"]);
+      const taxCol = resolveCol(headers, ["taxable", "tax", "gst", "charge_tax"]);
+      const activeCol = resolveCol(headers, ["active", "enabled", "status"]);
+      const keywordsCol = resolveCol(headers, ["keywords", "aliases", "tags"]);
+
+      const recognized = [nameCol, descCol, catCol, priceCol, labourCol, materialCol, taxCol, activeCol, keywordsCol].filter(Boolean) as string[];
+      const unrecognized = headers.filter((h) => !recognized.includes(h) && h.trim());
+
       const parsed: ImportRow[] = rows.map((row) => {
-        const name = (row[nameCol] ?? "").trim();
-        const priceStr = (row["price"] ?? "").trim();
-        const price = parseFloat(priceStr);
-        const taxStr = (row["taxable"] ?? "true").toLowerCase();
-        const activeStr = (row["active"] ?? "true").toLowerCase();
+        const name = csvVal(row, nameCol);
+        const labourStr = csvVal(row, labourCol);
+        const priceStr = csvVal(row, priceCol);
+        const labourPrice = parseFloat(labourStr) || parseFloat(priceStr) || 0;
+        const materialStr = csvVal(row, materialCol);
+        const materialPrice = parseFloat(materialStr) || 0;
+        const desc = csvVal(row, descCol);
+        const keywords = csvVal(row, keywordsCol);
+        const fullDesc = [desc, keywords].filter(Boolean).join(" | ");
         return {
           name,
-          description: (row["description"] ?? "").trim(),
-          category: (row["category"] ?? "General").trim() || "General",
-          price: isNaN(price) ? 0 : price,
-          taxable: taxStr !== "false" && taxStr !== "0" && taxStr !== "no",
-          active: activeStr !== "false" && activeStr !== "0" && activeStr !== "no",
+          description: fullDesc,
+          category: csvVal(row, catCol) || "General",
+          price: labourPrice,
+          materialPrice,
+          taxable: csvBool(row, taxCol, true),
+          active: csvBool(row, activeCol, true),
           error: !name ? "Name is required" : "",
         };
       });
+
       setImportRows(parsed);
       setImportResult(null);
+      if (unrecognized.length > 0) {
+        setImportResult({ imported: 0, updated: 0, errors: [`Unrecognized columns skipped: ${unrecognized.join(", ")}`] });
+      }
     };
     reader.readAsText(file);
     if (csvInputRef.current) csvInputRef.current.value = "";
@@ -214,6 +257,7 @@ export function PriceBook() {
             description: r.description || undefined,
             category: r.category,
             price: r.price,
+            material_price: r.materialPrice,
             taxable: r.taxable,
             active: r.active,
           })),
