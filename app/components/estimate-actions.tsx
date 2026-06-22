@@ -7,6 +7,7 @@ import { MarkJobDoneSheet } from "./mark-job-done-sheet";
 import { InvoiceSheet } from "./invoice-sheet";
 import { Spinner } from "./spinner";
 import { matchTemplate, buildDraftSummary } from "@/lib/quote-templates";
+import type { PricebookItem } from "@/lib/quote-templates";
 
 interface EstimateActionsProps {
   estimateId: string;
@@ -57,7 +58,6 @@ export function EstimateActions({
   const isQuoteRequest = status === "needs_review" && source === "website_quote";
   const [isConverting, setIsConverting] = useState(false);
   const [convertError, setConvertError] = useState("");
-  const [confirmZeroSend, setConfirmZeroSend] = useState(false);
   const isZeroTotal = !estimateTotal || estimateTotal <= 0;
   const [showSendSheet, setShowSendSheet] = useState(false);
   const [showDoneSheet, setShowDoneSheet] = useState(false);
@@ -152,13 +152,26 @@ export function EstimateActions({
     try {
       const desc = description ?? "";
       const template = matchTemplate(desc);
+
+      let pricebookItems: PricebookItem[] = [];
+      try {
+        const pbRes = await fetch("/api/price-book");
+        if (pbRes.ok) {
+          const pbData = await pbRes.json() as { items?: Array<{ name: string; unit_price: number }> };
+          pricebookItems = (pbData.items ?? []).map((i) => ({
+            name: i.name,
+            price: i.unit_price,
+          }));
+        }
+      } catch { /* pricebook fetch failure is non-fatal */ }
+
       const res = await fetch("/api/estimates", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: estimateId,
           title: template.title,
-          summary: buildDraftSummary(template, desc),
+          summary: buildDraftSummary(template, desc, pricebookItems),
           status: "draft",
         }),
       });
@@ -174,11 +187,6 @@ export function EstimateActions({
   }
 
   function handleSendClick() {
-    if (isZeroTotal && !confirmZeroSend) {
-      setConfirmZeroSend(true);
-      return;
-    }
-    setConfirmZeroSend(false);
     setShowSendSheet(true);
   }
 
@@ -269,20 +277,25 @@ export function EstimateActions({
               onClick={handleSendClick}
               className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
             >
-              {confirmZeroSend ? "Total is $0 — send anyway?" : "Send Estimate"}
+              Send Estimate
             </button>
           </>
         ) : (
           <>
-            {confirmZeroSend && (
-              <p className="text-amber-400 text-xs text-center">This estimate total is $0. Add pricing before sending, or tap again to send anyway.</p>
+            {isZeroTotal && (
+              <p className="text-amber-400 text-xs text-center">Add pricing to your line items before sending.</p>
             )}
             <button
               type="button"
+              disabled={isZeroTotal}
               onClick={handleSendClick}
-              className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+              className={`w-full font-bold text-base rounded-xl py-4 transition-colors min-h-[56px] ${
+                isZeroTotal
+                  ? "bg-zinc-800 text-zinc-500 cursor-not-allowed"
+                  : "bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950"
+              }`}
             >
-              {confirmZeroSend ? "Total is $0 — send anyway?" : "Send Estimate"}
+              Send Estimate
             </button>
           </>
         )}

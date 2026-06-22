@@ -335,6 +335,11 @@ export function EditableEstimateBody({
 
       {/* Line Items */}
       <SectionHeading>Line Items</SectionHeading>
+      {lineItems.length > 0 && lineItems.every(i => parseCost(i.cost) === 0) && (
+        <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
+          <p className="text-amber-800 text-sm font-medium">Review and add pricing before sending this estimate.</p>
+        </div>
+      )}
       <div className="mb-4 overflow-x-auto rounded-lg border border-zinc-200">
         <table className="w-full text-sm">
           <thead className="bg-zinc-100">
@@ -371,8 +376,12 @@ export function EditableEstimateBody({
                     type="text"
                     value={item.cost}
                     onChange={e => updateLine(item.id, 'cost', e.target.value)}
+                    onFocus={e => { if (parseCost(item.cost) === 0 && !/\d/.test(item.cost)) e.target.select(); }}
+                    placeholder="$0"
                     aria-label="Item cost"
-                    className="w-24 bg-transparent rounded-lg border border-transparent px-3 py-2.5 text-sm text-zinc-700 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]"
+                    className={`w-24 bg-transparent rounded-lg border border-transparent px-3 py-2.5 text-sm focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px] ${
+                      parseCost(item.cost) === 0 && !/\d/.test(item.cost) ? 'text-amber-500 italic' : 'text-zinc-700'
+                    }`}
                   />
                 </td>
                 <td className="border-t border-zinc-200 pr-1" style={{ width: 40, minWidth: 40 }}>

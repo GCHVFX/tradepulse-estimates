@@ -120,6 +120,37 @@ const GENERIC_TEMPLATE: QuoteTemplate = {
   ],
 };
 
+export interface PricebookItem {
+  name: string;
+  price: number;
+}
+
+const STOP_WORDS = new Set(["and", "or", "the", "a", "of", "for", "as", "to", "in", "on", "is", "if"]);
+
+function tokenize(text: string): string[] {
+  return text.toLowerCase().split(/\W+/).filter((w) => w.length > 1 && !STOP_WORDS.has(w));
+}
+
+function findBestMatch(
+  templateLabel: string,
+  pricebookItems: PricebookItem[],
+): PricebookItem | null {
+  const templateTokens = new Set(tokenize(templateLabel));
+  let bestItem: PricebookItem | null = null;
+  let bestScore = 0;
+
+  for (const item of pricebookItems) {
+    const itemTokens = tokenize(item.name);
+    const overlap = itemTokens.filter((t) => templateTokens.has(t)).length;
+    if (overlap > bestScore && overlap >= 2) {
+      bestScore = overlap;
+      bestItem = item;
+    }
+  }
+
+  return bestItem;
+}
+
 export function matchTemplate(description: string): QuoteTemplate {
   const text = description.toLowerCase();
   for (const entry of TEMPLATES) {
@@ -133,9 +164,17 @@ export function matchTemplate(description: string): QuoteTemplate {
 export function buildDraftSummary(
   template: QuoteTemplate,
   customerDescription: string,
+  pricebookItems?: PricebookItem[],
 ): string {
+  const pb = pricebookItems ?? [];
   const lineItemRows = template.lineItems
-    .map((item) => `| ${item} | $0 |`)
+    .map((label) => {
+      const match = pb.length > 0 ? findBestMatch(label, pb) : null;
+      if (match && match.price > 0) {
+        return `| ${match.name} | $${match.price.toFixed(2)} |`;
+      }
+      return `| ${label} | — |`;
+    })
     .join("\n");
 
   const assumptionBullets = template.assumptions

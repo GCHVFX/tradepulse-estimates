@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { parseCSV } from "@/lib/csv-parse";
 
 interface PriceBookItem {
   id: string;
@@ -38,6 +39,21 @@ export function PriceBook() {
   const [editName, setEditName] = useState("");
   const [editPrice, setEditPrice] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Import
+  interface ImportRow {
+    name: string;
+    description: string;
+    category: string;
+    price: number;
+    taxable: boolean;
+    active: boolean;
+    error: string;
+  }
+  const [importRows, setImportRows] = useState<ImportRow[] | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ imported: number; updated: number; errors: string[] } | null>(null);
+  const csvInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetch("/api/price-book")
@@ -135,6 +151,85 @@ export function PriceBook() {
   async function handleDeleteItem(id: string) {
     setItems((prev) => prev.filter((i) => i.id !== id));
     await fetch(`/api/price-book-items?id=${id}`, { method: "DELETE" });
+  }
+
+  function downloadTemplate() {
+    const csv = [
+      "name,description,category,price,taxable,active",
+      '"Toilet replacement labour","Remove existing toilet and install replacement",Toilets,450,true,true',
+      '"Faucet cartridge replacement","Replace faucet cartridge and test for leaks",Faucets,225,true,true',
+      '"Drain clearing","Clear blocked drain where accessible",Drains,250,true,true',
+    ].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "pricebook-template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function handleCSVFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const { headers, rows } = parseCSV(reader.result as string);
+      const nameCol = headers.includes("item_name") ? "item_name" : "name";
+      const parsed: ImportRow[] = rows.map((row) => {
+        const name = (row[nameCol] ?? "").trim();
+        const priceStr = (row["price"] ?? "").trim();
+        const price = parseFloat(priceStr);
+        const taxStr = (row["taxable"] ?? "true").toLowerCase();
+        const activeStr = (row["active"] ?? "true").toLowerCase();
+        return {
+          name,
+          description: (row["description"] ?? "").trim(),
+          category: (row["category"] ?? "General").trim() || "General",
+          price: isNaN(price) ? 0 : price,
+          taxable: taxStr !== "false" && taxStr !== "0" && taxStr !== "no",
+          active: activeStr !== "false" && activeStr !== "0" && activeStr !== "no",
+          error: !name ? "Name is required" : "",
+        };
+      });
+      setImportRows(parsed);
+      setImportResult(null);
+    };
+    reader.readAsText(file);
+    if (csvInputRef.current) csvInputRef.current.value = "";
+  }
+
+  async function handleConfirmImport() {
+    if (!importRows) return;
+    const valid = importRows.filter((r) => !r.error);
+    if (valid.length === 0) return;
+    setImporting(true);
+    try {
+      const res = await fetch("/api/price-book-items/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: valid.map((r) => ({
+            name: r.name,
+            description: r.description || undefined,
+            category: r.category,
+            price: r.price,
+            taxable: r.taxable,
+            active: r.active,
+          })),
+        }),
+      });
+      const data = await res.json() as { imported: number; updated: number; errors: string[] };
+      setImportResult(data);
+      const listRes = await fetch("/api/price-book");
+      const listData = await listRes.json() as { items: PriceBookItem[] };
+      setItems(listData.items);
+      setImportRows(null);
+    } catch {
+      setImportResult({ imported: 0, updated: 0, errors: ["Import failed. Try again."] });
+    } finally {
+      setImporting(false);
+    }
   }
 
   const inputClass =
@@ -351,6 +446,121 @@ export function PriceBook() {
             </svg>
             Add item
           </button>
+        )}
+
+        <div className="border-t border-zinc-800 pt-3 mt-1" />
+
+        <div>
+          <p className="text-sm font-medium text-zinc-400">Import from CSV</p>
+          <p className="text-xs text-zinc-400 mt-1">
+            Upload a spreadsheet to add items in bulk. Existing items with the same name are updated.
+          </p>
+        </div>
+
+        <input
+          ref={csvInputRef}
+          type="file"
+          accept=".csv,text/csv"
+          className="hidden"
+          onChange={handleCSVFile}
+        />
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => csvInputRef.current?.click()}
+            className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white font-medium text-sm rounded-xl py-3 transition-colors min-h-[44px] flex items-center justify-center gap-2"
+          >
+            <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4" aria-hidden="true">
+              <path d="M3 10v3h10v-3M8 2v8m0-8L5 5m3-3l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Import CSV
+          </button>
+          <button
+            type="button"
+            onClick={downloadTemplate}
+            className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white font-medium text-sm rounded-xl py-3 transition-colors min-h-[44px] flex items-center justify-center gap-2"
+          >
+            <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4" aria-hidden="true">
+              <path d="M3 10v3h10v-3M8 2v8m0 0L5 7m3 3l3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Download Template
+          </button>
+        </div>
+
+        {importResult && (
+          <div className={`rounded-xl border px-4 py-3 text-sm ${importResult.errors.length > 0 ? "border-amber-800 bg-amber-950 text-amber-300" : "border-green-800 bg-green-950 text-green-300"}`}>
+            <p className="font-medium">
+              {importResult.imported > 0 && `${importResult.imported} imported`}
+              {importResult.imported > 0 && importResult.updated > 0 && ", "}
+              {importResult.updated > 0 && `${importResult.updated} updated`}
+              {importResult.imported === 0 && importResult.updated === 0 && "No items imported"}
+            </p>
+            {importResult.errors.length > 0 && (
+              <ul className="mt-1.5 text-xs space-y-0.5">
+                {importResult.errors.map((err, i) => <li key={i}>{err}</li>)}
+              </ul>
+            )}
+            <button
+              type="button"
+              onClick={() => setImportResult(null)}
+              className="mt-2 text-xs text-zinc-400 hover:text-zinc-300 transition-colors"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {importRows && (
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 flex flex-col gap-3">
+            <p className="text-white text-sm font-medium">
+              Preview: {importRows.length} {importRows.length === 1 ? "item" : "items"}
+              {importRows.some((r) => r.error) && (
+                <span className="text-red-400 font-normal ml-2">
+                  ({importRows.filter((r) => r.error).length} with errors)
+                </span>
+              )}
+            </p>
+            <div className="overflow-x-auto rounded-lg border border-zinc-700">
+              <table className="w-full text-xs">
+                <thead className="bg-zinc-800">
+                  <tr>
+                    <th className="px-2.5 py-2 text-left text-zinc-400 font-medium">Name</th>
+                    <th className="px-2.5 py-2 text-left text-zinc-400 font-medium">Category</th>
+                    <th className="px-2.5 py-2 text-right text-zinc-400 font-medium">Price</th>
+                    <th className="px-2.5 py-2 text-left text-zinc-400 font-medium" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {importRows.map((row, i) => (
+                    <tr key={i} className={row.error ? "bg-red-950/30" : ""}>
+                      <td className="px-2.5 py-2 border-t border-zinc-700 text-white truncate max-w-[180px]">{row.name || <span className="text-red-400 italic">missing</span>}</td>
+                      <td className="px-2.5 py-2 border-t border-zinc-700 text-zinc-400">{row.category}</td>
+                      <td className="px-2.5 py-2 border-t border-zinc-700 text-zinc-300 text-right">${row.price.toFixed(2)}</td>
+                      <td className="px-2.5 py-2 border-t border-zinc-700 text-red-400">{row.error}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleConfirmImport}
+                disabled={importing || importRows.every((r) => !!r.error)}
+                className="flex-1 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-semibold text-sm rounded-lg py-2.5 transition-colors min-h-[40px]"
+              >
+                {importing ? "Importing..." : `Import ${importRows.filter((r) => !r.error).length} items`}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setImportRows(null); setImportResult(null); }}
+                className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white text-sm rounded-lg py-2.5 transition-colors min-h-[40px]"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </div>
