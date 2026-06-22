@@ -191,6 +191,13 @@ export function EditableEstimateBody({
     );
   }
 
+  function formatLineCost(raw: string): string {
+    const n = parseCost(raw);
+    if (n > 0) return '$' + n.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (/\d/.test(raw)) return '$0.00';
+    return '—';
+  }
+
   function updateLine(id: string, field: 'label' | 'cost', value: string) {
     const nextLine = lineItems.map(i => (i.id === id ? { ...i, [field]: value } : i));
     setLineItems(nextLine);
@@ -199,8 +206,7 @@ export function EditableEstimateBody({
 
   function handleAddItem() {
     if (!newLabel.trim() || !newCost.trim()) return;
-    const rawCost = parseFloat(newCost.replace(/[^0-9.]/g, ''));
-    const formattedCost = isNaN(rawCost) ? newCost.trim() : '$' + rawCost.toFixed(2);
+    const formattedCost = formatLineCost(newCost);
     const item: LineItem = { id: newId(), label: newLabel.trim(), cost: formattedCost };
     const nextLine = [...lineItems, item];
     setLineItems(nextLine);
@@ -376,10 +382,18 @@ export function EditableEstimateBody({
                     type="text"
                     value={item.cost}
                     onChange={e => updateLine(item.id, 'cost', e.target.value)}
-                    onFocus={e => { if (parseCost(item.cost) === 0 && !/\d/.test(item.cost)) e.target.select(); }}
+                    onFocus={e => {
+                      const n = parseCost(item.cost);
+                      if (n > 0) {
+                        updateLine(item.id, 'cost', String(n));
+                      } else {
+                        e.target.select();
+                      }
+                    }}
+                    onBlur={() => updateLine(item.id, 'cost', formatLineCost(item.cost))}
                     placeholder="$0"
                     aria-label="Item cost"
-                    className={`w-24 bg-transparent rounded-lg border border-transparent px-3 py-2.5 text-sm focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px] ${
+                    className={`w-28 bg-transparent rounded-lg border border-transparent px-3 py-2.5 text-sm focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px] ${
                       parseCost(item.cost) === 0 && !/\d/.test(item.cost) ? 'text-amber-500 italic' : 'text-zinc-700'
                     }`}
                   />

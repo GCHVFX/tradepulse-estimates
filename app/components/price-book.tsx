@@ -172,15 +172,37 @@ export function PriceBook() {
     URL.revokeObjectURL(url);
   }
 
+  function normalizeHeader(h: string): string {
+    return h
+      .toLowerCase()
+      .trim()
+      .replace(/[\s-]+/g, "_")
+      .replace(/[^a-z0-9_]/g, "")
+      .replace(/_+/g, "_")
+      .replace(/^_|_$/g, "");
+  }
+
   function resolveCol(headers: string[], aliases: string[]): string | null {
-    for (const alias of aliases) {
-      if (headers.includes(alias)) return alias;
+    const normalizedAliases = aliases.map(normalizeHeader);
+    for (const header of headers) {
+      const norm = normalizeHeader(header);
+      if (normalizedAliases.includes(norm)) return header;
     }
     return null;
   }
 
   function csvVal(row: Record<string, string>, col: string | null): string {
     return col ? (row[col] ?? "").trim() : "";
+  }
+
+  function parseMoney(val: string): number {
+    if (!val) return 0;
+    const cleaned = val
+      .replace(/[$,]/g, "")
+      .replace(/\s*(CAD|USD|CDN)\s*/gi, "")
+      .trim();
+    const n = parseFloat(cleaned);
+    return isNaN(n) ? 0 : n;
   }
 
   function csvBool(row: Record<string, string>, col: string | null, fallback: boolean): boolean {
@@ -214,9 +236,9 @@ export function PriceBook() {
         const name = csvVal(row, nameCol);
         const labourStr = csvVal(row, labourCol);
         const priceStr = csvVal(row, priceCol);
-        const labourPrice = parseFloat(labourStr) || parseFloat(priceStr) || 0;
+        const labourPrice = parseMoney(labourStr) || parseMoney(priceStr);
         const materialStr = csvVal(row, materialCol);
-        const materialPrice = parseFloat(materialStr) || 0;
+        const materialPrice = parseMoney(materialStr);
         const desc = csvVal(row, descCol);
         const keywords = csvVal(row, keywordsCol);
         const fullDesc = [desc, keywords].filter(Boolean).join(" | ");

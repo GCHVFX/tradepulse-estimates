@@ -70,8 +70,8 @@ const TEMPLATES: { keywords: RegExp; template: QuoteTemplate }[] = [
       scope:
         "Diagnose the blocked or slow drain, clear the obstruction where accessible, test drainage, and advise if further inspection is required.",
       lineItems: [
-        "Diagnose blocked drain",
-        "Clear drain blockage",
+        "Drain clearing",
+        "Materials allowance",
         "Test drainage and flow",
         "Cleanup",
         "Optional camera inspection if required",
@@ -161,6 +161,11 @@ function findBestMatch(
   templateLabel: string,
   pricebookItems: PricebookItem[],
 ): PricebookItem | null {
+  const labelLower = templateLabel.toLowerCase().trim();
+  for (const item of pricebookItems) {
+    if (item.name.toLowerCase().trim() === labelLower) return item;
+  }
+
   const templateStems = new Set(tokenize(templateLabel));
   let bestItem: PricebookItem | null = null;
   let bestScore = 0;
