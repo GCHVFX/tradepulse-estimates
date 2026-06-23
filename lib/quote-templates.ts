@@ -157,20 +157,30 @@ function tokenize(text: string): string[] {
     .map(stem);
 }
 
+const TRADE_KEYWORDS = ["toilet", "faucet", "drain", "water heater", "tap", "sink"];
+
 function findBestMatch(
   templateLabel: string,
   pricebookItems: PricebookItem[],
+  templateTitle: string,
 ): PricebookItem | null {
   const labelLower = templateLabel.toLowerCase().trim();
   for (const item of pricebookItems) {
     if (item.name.toLowerCase().trim() === labelLower) return item;
   }
 
+  const titleLower = templateTitle.toLowerCase();
   const templateStems = new Set(tokenize(templateLabel));
   let bestItem: PricebookItem | null = null;
   let bestScore = 0;
 
   for (const item of pricebookItems) {
+    const itemNameLower = item.name.toLowerCase();
+    const wrongTrade = TRADE_KEYWORDS.some(
+      (kw) => itemNameLower.includes(kw) && !titleLower.includes(kw),
+    );
+    if (wrongTrade) continue;
+
     const itemText = [item.name, item.description].filter(Boolean).join(" ");
     const itemStems = tokenize(itemText);
     const uniqueItemStems = new Set(itemStems);
@@ -203,7 +213,7 @@ export function buildDraftSummary(
   const remaining = [...(pricebookItems ?? [])];
   const lineItemRows = template.lineItems
     .map((label) => {
-      const match = remaining.length > 0 ? findBestMatch(label, remaining) : null;
+      const match = remaining.length > 0 ? findBestMatch(label, remaining, template.title) : null;
       if (match && match.price > 0) {
         const idx = remaining.indexOf(match);
         if (idx !== -1) remaining.splice(idx, 1);

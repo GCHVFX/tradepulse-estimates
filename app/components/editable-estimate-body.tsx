@@ -103,6 +103,10 @@ export function EditableEstimateBody({
   const deposit = Math.round((total * depositPercent) / 100);
   const balance = total - deposit;
 
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('estimate-total-change', { detail: total }));
+  }, [total]);
+
   function startCommitTimer(
     nextScope: ScopeItem[],
     nextLine: LineItem[],

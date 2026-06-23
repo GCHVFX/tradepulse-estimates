@@ -58,7 +58,17 @@ export function EstimateActions({
   const isQuoteRequest = status === "needs_review" && source === "website_quote";
   const [isConverting, setIsConverting] = useState(false);
   const [convertError, setConvertError] = useState("");
-  const isZeroTotal = !estimateTotal || estimateTotal <= 0;
+  const [liveTotal, setLiveTotal] = useState(estimateTotal ?? 0);
+
+  useEffect(() => {
+    function handleTotalChange(e: Event) {
+      setLiveTotal((e as CustomEvent<number>).detail);
+    }
+    window.addEventListener('estimate-total-change', handleTotalChange);
+    return () => window.removeEventListener('estimate-total-change', handleTotalChange);
+  }, []);
+
+  const isZeroTotal = !liveTotal || liveTotal <= 0;
   const [showSendSheet, setShowSendSheet] = useState(false);
   const [showDoneSheet, setShowDoneSheet] = useState(false);
   const [doneSheetInitialPanel, setDoneSheetInitialPanel] = useState<"review-ready" | "needs-link">("review-ready");
