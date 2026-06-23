@@ -14,12 +14,14 @@ interface Rates {
   markup_percent: number;
   deposit_percent: number;
   deposit_threshold: number;
+  tax_label: string;
+  tax_rate: number;
 }
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
 
 export function PriceBook() {
-  const [rates, setRates] = useState<Rates>({ labour_rate: 0, markup_percent: 0, deposit_percent: 0, deposit_threshold: 0 });
+  const [rates, setRates] = useState<Rates>({ labour_rate: 0, markup_percent: 0, deposit_percent: 0, deposit_threshold: 0, tax_label: 'GST', tax_rate: 5 });
   const [items, setItems] = useState<PriceBookItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [rateStatus, setRateStatus] = useState<SaveStatus>("idle");
@@ -360,6 +362,32 @@ export function PriceBook() {
               />
             </div>
             <p className="text-zinc-400 text-xs">Require deposit on jobs over this amount.</p>
+          </div>
+        </div>
+
+        <div className="flex gap-4">
+          <div className="flex flex-col gap-1.5 flex-1">
+            <label className="text-sm font-medium text-zinc-400">Tax label</label>
+            <input
+              type="text"
+              className={inputClass}
+              placeholder="GST"
+              value={rates.tax_label}
+              onChange={(e) => setRates((r) => ({ ...r, tax_label: e.target.value }))}
+              onBlur={() => setRates((r) => ({ ...r, tax_label: r.tax_label.replace(/[a-zA-Z]+/g, w => w.toUpperCase()).trim() || 'GST' }))}
+            />
+            <p className="text-zinc-400 text-xs">e.g. GST, HST, GST + PST</p>
+          </div>
+          <div className="flex flex-col gap-1.5 flex-1">
+            <label className="text-sm font-medium text-zinc-400">Tax rate (%)</label>
+            <input
+              type="number"
+              className={inputClass}
+              placeholder="5"
+              value={rates.tax_rate || ""}
+              onChange={(e) => setRates((r) => ({ ...r, tax_rate: parseFloat(e.target.value) || 0 }))}
+            />
+            <p className="text-zinc-400 text-xs">Applied to estimate line items.</p>
           </div>
         </div>
 

@@ -71,6 +71,8 @@ export function EditableEstimateBody({
   const [afterSections, setAfterSections] = useState<Array<{ heading: string; content: string }>>(
     () => parsed.afterPricingSections,
   );
+  const [taxLabel, setTaxLabel] = useState(() => parsed.taxLabel);
+  const [taxRate, setTaxRate] = useState(() => parsed.taxRate);
   const [undo, setUndo] = useState<UndoEntry | null>(null);
   const [toastVisible, setToastVisible] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -98,7 +100,7 @@ export function EditableEstimateBody({
     : preambleText;
 
   const subtotal = lineItems.reduce((sum, i) => sum + parseCost(i.cost), 0);
-  const tax = Math.round(subtotal * 0.05);
+  const tax = Math.round(subtotal * (taxRate / 100));
   const total = subtotal + tax;
   const deposit = Math.round((total * depositPercent) / 100);
   const balance = total - deposit;
@@ -113,6 +115,8 @@ export function EditableEstimateBody({
     nextBefore: BeforeSection[],
     nextAfter: Array<{ heading: string; content: string }>,
     nextPreamble: string,
+    nextTaxLabel?: string,
+    nextTaxRate?: number,
   ) {
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(async () => {
@@ -126,6 +130,8 @@ export function EditableEstimateBody({
         depositPercent,
         nextBefore,
         nextAfter,
+        nextTaxLabel ?? taxLabel,
+        nextTaxRate ?? taxRate,
       );
       setSaveStatus('saving');
       try {
@@ -245,6 +251,26 @@ export function EditableEstimateBody({
   function updatePreamble(value: string) {
     setPreambleText(value);
     startCommitTimer(scopeItems, lineItems, beforeSections, afterSections, value);
+  }
+
+  function normalizeTaxLabel(raw: string): string {
+    return raw.replace(/[a-zA-Z]+/g, w => w.toUpperCase()).trim() || 'GST';
+  }
+
+  function updateTaxLabel(value: string) {
+    setTaxLabel(value);
+    startCommitTimer(scopeItems, lineItems, beforeSections, afterSections, preambleText, value, undefined);
+  }
+
+  function commitTaxLabel() {
+    const normalized = normalizeTaxLabel(taxLabel);
+    setTaxLabel(normalized);
+    startCommitTimer(scopeItems, lineItems, beforeSections, afterSections, preambleText, normalized, undefined);
+  }
+
+  function updateTaxRate(value: number) {
+    setTaxRate(value);
+    startCommitTimer(scopeItems, lineItems, beforeSections, afterSections, preambleText, undefined, value);
   }
 
   function handleUndo() {
@@ -537,34 +563,52 @@ export function EditableEstimateBody({
       <div className="mb-4 overflow-x-auto rounded-lg border border-zinc-200">
         <table className="w-full text-sm">
           <tbody>
-            {(
-              [
-                ['Subtotal', formatDollars(subtotal), false],
-                ['Tax (GST 5%)', formatDollars(tax), false],
-                ['Total', formatDollars(total), true],
-                depositPercent === 0
-                  ? ['No deposit required', '', false]
-                  : [`Deposit required (${depositPercent}%)`, formatDollars(deposit), false],
-                ['Balance on completion', depositPercent === 0 ? formatDollars(total) : formatDollars(balance), false],
-              ] as [string, string, boolean][]
-            ).map(([label, amount, bold]) => (
-              <tr key={label}>
-                <td
-                  className={`px-3 py-2.5 border-t border-zinc-200 ${
-                    bold ? 'font-semibold text-zinc-900' : 'text-zinc-700'
-                  }`}
-                >
-                  {label}
-                </td>
-                <td
-                  className={`px-3 py-2.5 border-t border-zinc-200 text-right ${
-                    bold ? 'font-semibold text-zinc-900' : 'text-zinc-700'
-                  }`}
-                >
-                  {amount}
-                </td>
-              </tr>
-            ))}
+            <tr>
+              <td className="px-3 py-2.5 border-t border-zinc-200 text-zinc-700">Subtotal</td>
+              <td className="px-3 py-2.5 border-t border-zinc-200 text-right text-zinc-700">{formatDollars(subtotal)}</td>
+            </tr>
+            <tr>
+              <td className="px-3 py-2.5 border-t border-zinc-200 text-zinc-700">
+                <span className="inline-flex items-baseline gap-0">
+                  <span>Tax&nbsp;(</span>
+                  <input
+                    type="text"
+                    value={taxLabel}
+                    onChange={e => updateTaxLabel(e.target.value)}
+                    onBlur={commitTaxLabel}
+                    className="w-20 bg-transparent border border-transparent rounded px-1 py-0.5 text-sm text-zinc-700 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                    aria-label="Tax label"
+                  />
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={taxRate ? String(parseFloat(taxRate.toFixed(2))) : ''}
+                    onChange={e => updateTaxRate(parseFloat(e.target.value) || 0)}
+                    className="w-10 bg-transparent border border-transparent rounded px-0.5 py-0.5 text-sm text-zinc-700 text-right focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                    aria-label="Tax rate"
+                  /><span>%)</span>
+                </span>
+              </td>
+              <td className="px-3 py-2.5 border-t border-zinc-200 text-right text-zinc-700">{formatDollars(tax)}</td>
+            </tr>
+            <tr>
+              <td className="px-3 py-2.5 border-t border-zinc-200 font-semibold text-zinc-900">Total</td>
+              <td className="px-3 py-2.5 border-t border-zinc-200 text-right font-semibold text-zinc-900">{formatDollars(total)}</td>
+            </tr>
+            <tr>
+              <td className="px-3 py-2.5 border-t border-zinc-200 text-zinc-700">
+                {depositPercent === 0 ? 'No deposit required' : `Deposit required (${depositPercent}%)`}
+              </td>
+              <td className="px-3 py-2.5 border-t border-zinc-200 text-right text-zinc-700">
+                {depositPercent === 0 ? '' : formatDollars(deposit)}
+              </td>
+            </tr>
+            <tr>
+              <td className="px-3 py-2.5 border-t border-zinc-200 text-zinc-700">Balance on completion</td>
+              <td className="px-3 py-2.5 border-t border-zinc-200 text-right text-zinc-700">
+                {depositPercent === 0 ? formatDollars(total) : formatDollars(balance)}
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>

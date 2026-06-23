@@ -15,7 +15,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("id, subscription_status, trial_ends_at, labour_rate, markup_percent, deposit_percent, deposit_threshold")
+    .select("id, subscription_status, trial_ends_at, labour_rate, markup_percent, deposit_percent, deposit_threshold, tax_label, tax_rate")
     .eq("owner_user_id", user.id)
     .maybeSingle();
 
@@ -33,6 +33,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       markup_percent: business!.markup_percent ?? 0,
       deposit_percent: business!.deposit_percent ?? 0,
       deposit_threshold: business!.deposit_threshold ?? 0,
+      tax_label: business!.tax_label ?? 'GST',
+      tax_rate: business!.tax_rate ?? 5,
     },
     items: (items ?? []).map((item) => ({
       id: item.id,
@@ -56,19 +58,21 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
 
   if (!checkAccess(business)) return applyTo(NextResponse.json({ error: "Subscription required" }, { status: 403 }));
 
-  let body: { labour_rate?: unknown; markup_percent?: unknown; deposit_percent?: unknown; deposit_threshold?: unknown };
+  let body: { labour_rate?: unknown; markup_percent?: unknown; deposit_percent?: unknown; deposit_threshold?: unknown; tax_label?: unknown; tax_rate?: unknown };
   try {
     body = await request.json();
   } catch {
     return applyTo(NextResponse.json({ error: "Invalid request body" }, { status: 400 }));
   }
 
-  const values = {
+  const values: Record<string, unknown> = {
     labour_rate: Number(body.labour_rate) || 0,
     markup_percent: Number(body.markup_percent) || 0,
     deposit_percent: Number(body.deposit_percent) || 0,
     deposit_threshold: Number(body.deposit_threshold) || 0,
   };
+  if (typeof body.tax_label === 'string') values.tax_label = body.tax_label.replace(/[a-zA-Z]+/g, (w: string) => w.toUpperCase()).trim() || 'GST';
+  if (body.tax_rate !== undefined) values.tax_rate = Number(body.tax_rate) || 0;
 
   const { error } = await supabaseAdmin
     .from("tpe_businesses")

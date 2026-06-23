@@ -209,6 +209,8 @@ export function buildDraftSummary(
   template: QuoteTemplate,
   customerDescription: string,
   pricebookItems?: PricebookItem[],
+  taxLabel = 'GST',
+  taxRate = 5,
 ): string {
   const remaining = [...(pricebookItems ?? [])];
   const lineItemRows = template.lineItems
@@ -252,7 +254,7 @@ export function buildDraftSummary(
     `| | |`,
     `|---|---|`,
     `| Subtotal | $0 |`,
-    `| Tax (GST 5%) | $0 |`,
+    `| Tax (${taxLabel} ${parseFloat(taxRate.toFixed(2))}%) | $0 |`,
     `| **Total** | **$0** |`,
     `| No deposit required | |`,
     `| Balance on completion | $0 |`,

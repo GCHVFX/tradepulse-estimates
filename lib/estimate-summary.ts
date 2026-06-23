@@ -34,6 +34,8 @@ export interface ParsedSummary {
   scopeItems: ScopeItem[];
   lineItems: LineItem[];
   depositPercent: number;
+  taxLabel: string;
+  taxRate: number;
   beforePricingSections: BeforeSection[];
   afterPricingSections: AfterSection[];
 }
@@ -48,21 +50,21 @@ export function formatDollars(amount: number): string {
   return '$' + Math.round(amount).toLocaleString('en-CA');
 }
 
-export function computeTotals(lineItems: LineItem[]): {
+export function computeTotals(lineItems: LineItem[], taxRate = 5): {
   subtotal: number;
   tax: number;
   total: number;
 } {
   const subtotal = lineItems.reduce((sum, i) => sum + parseCost(i.cost), 0);
-  const tax = Math.round(subtotal * 0.05);
+  const tax = Math.round(subtotal * (taxRate / 100));
   return { subtotal, tax, total: subtotal + tax };
 }
 
 // The AI writes a plain "Total: $X" line at the end of the job summary.
 // Rewrite it from the line items so it always matches the Pricing Summary.
-function syncPreambleTotal(preamble: string, lineItems: LineItem[]): string {
+function syncPreambleTotal(preamble: string, lineItems: LineItem[], taxRate = 5): string {
   if (!preamble) return preamble;
-  const { total } = computeTotals(lineItems);
+  const { total } = computeTotals(lineItems, taxRate);
   return preamble.replace(
     /(^|\n)Total:[^\n]*(\s*)$/i,
     (_match, before: string, after: string) => `${before}Total: ${formatDollars(total)}${after}`,
@@ -93,6 +95,8 @@ export function parseSummary(rawSummary: string): ParsedSummary {
   let scopeItems: ScopeItem[] = [];
   let lineItems: LineItem[] = [];
   let depositPercent = 0;
+  let taxLabel = 'GST';
+  let taxRate = 5;
   const beforePricingSections: BeforeSection[] = [];
   const afterPricingSections: AfterSection[] = [];
   let seenPricing = false;
@@ -124,12 +128,13 @@ export function parseSummary(rawSummary: string): ParsedSummary {
       for (const line of sec.lines) {
         if (/no deposit required/i.test(line)) {
           depositPercent = 0;
-          break;
         }
-        const m = line.match(/Deposit.*?\((\d+)%\)/i);
-        if (m) {
-          depositPercent = parseInt(m[1]);
-          break;
+        const dm = line.match(/Deposit.*?\((\d+)%\)/i);
+        if (dm) depositPercent = parseInt(dm[1]);
+        const tm = line.match(/Tax\s*\(([^)]*?)\s+(\d+(?:\.\d+)?)%\)/i);
+        if (tm) {
+          taxLabel = tm[1].replace(/[a-zA-Z]+/g, w => w.toUpperCase()).trim();
+          taxRate = parseFloat(tm[2]);
         }
       }
     } else {
@@ -157,7 +162,7 @@ export function parseSummary(rawSummary: string): ParsedSummary {
     }
   }
 
-  return { preamble, scopeItems, lineItems, depositPercent, beforePricingSections, afterPricingSections };
+  return { preamble, scopeItems, lineItems, depositPercent, taxLabel, taxRate, beforePricingSections, afterPricingSections };
 }
 
 // ── Section builders ──────────────────────────────────────────────────────────
@@ -181,8 +186,8 @@ function beforeBlock(s: BeforeSection): string {
   return `## ${s.heading}\n${sectionContent}`;
 }
 
-function pricingBlock(lineItems: LineItem[], depositPercent: number): string {
-  const { subtotal, tax, total } = computeTotals(lineItems);
+function pricingBlock(lineItems: LineItem[], depositPercent: number, taxLabel = 'GST', taxRate = 5): string {
+  const { subtotal, tax, total } = computeTotals(lineItems, taxRate);
   const deposit = Math.round((total * depositPercent) / 100);
   const balance = total - deposit;
 
@@ -190,7 +195,7 @@ function pricingBlock(lineItems: LineItem[], depositPercent: number): string {
     '| | |',
     '|---|---|',
     `| Subtotal | ${formatDollars(subtotal)} |`,
-    `| Tax (GST 5%) | ${formatDollars(tax)} |`,
+    `| Tax (${taxLabel} ${parseFloat(taxRate.toFixed(2))}%) | ${formatDollars(tax)} |`,
     `| **Total** | **${formatDollars(total)}** |`,
     depositPercent === 0
       ? '| No deposit required | |'
@@ -209,24 +214,24 @@ export function serializeSummary(
   depositPercent: number,
   beforePricingSections: BeforeSection[],
   afterPricingSections: AfterSection[],
+  taxLabel = 'GST',
+  taxRate = 5,
 ): string {
   const parts: string[] = [];
-  if (preamble) parts.push(syncPreambleTotal(preamble, lineItems));
+  if (preamble) parts.push(syncPreambleTotal(preamble, lineItems, taxRate));
   parts.push(scopeBlock(scopeItems));
   parts.push(lineItemsBlock(lineItems));
   for (const s of beforePricingSections) parts.push(beforeBlock(s));
-  parts.push(pricingBlock(lineItems, depositPercent));
+  parts.push(pricingBlock(lineItems, depositPercent, taxLabel, taxRate));
   for (const s of afterPricingSections) parts.push(`## ${s.heading}\n${s.content}`);
   return parts.join('\n\n');
 }
 
 // ── Total calculator ──────────────────────────────────────────────────────────
-// Same math as the in-app pricing summary: subtotal from line items, 5% GST
-// rounded to whole dollars.
 
 export function calculateEstimateTotal(summary: string): number {
   const p = parseSummary(summary);
-  return Math.round(computeTotals(p.lineItems).total);
+  return Math.round(computeTotals(p.lineItems, p.taxRate).total);
 }
 
 // ── Display formatter ─────────────────────────────────────────────────────────
@@ -238,11 +243,11 @@ export function calculateEstimateTotal(summary: string): number {
 export function formatEstimateForDisplay(summary: string): string {
   const p = parseSummary(summary);
   const parts: string[] = [];
-  if (p.preamble) parts.push(syncPreambleTotal(p.preamble, p.lineItems));
+  if (p.preamble) parts.push(syncPreambleTotal(p.preamble, p.lineItems, p.taxRate));
   parts.push(scopeBlock(p.scopeItems));
   parts.push(lineItemsBlock(p.lineItems));
   for (const s of p.beforePricingSections) parts.push(beforeBlock(s));
-  parts.push(pricingBlock(p.lineItems, p.depositPercent));
+  parts.push(pricingBlock(p.lineItems, p.depositPercent, p.taxLabel, p.taxRate));
   for (const s of p.afterPricingSections) parts.push(`## ${s.heading}\n${s.content}`);
   return parts.join('\n\n');
 }

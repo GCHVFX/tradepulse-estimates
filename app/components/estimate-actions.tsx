@@ -164,15 +164,19 @@ export function EstimateActions({
       const template = matchTemplate(desc);
 
       let pricebookItems: PricebookItem[] = [];
+      let taxLabel = 'GST';
+      let taxRate = 5;
       try {
         const pbRes = await fetch("/api/price-book");
         if (pbRes.ok) {
-          const pbData = await pbRes.json() as { items?: Array<{ name: string; description?: string; unit_price: number }> };
+          const pbData = await pbRes.json() as { rates?: { tax_label?: string; tax_rate?: number }; items?: Array<{ name: string; description?: string; unit_price: number }> };
           pricebookItems = (pbData.items ?? []).map((i) => ({
             name: i.name,
             description: i.description ?? "",
             price: i.unit_price,
           }));
+          if (pbData.rates?.tax_label) taxLabel = pbData.rates.tax_label;
+          if (pbData.rates?.tax_rate !== undefined) taxRate = pbData.rates.tax_rate;
         }
       } catch { /* pricebook fetch failure is non-fatal */ }
 
@@ -182,7 +186,7 @@ export function EstimateActions({
         body: JSON.stringify({
           id: estimateId,
           title: template.title,
-          summary: buildDraftSummary(template, desc, pricebookItems),
+          summary: buildDraftSummary(template, desc, pricebookItems, taxLabel, taxRate),
           status: "draft",
         }),
       });

@@ -45,7 +45,7 @@ Output must follow this exact structure:
    | | |
    |---|---|
    | Subtotal | $XXX |
-   | Tax (GST 5%) | $XXX |
+   | Tax (TAX_LABEL TAX_RATE%) | $XXX |
    | **Total** | **$XXX** |
    | Deposit required | $XXX |
    | Balance on completion | $XXX |
@@ -55,6 +55,11 @@ Output must follow this exact structure:
 9. Notes (omit if nothing relevant)`;
 
 export async function POST(request: NextRequest) {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.error("[generate-estimate] ANTHROPIC_API_KEY is not set");
+    return new NextResponse("Estimate generation is temporarily unavailable.", { status: 500 });
+  }
+
   const { supabase, applyTo } = createApiClient(request);
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return applyTo(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
@@ -66,7 +71,7 @@ export async function POST(request: NextRequest) {
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("id, name, prepared_by, subscription_status, trial_ends_at, labour_rate, markup_percent, deposit_percent, deposit_threshold")
+    .select("id, name, prepared_by, subscription_status, trial_ends_at, labour_rate, markup_percent, deposit_percent, deposit_threshold, tax_label, tax_rate")
     .eq("owner_user_id", user.id)
     .maybeSingle();
 
@@ -137,6 +142,10 @@ export async function POST(request: NextRequest) {
       lines.push(`  - ${item.name}: $${item.labour_price}`);
     });
   }
+  const taxLabel = business.tax_label ?? 'GST';
+  const taxRate = business.tax_rate ?? 5;
+  lines.push(`Tax: use "${taxLabel} ${taxRate}%" as the tax label in the Pricing Summary. Calculate tax as ${taxRate}% of the subtotal.`);
+
   if (business.deposit_percent && business.deposit_threshold) {
     lines.push(`Deposit rule: if the job total exceeds $${business.deposit_threshold}, include a deposit row in the Pricing Summary table showing ${business.deposit_percent}% of the total. Calculate the exact dollar amount. If the total is under $${business.deposit_threshold}, write "No deposit required" in the deposit row.`);
   } else {
@@ -156,8 +165,12 @@ export async function POST(request: NextRequest) {
       messages: [{ role: "user", content: userMessage }],
     });
   } catch (err) {
-    console.error("[generate-estimate] failed to create stream:", err);
     const errStatus = (err as { status?: number }).status;
+    if (errStatus === 401) {
+      console.error("[generate-estimate] Anthropic API authentication failed. Check ANTHROPIC_API_KEY is valid.");
+    } else {
+      console.error("[generate-estimate] failed to create stream:", err instanceof Error ? err.message : err);
+    }
     if (typeof errStatus === "number") {
       void fetch(`${baseUrl}/api/notify-error`, {
         method: "POST",
@@ -239,9 +252,15 @@ export async function POST(request: NextRequest) {
 
         controller.close();
       } catch (err) {
-        console.error("[generate-estimate] stream error:", err);
-        const message = err instanceof Error ? err.message : "Estimate generation failed";
         const errStatus = (err as { status?: number }).status;
+        const message = err instanceof Error ? err.message : "Estimate generation failed";
+
+        if (errStatus === 401) {
+          console.error("[generate-estimate] Anthropic API authentication failed. Check ANTHROPIC_API_KEY is valid.");
+        } else {
+          console.error("[generate-estimate] stream error:", message);
+        }
+
         if (typeof errStatus === "number") {
           void fetch(`${baseUrl}/api/notify-error`, {
             method: "POST",

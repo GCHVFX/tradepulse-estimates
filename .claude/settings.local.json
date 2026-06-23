@@ -22,11 +22,17 @@
       "PowerShell($ready=$false; for\\($i=0;$i -lt 40;$i++\\){ try { $r=Invoke-WebRequest -Uri 'http://localhost:3000/login' -MaximumRedirection 0 -SkipHttpErrorCheck -TimeoutSec 5; if\\($r.StatusCode\\){ $ready=$true; break } } catch { Start-Sleep -Seconds 2 } }; if\\($ready\\){ Write-Output \"SERVER UP \\(status $\\($r.StatusCode\\) on /login\\)\" } else { Write-Output \"NOT READY\" })",
       "mcp__claude_ai_Vercel__list_teams",
       "mcp__claude_ai_Vercel__get_project",
-      "mcp__claude_ai_Vercel__deploy_to_vercel"
+      "mcp__claude_ai_Vercel__deploy_to_vercel",
+      "PowerShell(Get-ChildItem \"C:\\\\\" -Directory -Depth 0 | Select-Object Name; Get-ChildItem \"$env:USERPROFILE\" -Directory -Depth 0 | Select-Object Name)",
+      "mcp__bd8bafa0-1267-4501-9542-6b265dcaa12a__execute_sql",
+      "mcp__13cef253-eccf-4034-b093-91968b0c595c__list_projects",
+      "mcp__13cef253-eccf-4034-b093-91968b0c595c__get_runtime_logs",
+      "mcp__bd8bafa0-1267-4501-9542-6b265dcaa12a__list_tables",
+      "PowerShell(New-Item -ItemType Directory -Force \"C:\\\\Work\\\\web-apps\\\\tradepulse-estimates\\\\docs\\\\superpowers\\\\plans\")"
     ]
   },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "vercel"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }

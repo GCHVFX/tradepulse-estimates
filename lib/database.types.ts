@@ -34,6 +34,8 @@ export type Database = {
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
           subscription_status: string
+          tax_label: string
+          tax_rate: number
           trial_ends_at: string | null
           updated_at: string
         }
@@ -58,6 +60,8 @@ export type Database = {
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           subscription_status?: string
+          tax_label?: string
+          tax_rate?: number
           trial_ends_at?: string | null
           updated_at?: string
         }
@@ -82,6 +86,8 @@ export type Database = {
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           subscription_status?: string
+          tax_label?: string
+          tax_rate?: number
           trial_ends_at?: string | null
           updated_at?: string
         }
