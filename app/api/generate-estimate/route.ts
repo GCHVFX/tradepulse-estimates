@@ -29,7 +29,7 @@ Output must follow this exact structure:
 
 1. Job Title (H1 heading)
 2. Job Summary (2 to 3 sentences)
-3. Total Price (after the summary, write the total price as a simple line like "Total: $1,943". This is plain text, not a heading or table.)
+3. Estimated Total (after the summary, write the total price as a simple line like "Estimated total: $1,943". This is plain text, not a heading or table.)
 4. Scope of Work (bullet list of specific tasks)
 5. Line Items (labour and materials, individually priced)
    Line Items MUST be formatted as markdown pipe tables, not bullet points or plain text. Use this exact format:

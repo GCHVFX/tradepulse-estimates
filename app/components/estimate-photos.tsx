@@ -19,6 +19,7 @@ export function EstimatePhotos({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [failedUrls, setFailedUrls] = useState<Set<string>>(new Set());
 
   if (urls.length === 0) return null;
 
@@ -68,12 +69,19 @@ export function EstimatePhotos({
           <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
             {urls.map((url) => (
               <div key={url} className="relative">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={url}
-                  alt="Job site photo"
-                  className="aspect-square w-full rounded-xl border border-zinc-200 object-cover"
-                />
+                {failedUrls.has(url) ? (
+                  <div className="aspect-square w-full rounded-xl border border-zinc-200 bg-zinc-100 flex items-center justify-center">
+                    <p className="text-zinc-400 text-xs text-center px-2">Photo could not be loaded</p>
+                  </div>
+                ) : (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={url}
+                    alt="Job site photo"
+                    className="aspect-square w-full rounded-xl border border-zinc-200 object-cover"
+                    onError={() => setFailedUrls((prev) => new Set(prev).add(url))}
+                  />
+                )}
                 {deleting === url && (
                   <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/40">
                     <Spinner className="h-6 w-6 text-white" />

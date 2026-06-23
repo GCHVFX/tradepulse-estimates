@@ -162,7 +162,8 @@ export function EstimateActions({
     setIsConverting(true);
     setConvertError("");
     try {
-      let desc = description ?? "";
+      const customerDesc = description ?? "";
+      let photoNotes = "";
 
       if (hasPhotos) {
         try {
@@ -170,12 +171,17 @@ export function EstimateActions({
           if (photoRes.ok) {
             const photoData = await photoRes.json() as { description?: string };
             if (photoData.description) {
-              desc = desc ? `${desc}\n\nFrom photos: ${photoData.description}` : photoData.description;
+              photoNotes = photoData.description
+                .replace(/^#{1,3}\s+.*$/gm, "")
+                .replace(/^[A-Za-z ]+:\s*$/gm, "")
+                .replace(/\n{3,}/g, "\n\n")
+                .trim();
             }
           }
         } catch { /* photo analysis failure is non-fatal */ }
       }
 
+      const desc = photoNotes ? `${customerDesc}\n\n${photoNotes}` : customerDesc;
       const template = matchTemplate(desc);
 
       let pricebookItems: PricebookItem[] = [];
@@ -201,7 +207,7 @@ export function EstimateActions({
         body: JSON.stringify({
           id: estimateId,
           title: template.title,
-          summary: buildDraftSummary(template, desc, pricebookItems, taxLabel, taxRate),
+          summary: buildDraftSummary(template, customerDesc, pricebookItems, taxLabel, taxRate, photoNotes || undefined),
           status: "draft",
         }),
       });

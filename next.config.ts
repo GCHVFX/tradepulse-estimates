@@ -31,9 +31,9 @@ const nextConfig: NextConfig = {
             value: [
               "default-src 'self'",
               `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""} us-assets.i.posthog.com us.i.posthog.com js.stripe.com va.vercel-scripts.com`,
-              "connect-src 'self' us-assets.i.posthog.com us.i.posthog.com o4511196860645376.ingest.us.sentry.io https://hmkkuyznyumhajjqbxpu.supabase.co api.stripe.com",
+              `connect-src 'self' us-assets.i.posthog.com us.i.posthog.com o4511196860645376.ingest.us.sentry.io ${supabaseHostname ? `https://${supabaseHostname}` : ""} api.stripe.com`,
               "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: blob: o4511196860645376.ingest.us.sentry.io hmkkuyznyumhajjqbxpu.supabase.co",
+              `img-src 'self' data: blob: o4511196860645376.ingest.us.sentry.io ${supabaseHostname}`,
               "frame-src js.stripe.com hooks.stripe.com",
               "font-src 'self'",
             ].join("; "),

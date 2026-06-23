@@ -55,9 +55,12 @@ export default async function EstimatePage({
   const photoUrls: string[] = [];
   if (photoRecords && photoRecords.length > 0) {
     for (const record of photoRecords) {
-      const { data: signedUrlData } = await supabaseAdmin.storage
+      const { data: signedUrlData, error: signedUrlError } = await supabaseAdmin.storage
         .from("tpe-estimate-photos")
         .createSignedUrl(record.storage_path, 60 * 60 * 24); // 24 hours
+      if (signedUrlError) {
+        console.error(`[estimate-photos] signed URL failed for ${record.storage_path}:`, signedUrlError.message);
+      }
       if (signedUrlData?.signedUrl) {
         photoUrls.push(signedUrlData.signedUrl);
       }

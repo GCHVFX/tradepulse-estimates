@@ -60,14 +60,12 @@ export function computeTotals(lineItems: LineItem[], taxRate = 5): {
   return { subtotal, tax, total: subtotal + tax };
 }
 
-// The AI writes a plain "Total: $X" line at the end of the job summary.
-// Rewrite it from the line items so it always matches the Pricing Summary.
 function syncPreambleTotal(preamble: string, lineItems: LineItem[], taxRate = 5): string {
   if (!preamble) return preamble;
   const { total } = computeTotals(lineItems, taxRate);
   return preamble.replace(
-    /(^|\n)Total:[^\n]*(\s*)$/i,
-    (_match, before: string, after: string) => `${before}Total: ${formatDollars(total)}${after}`,
+    /(^|\n)(?:Estimated total|Total):[^\n]*(\s*)$/i,
+    (_match, before: string, after: string) => `${before}Estimated total: ${formatDollars(total)}${after}`,
   );
 }
 

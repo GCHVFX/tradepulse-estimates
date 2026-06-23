@@ -33,8 +33,14 @@ const markdownComponents = {
       : typeof children === "string"
         ? children
         : "";
-    if (/^Total:/i.test(text.trim())) {
-      return <p className="font-semibold text-zinc-900 text-base mb-3">{children}</p>;
+    const totalMatch = text.trim().match(/^(?:Estimated total|Total):\s*(\$[\d,]+(?:\.\d+)?)/i);
+    if (totalMatch) {
+      return (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-center justify-between">
+          <span className="text-sm font-medium text-zinc-600">Estimated total</span>
+          <span className="text-xl font-bold text-zinc-900">{totalMatch[1]}</span>
+        </div>
+      );
     }
     return <p className="text-zinc-700 text-sm leading-relaxed mb-3">{children}</p>;
   },

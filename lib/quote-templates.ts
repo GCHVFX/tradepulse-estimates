@@ -211,6 +211,7 @@ export function buildDraftSummary(
   pricebookItems?: PricebookItem[],
   taxLabel = 'GST',
   taxRate = 5,
+  photoNotes?: string,
 ): string {
   const remaining = [...(pricebookItems ?? [])];
   const lineItemRows = template.lineItems
@@ -229,8 +230,13 @@ export function buildDraftSummary(
     .map((a) => `- ${a}`)
     .join("\n");
 
+  const preambleParts = [`Customer request: ${customerDescription}`];
+  if (photoNotes) {
+    preambleParts.push("", `Photo notes: ${photoNotes}`);
+  }
+
   return [
-    `Customer request: ${customerDescription}`,
+    ...preambleParts,
     "",
     `## Scope of Work`,
     "",

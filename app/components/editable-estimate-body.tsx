@@ -63,6 +63,14 @@ export function EditableEstimateBody({
   const { depositPercent } = parsed;
 
   const [preambleText, setPreambleText] = useState<string>(() => parsed.preamble);
+  const [photoNotesText, setPhotoNotesText] = useState<string>(() => {
+    const raw = parsed.preamble;
+    const m = raw.match(/\n\s*Photo notes:\s*/i);
+    if (!m || m.index === undefined) return '';
+    const after = raw.slice(m.index + m[0].length);
+    const totalM = after.match(/\n\s*(?:Estimated total|Total):[^\n]*\s*$/i);
+    return totalM ? after.slice(0, totalM.index).trim() : after.trim();
+  });
   const [scopeItems, setScopeItems] = useState<ScopeItem[]>(() => parsed.scopeItems);
   const [lineItems, setLineItems] = useState<LineItem[]>(() => parsed.lineItems);
   const [beforeSections, setBeforeSections] = useState<BeforeSection[]>(
@@ -91,13 +99,26 @@ export function EditableEstimateBody({
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, []);
 
-  // The AI writes a plain "Total: $X" line at the end of the job summary.
-  // Split it out of the textarea so it can render bold; rejoined on save.
-  const preambleTotalMatch = preambleText.match(/(?:^|\n)(Total:[^\n]*)\s*$/i);
+  // Split preamble into: customer request (read-only), photo notes (editable), total line (bold)
+  const preambleTotalMatch = preambleText.match(/(?:^|\n)((?:Estimated total|Total):[^\n]*)\s*$/i);
   const preambleTotalLine = preambleTotalMatch ? preambleTotalMatch[1].trim() : null;
-  const preambleBody = preambleTotalMatch
-    ? preambleText.slice(0, preambleTotalMatch.index)
+  const preambleWithoutTotal = preambleTotalMatch
+    ? preambleText.slice(0, preambleTotalMatch.index).trim()
     : preambleText;
+
+  const photoNotesMatch = preambleWithoutTotal.match(/\n\s*Photo notes:\s*/i);
+  const hasPhotoNotes = photoNotesMatch && photoNotesMatch.index !== undefined;
+  const customerRequestBlock = hasPhotoNotes
+    ? preambleWithoutTotal.slice(0, photoNotesMatch.index).trim()
+    : preambleWithoutTotal;
+  const customerRequestText = customerRequestBlock.replace(/^Customer request:\s*/i, '');
+
+  function rebuildPreamble(photoNotes: string): string {
+    const parts = [customerRequestBlock];
+    if (photoNotes.trim()) parts.push(`Photo notes: ${photoNotes.trim()}`);
+    if (preambleTotalLine) parts.push(preambleTotalLine);
+    return parts.join('\n\n');
+  }
 
   const subtotal = lineItems.reduce((sum, i) => sum + parseCost(i.cost), 0);
   const tax = Math.round(subtotal * (taxRate / 100));
@@ -253,6 +274,13 @@ export function EditableEstimateBody({
     startCommitTimer(scopeItems, lineItems, beforeSections, afterSections, value);
   }
 
+  function updatePhotoNotes(value: string) {
+    setPhotoNotesText(value);
+    const rebuilt = rebuildPreamble(value);
+    setPreambleText(rebuilt);
+    startCommitTimer(scopeItems, lineItems, beforeSections, afterSections, rebuilt);
+  }
+
   function normalizeTaxLabel(raw: string): string {
     return raw.replace(/[a-zA-Z]+/g, w => w.toUpperCase()).trim() || 'GST';
   }
@@ -310,27 +338,60 @@ export function EditableEstimateBody({
 
   return (
     <>
-      {/* Preamble (job summary) — inline editable; Total line rendered bold below */}
-      <textarea
-        ref={el => {
-          if (el) {
-            el.style.height = 'auto';
-            el.style.height = `${el.scrollHeight}px`;
+      {/* Customer request — read-only */}
+      {customerRequestBlock.match(/^Customer request:/i) ? (
+        <div className="mb-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5">
+          <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1">Customer request</p>
+          <p className="text-sm text-zinc-700 leading-relaxed whitespace-pre-wrap">{customerRequestText}</p>
+        </div>
+      ) : (
+        <textarea
+          ref={el => {
+            if (el) {
+              el.style.height = 'auto';
+              el.style.height = `${el.scrollHeight}px`;
+            }
+          }}
+          value={preambleWithoutTotal}
+          onChange={e =>
+            updatePreamble(
+              preambleTotalLine
+                ? `${e.target.value.replace(/\n$/, '')}\n\n${preambleTotalLine}`
+                : e.target.value,
+            )
           }
-        }}
-        value={preambleBody}
-        onChange={e =>
-          updatePreamble(
-            preambleTotalLine
-              ? `${e.target.value.replace(/\n$/, '')}\n\n${preambleTotalLine}`
-              : e.target.value,
-          )
-        }
-        aria-label="Edit job summary"
-        className="mb-3 w-full resize-none overflow-hidden border border-zinc-200 rounded-lg px-3 py-2.5 text-sm text-zinc-700 leading-relaxed focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
-      />
+          aria-label="Edit job summary"
+          className="mb-3 w-full resize-none overflow-hidden border border-zinc-200 rounded-lg px-3 py-2.5 text-sm text-zinc-700 leading-relaxed focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+        />
+      )}
+
+      {/* Photo notes — editable */}
+      {hasPhotoNotes && (
+        <div className="mb-3">
+          <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1 flex items-center gap-1">
+            Photo notes
+            <span className="text-amber-500 text-sm" aria-hidden="true">{'✏︎'}</span>
+          </p>
+          <textarea
+            ref={el => {
+              if (el) {
+                el.style.height = 'auto';
+                el.style.height = `${el.scrollHeight}px`;
+              }
+            }}
+            value={photoNotesText}
+            onChange={e => updatePhotoNotes(e.target.value)}
+            aria-label="Edit photo notes"
+            className="w-full resize-none overflow-hidden border border-zinc-200 rounded-lg px-3 py-2.5 text-sm text-zinc-700 leading-relaxed focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+          />
+        </div>
+      )}
+
       {preambleTotalLine && (
-        <p className="mb-3 font-semibold text-zinc-900 text-base">{`Total: ${formatDollars(total)}`}</p>
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-center justify-between">
+          <span className="text-sm font-medium text-zinc-600">Estimated total</span>
+          <span className="text-xl font-bold text-zinc-900">{formatDollars(total)}</span>
+        </div>
       )}
 
       {/* Scope of Work */}
