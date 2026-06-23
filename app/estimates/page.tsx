@@ -5,6 +5,7 @@ import { Logo } from "@/app/components/logo";
 import { BottomNav } from "@/app/components/bottom-nav";
 import { DeleteEstimateButton } from "@/app/components/delete-estimate-button";
 import { LocalDateText } from "@/app/components/local-date-text";
+import { SetupChecklist } from "@/app/components/setup-checklist";
 
 interface Estimate {
   id: string;
@@ -31,7 +32,7 @@ export default async function EstimatesPage() {
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("id")
+    .select("id, name")
     .eq("owner_user_id", user.id)
     .maybeSingle();
 
@@ -64,6 +65,14 @@ export default async function EstimatesPage() {
       </header>
 
       <main className="flex-1 px-5 pb-28">
+        {business && (
+          <SetupChecklist
+            businessId={business.id}
+            hasBusinessName={Boolean(business.name?.trim())}
+            hasEstimates={items.length > 0}
+            hasWebsiteQuotes={items.some((e) => e.source === "website_quote")}
+          />
+        )}
         {items.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
             <svg viewBox="0 0 48 48" fill="none" className="w-12 h-12 text-zinc-700" aria-hidden="true">

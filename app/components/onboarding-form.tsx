@@ -123,13 +123,21 @@ export function OnboardingForm({
   return (
     <div className="flex flex-col gap-5">
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 px-4 py-4">
-        <p className="text-sm font-semibold text-white">Your TradePulse business ID</p>
+        <p className="text-sm font-semibold text-white">Website connection code</p>
+        <p className="mt-1 text-xs text-zinc-400">
+          Give this code to whoever is setting up your website. It connects website quote requests to your TradePulse account.
+        </p>
         <p className="mt-2 break-all rounded-lg bg-zinc-950 px-3 py-2 font-mono text-xs text-zinc-300">
           {businessId}
         </p>
-        <p className="mt-2 text-xs text-zinc-500">
-          Use this later as TP_BUSINESS_ID when connecting a standalone contractor website.
-        </p>
+        <details className="mt-2">
+          <summary className="text-xs text-zinc-500 cursor-pointer hover:text-zinc-400 transition-colors">
+            Developer setup
+          </summary>
+          <p className="mt-1 text-xs text-zinc-500">
+            Set as an environment variable: <code className="text-zinc-400">TP_BUSINESS_ID={businessId}</code>
+          </p>
+        </details>
       </div>
 
       <div className="flex items-end gap-3">

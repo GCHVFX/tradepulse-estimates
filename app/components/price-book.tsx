@@ -7,6 +7,7 @@ interface PriceBookItem {
   id: string;
   name: string;
   unit_price: number;
+  material_price: number;
 }
 
 interface Rates {
@@ -500,7 +501,15 @@ export function PriceBook() {
               <div className="flex-1 min-w-0">
                 <p className="text-white text-sm font-medium truncate">{item.name}</p>
                 <p className="text-zinc-400 text-xs mt-0.5">
-                  ${item.unit_price.toFixed(2)}
+                  {item.material_price > 0 ? (
+                    <>
+                      <span className="text-zinc-500">Labour</span> ${item.unit_price.toFixed(2)}
+                      {" · "}
+                      <span className="text-zinc-500">Materials</span> ${item.material_price.toFixed(2)}
+                    </>
+                  ) : (
+                    `$${item.unit_price.toFixed(2)}`
+                  )}
                 </p>
               </div>
               <div className="flex items-center shrink-0">

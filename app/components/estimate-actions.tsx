@@ -30,6 +30,7 @@ interface EstimateActionsProps {
   estimateTotal?: number;
   businessHasPaymentLink?: boolean;
   justSent?: boolean;
+  hasPhotos?: boolean;
 }
 
 export function EstimateActions({
@@ -53,6 +54,7 @@ export function EstimateActions({
   estimateTotal,
   businessHasPaymentLink,
   justSent,
+  hasPhotos,
 }: EstimateActionsProps) {
   const router = useRouter();
   const isQuoteRequest = status === "needs_review" && source === "website_quote";
@@ -160,7 +162,20 @@ export function EstimateActions({
     setIsConverting(true);
     setConvertError("");
     try {
-      const desc = description ?? "";
+      let desc = description ?? "";
+
+      if (hasPhotos) {
+        try {
+          const photoRes = await fetch(`/api/estimates/${estimateId}/analyze-photos`, { method: "POST" });
+          if (photoRes.ok) {
+            const photoData = await photoRes.json() as { description?: string };
+            if (photoData.description) {
+              desc = desc ? `${desc}\n\nFrom photos: ${photoData.description}` : photoData.description;
+            }
+          }
+        } catch { /* photo analysis failure is non-fatal */ }
+      }
+
       const template = matchTemplate(desc);
 
       let pricebookItems: PricebookItem[] = [];

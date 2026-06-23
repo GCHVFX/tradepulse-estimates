@@ -141,7 +141,7 @@ export default async function EstimatePage({
               <EstimatePhotos
                 estimateId={estimate.id}
                 photoUrls={photoUrls}
-                includePhotos={estimate.include_photos ?? false}
+                includePhotos={photoUrls.length > 0}
                 isPro={isPro}
               />
             </div>
@@ -178,7 +178,7 @@ export default async function EstimatePage({
               <EstimatePhotos
                 estimateId={estimate.id}
                 photoUrls={photoUrls}
-                includePhotos={estimate.include_photos ?? false}
+                includePhotos={estimate.include_photos ?? (photoUrls.length > 0)}
                 isPro={isPro}
               />
             </div>
@@ -208,6 +208,7 @@ export default async function EstimatePage({
         estimateTotal={estimateTotal}
         justSent={sent === "1"}
         businessHasPaymentLink={Boolean(business?.payment_link?.trim())}
+        hasPhotos={photoUrls.length > 0}
       />
 
       <div className="fixed bottom-0 left-0 right-0 z-40">
