@@ -510,10 +510,12 @@ export default async function LandingPage() {
                   <span className="text-4xl font-bold text-slate-900">$69</span>
                   <span className="text-slate-500 mb-1">/month CAD</span>
                 </div>
+                <p className="text-sm text-slate-400 mb-1">Same price as Jobber&apos;s starting plan.</p>
                 <p className="text-sm text-slate-400 mb-6">Everything in Starter, plus:</p>
 
                 <div className="flex flex-col gap-3 mb-8">
                   {[
+                    { title: "AI Photo Estimates", description: "Take photos of the job site and AI writes the description for you." },
                     { title: "Google Review Requests", description: "Ask customers for Google reviews after completed jobs." },
                     { title: "Payment Reminders", description: "Automatic follow-up on unpaid invoices." },
                     { title: "Customer Follow-Ups", description: "Stay connected with past customers and generate repeat business." },
@@ -534,13 +536,13 @@ export default async function LandingPage() {
                 <Link href="/signup?plan=pro"
                   className="flex items-center justify-center w-full h-12 rounded-xl text-base font-semibold text-white transition hover:opacity-90"
                   style={{ background: "#0D1B2E" }}>
-                  Try free for 14 days
+                  Subscribe Now
                 </Link>
               </div>
 
             </div>
 
-            <p className="text-center text-xs text-slate-400 mt-6">14-day free trial on both plans. No card required.</p>
+            <p className="text-center text-xs text-slate-400 mt-6">Starter includes a 14-day free trial, no card required. Pro is billed right away.</p>
           </div>
         </section>
 

@@ -67,19 +67,30 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       metadata: { user_id: userId },
     });
 
-    const subscription = await stripe.subscriptions.create({
-      customer: customer.id,
-      items: [{ price: plan === "pro" ? process.env.STRIPE_PRO_PRICE_ID! : process.env.STRIPE_PRICE_ID! }],
-      trial_period_days: 14,
-      payment_settings: {
-        save_default_payment_method: "on_subscription",
-      },
-      expand: ["latest_invoice.payment_intent"],
-    });
+    let subscriptionStatus = "trial";
+    let trialEndsAt: string | null = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+    let stripeSubscriptionId: string | null = null;
 
-    const trialEndsAt = subscription.trial_end
-      ? new Date(subscription.trial_end * 1000).toISOString()
-      : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+    if (plan === "starter") {
+      const subscription = await stripe.subscriptions.create({
+        customer: customer.id,
+        items: [{ price: process.env.STRIPE_PRICE_ID! }],
+        trial_period_days: 14,
+        payment_settings: {
+          save_default_payment_method: "on_subscription",
+        },
+        expand: ["latest_invoice.payment_intent"],
+      });
+      trialEndsAt = subscription.trial_end
+        ? new Date(subscription.trial_end * 1000).toISOString()
+        : trialEndsAt;
+      stripeSubscriptionId = subscription.id;
+    } else {
+      // Pro is paid up front, no trial, no subscription created yet.
+      // The user goes straight to Stripe Checkout right after this.
+      subscriptionStatus = "incomplete";
+      trialEndsAt = null;
+    }
 
     const { error: dbError } = await supabaseAdmin
       .from("tpe_businesses")
@@ -89,10 +100,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           name: "",
           slug: userId,
           plan,
-          subscription_status: "trial",
+          subscription_status: subscriptionStatus,
           trial_ends_at: trialEndsAt,
           stripe_customer_id: customer.id,
-          stripe_subscription_id: subscription.id,
+          stripe_subscription_id: stripeSubscriptionId,
           ...(signupSource ? { signup_source: signupSource } : {}),
         },
         { onConflict: "owner_user_id" }

@@ -38,6 +38,8 @@ export default async function SubscribePage({ searchParams }: { searchParams: Pr
     ? Math.max(0, Math.ceil((new Date(business.trial_ends_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
     : 0;
 
+  const neverHadTrial = business?.plan === "pro" && !business?.trial_ends_at;
+
   return (
     <div className="min-h-dvh bg-zinc-950 text-white flex flex-col items-center justify-center px-5 py-16">
       <div className="w-full max-w-md">
@@ -48,10 +50,16 @@ export default async function SubscribePage({ searchParams }: { searchParams: Pr
             </svg>
           </div>
           <h1 className="text-2xl font-bold">
-            {trialExpired ? "Your trial has ended" : `${daysLeft} days left in your trial`}
+            {neverHadTrial
+              ? "Finish setting up Pro"
+              : trialExpired
+              ? "Your trial has ended"
+              : `${daysLeft} days left in your trial`}
           </h1>
           <p className="text-zinc-400 text-sm mt-2">
-            {trialExpired
+            {neverHadTrial
+              ? "Subscribe to start using TradePulse Pro."
+              : trialExpired
               ? "Subscribe to keep creating estimates and sending quotes."
               : "Subscribe now to continue without interruption after your trial ends."}
           </p>
