@@ -19,7 +19,12 @@ export function BottomNav({ onNewClick }: BottomNavProps = {}) {
     setUpgrading(true);
     try {
       const res = await fetch("/api/billing/upgrade", { method: "POST" });
-      const data = await res.json() as { upgraded?: boolean; redirectUrl?: string };
+      const data = await res.json() as { upgraded?: boolean; redirectUrl?: string; error?: string };
+      if (!res.ok || data.error) {
+        router.push("/subscribe");
+        setUpgrading(false);
+        return;
+      }
       if (data.redirectUrl) {
         window.location.href = data.redirectUrl;
         return;
@@ -32,6 +37,7 @@ export function BottomNav({ onNewClick }: BottomNavProps = {}) {
     } catch {
       // fall through
     }
+    router.push("/subscribe");
     setUpgrading(false);
   }
 

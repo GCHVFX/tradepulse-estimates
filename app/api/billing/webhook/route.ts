@@ -24,24 +24,76 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return null;
   };
 
+  const toBusinessSubscriptionStatus = (status: Stripe.Subscription.Status): string => {
+    if (status === "trialing") return "trial";
+    if (status === "canceled") return "cancelled";
+    return status;
+  };
+
   const customerId = getCustomerId(event.data.object);
 
   if (customerId) {
+    if (event.type === "checkout.session.completed") {
+      const session = event.data.object as Stripe.Checkout.Session;
+      const subscription =
+        typeof session.subscription === "string"
+          ? session.subscription
+          : session.subscription?.id;
+      const plan = session.metadata?.plan;
+      const previousSubscriptionId = session.metadata?.previous_subscription_id;
+      const update: Record<string, unknown> = {};
+
+      if (subscription) update.stripe_subscription_id = subscription;
+      if (plan === "starter" || plan === "pro") update.plan = plan;
+
+      if (Object.keys(update).length > 0) {
+        await supabaseAdmin
+          .from("tpe_businesses")
+          .update(update)
+          .eq("stripe_customer_id", customerId);
+      }
+
+      if (previousSubscriptionId && previousSubscriptionId !== subscription) {
+        try {
+          const previous = await stripe.subscriptions.retrieve(previousSubscriptionId);
+          if (previous.status === "trialing") {
+            await stripe.subscriptions.cancel(previousSubscriptionId);
+          }
+        } catch (err) {
+          console.error("[webhook] failed to cancel previous trial:", err instanceof Error ? err.message : err);
+        }
+      }
+    }
+
     if (event.type === "customer.subscription.created" || event.type === "customer.subscription.updated") {
       const sub = event.data.object as Stripe.Subscription;
+      const { data: currentBusiness, error: currentBusinessError } = await supabaseAdmin
+        .from("tpe_businesses")
+        .select("stripe_subscription_id")
+        .eq("stripe_customer_id", customerId)
+        .maybeSingle();
 
-      let status: string;
+      if (currentBusinessError) {
+        console.error("[webhook] failed to look up current subscription:", currentBusinessError.message);
+        return NextResponse.json({ received: true });
+      }
+
+      if (currentBusiness?.stripe_subscription_id && currentBusiness.stripe_subscription_id !== sub.id) {
+        console.warn("[webhook] ignored stale subscription event", {
+          eventType: event.type,
+          eventSubscriptionId: sub.id,
+          currentSubscriptionId: currentBusiness.stripe_subscription_id,
+        });
+        return NextResponse.json({ received: true });
+      }
+
       const update: Record<string, unknown> = { stripe_subscription_id: sub.id };
+      const status = toBusinessSubscriptionStatus(sub.status);
 
       if (sub.status === "trialing") {
-        status = "trial";
         update.trial_ends_at = sub.trial_end
           ? new Date(sub.trial_end * 1000).toISOString()
           : null;
-      } else if (sub.status === "active") {
-        status = "active";
-      } else {
-        status = sub.status;
       }
 
       update.subscription_status = status;
@@ -60,11 +112,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     if (event.type === "customer.subscription.deleted") {
       const sub = event.data.object as Stripe.Subscription;
-      // Only mark canceled if this is still the subscription on record.
+      // Stripe uses "canceled"; the app stores "cancelled".
+      // Only mark cancelled if this is still the subscription on record.
       // Guards against old trial subs being deleted after a user has since subscribed.
       await supabaseAdmin
         .from("tpe_businesses")
-        .update({ subscription_status: "canceled" })
+        .update({ subscription_status: "cancelled" })
         .eq("stripe_customer_id", customerId)
         .eq("stripe_subscription_id", sub.id);
     }

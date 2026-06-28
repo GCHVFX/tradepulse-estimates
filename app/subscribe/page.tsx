@@ -15,30 +15,62 @@ export default async function SubscribePage({ searchParams }: { searchParams: Pr
   const { data: business } = user
     ? await supabaseAdmin
         .from("tpe_businesses")
-        .select("subscription_status, trial_ends_at, name, plan")
+        .select("subscription_status, trial_ends_at, name, plan, stripe_customer_id")
         .eq("owner_user_id", user.id)
         .maybeSingle()
     : { data: null };
 
   const isActive = business?.subscription_status === "active";
-  const isTrialing =
-    business?.subscription_status === "trial" &&
-    business?.trial_ends_at &&
-    new Date(business.trial_ends_at) > new Date();
   const isComplimentary = business?.subscription_status === "complimentary";
-  const hasAccess = isActive || isTrialing || isComplimentary;
-
-  if (!isPreview && hasAccess) redirect("/estimates");
 
   const trialExpired = business?.trial_ends_at
     ? new Date(business.trial_ends_at) < new Date()
     : true;
 
   const daysLeft = business?.trial_ends_at
-    ? Math.max(0, Math.ceil((new Date(business.trial_ends_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+    ? Math.max(0, Math.ceil((new Date(business.trial_ends_at).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))
     : 0;
 
   const neverHadTrial = business?.plan === "pro" && !business?.trial_ends_at;
+  const isStarter = business?.plan !== "pro";
+  const isPro = business?.plan === "pro";
+  const isPastDue = business?.subscription_status === "past_due";
+  const canManageBilling = Boolean(business?.stripe_customer_id) && (isActive || isPastDue);
+  const showProOnly = (isActive && isStarter) || neverHadTrial;
+  const proBillingReady = Boolean(process.env.STRIPE_PRO_PRICE_ID);
+  const availablePlans: Array<"starter" | "pro"> = showProOnly
+    ? proBillingReady ? ["pro"] : []
+    : proBillingReady ? ["starter", "pro"] : ["starter"];
+  const showPlanPicker = !isComplimentary && !(isActive && isPro) && !isPastDue && availablePlans.length > 0;
+  const proOnlyUnavailable = showProOnly && !proBillingReady;
+
+  const title = isComplimentary
+    ? "You're all set"
+    : isActive && isPro
+    ? "You're on Pro"
+    : isActive && isStarter
+    ? "Upgrade to Pro"
+    : isPastDue
+    ? "Update your billing"
+    : neverHadTrial
+    ? "Finish setting up Pro"
+    : trialExpired
+    ? "Your trial has ended"
+    : `${daysLeft} days left in your trial`;
+
+  const description = isComplimentary
+    ? "Your complimentary TradePulse access is active. No billing needed."
+    : isActive && isPro
+    ? "Manage or cancel your TradePulse Pro subscription from Stripe."
+    : isActive && isStarter
+    ? "Add photo estimates, review requests, and payment reminders."
+    : isPastDue
+    ? "Update your payment method in Stripe to keep using TradePulse."
+    : neverHadTrial
+    ? "Subscribe to start using TradePulse Pro."
+    : trialExpired
+    ? "Choose Starter or Pro to keep creating estimates and sending quotes."
+    : "Choose Starter or Pro when you're ready. You can also keep using your trial until it ends.";
 
   return (
     <div className="min-h-dvh bg-zinc-950 text-white flex flex-col items-center justify-center px-5 py-16">
@@ -49,33 +81,58 @@ export default async function SubscribePage({ searchParams }: { searchParams: Pr
               <path d="M9 2L4 9h4l-1 5 5-7H8l1-5z" fill="#09090b" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold">
-            {neverHadTrial
-              ? "Finish setting up Pro"
-              : trialExpired
-              ? "Your trial has ended"
-              : `${daysLeft} days left in your trial`}
-          </h1>
+          <h1 className="text-2xl font-bold">{title}</h1>
           <p className="text-zinc-400 text-sm mt-2">
-            {neverHadTrial
-              ? "Subscribe to start using TradePulse Pro."
-              : trialExpired
-              ? "Subscribe to keep creating estimates and sending quotes."
-              : "Subscribe now to continue without interruption after your trial ends."}
+            {description}
           </p>
         </div>
 
         <div className="mb-4">
-          <p className="text-zinc-400 text-sm mb-4 text-center">Cancel anytime from your profile.</p>
+          {showPlanPicker ? (
+            <>
+              <p className="text-zinc-400 text-sm mb-4 text-center">
+                {proBillingReady
+                  ? "Cancel anytime from your profile."
+                  : "Pro checkout is not configured yet. Starter is available now."}
+              </p>
 
-          <PlanPicker
-            defaultPlan={business?.plan === "pro" ? "pro" : "starter"}
-            disabled={isPreview}
-          />
+              <PlanPicker
+                defaultPlan={showProOnly ? "pro" : business?.plan === "pro" && proBillingReady ? "pro" : "starter"}
+                availablePlans={availablePlans}
+                submitAction={showProOnly ? "/api/billing/upgrade" : undefined}
+                submitLabel={showProOnly ? "Upgrade to Pro, $69/month" : undefined}
+                disabled={isPreview}
+              />
+            </>
+          ) : (
+            <div className="rounded-2xl bg-zinc-900 border border-zinc-800 p-6 text-center">
+              <p className="text-white font-semibold">
+                {proOnlyUnavailable ? "Pro billing is not ready" : isPastDue ? "Payment needs attention" : "No upgrade needed"}
+              </p>
+              <p className="text-zinc-400 text-sm mt-2">
+                {proOnlyUnavailable
+                  ? "Pro checkout is not configured yet. Email support if you need this upgrade right away."
+                  : isPastDue
+                  ? "Open Stripe to update your card or manage your subscription."
+                  : "You already have every TradePulse feature."}
+              </p>
+            </div>
+          )}
         </div>
 
-        <p className="text-center text-zinc-500 text-xs">
-          Powered by Stripe. Your payment is secure.
+        {canManageBilling && !isPreview && (
+          <form action="/api/billing/portal" method="POST" className="mt-3">
+            <button
+              type="submit"
+              className="w-full text-zinc-400 hover:text-zinc-300 text-sm py-3 transition-colors min-h-[44px]"
+            >
+              Manage or cancel subscription
+            </button>
+          </form>
+        )}
+
+        <p className="text-center text-zinc-500 text-xs mt-3">
+          Powered by Stripe. Your payment is secure. Refund requests are handled manually by support.
         </p>
 
         <p className="text-center text-zinc-400 text-sm mt-4">
@@ -85,7 +142,7 @@ export default async function SubscribePage({ searchParams }: { searchParams: Pr
           </a>
         </p>
 
-        {!trialExpired && (
+        {!trialExpired && !isActive && (
           <div className="text-center mt-4">
             <Link href="/new" className="text-zinc-600 hover:text-zinc-400 text-sm transition-colors">
               Continue trial ({daysLeft} days remaining)

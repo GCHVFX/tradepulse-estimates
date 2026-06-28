@@ -15,7 +15,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("stripe_customer_id, stripe_subscription_id, name, email")
+    .select("stripe_customer_id, stripe_subscription_id, name, email, plan, subscription_status")
     .eq("owner_user_id", user.id)
     .maybeSingle();
 
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (customerId) {
       try {
         await stripe.customers.retrieve(customerId);
-      } catch (err) {
+      } catch {
         console.warn("[checkout] customer not found in Stripe, recreating:", customerId);
         customerId = null; // Force recreation
       }
@@ -62,26 +62,38 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         .eq("owner_user_id", user.id);
     }
 
-    // If the user has a trial subscription in Stripe, cancel it before creating a paid subscription
+    let previousSubscriptionId: string | undefined;
+
+    // If the user has a trial subscription in Stripe, cancel it only after
+    // paid checkout completes. Otherwise backing out of Stripe would remove
+    // the trial subscription before the user actually subscribes.
     if (business.stripe_subscription_id) {
       try {
         const existing = await stripe.subscriptions.retrieve(business.stripe_subscription_id);
         if (existing.status === "trialing") {
-          await supabaseAdmin
-            .from("tpe_businesses")
-            .update({ stripe_subscription_id: null })
-            .eq("owner_user_id", user.id);
-
-          await stripe.subscriptions.cancel(business.stripe_subscription_id);
+          previousSubscriptionId = business.stripe_subscription_id;
         }
       } catch (err) {
-        console.error("[checkout] failed to cancel trial:", err instanceof Error ? err.message : err);
+        console.error("[checkout] failed to inspect trial:", err instanceof Error ? err.message : err);
       }
     }
 
     const url = new URL(request.url);
     const plan = url.searchParams.get("plan") === "pro" ? "pro" : "starter";
+
+    if (business.subscription_status === "active") {
+      if (business.plan === "pro") {
+        return applyTo(NextResponse.redirect(new URL("/profile", request.url), 303));
+      }
+
+      return applyTo(NextResponse.redirect(new URL("/subscribe", request.url), 303));
+    }
+
     const priceId = plan === "pro" ? process.env.STRIPE_PRO_PRICE_ID : process.env.STRIPE_PRICE_ID;
+    if (!priceId) {
+      console.error(`[checkout] ${plan} price ID not configured`);
+      return applyTo(NextResponse.json({ error: "Billing not configured" }, { status: 500 }));
+    }
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
@@ -95,7 +107,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       ],
       success_url: `${origin}/new?subscribed=1`,
       cancel_url: `${origin}/subscribe`,
-      metadata: { user_id: user.id, plan },
+      metadata: {
+        user_id: user.id,
+        plan,
+        ...(previousSubscriptionId ? { previous_subscription_id: previousSubscriptionId } : {}),
+      },
     });
 
     if (!session.url) {

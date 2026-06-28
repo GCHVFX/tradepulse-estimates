@@ -542,7 +542,9 @@ export default async function LandingPage() {
 
             </div>
 
-            <p className="text-center text-xs text-slate-400 mt-6">Starter includes a 14-day free trial, no card required. Pro is billed right away.</p>
+            <p className="text-center text-xs text-slate-400 mt-6">
+              Starter includes a 14-day free trial, no card required. Pro is billed right away. First paid charge has a 30-day money-back guarantee.
+            </p>
           </div>
         </section>
 
@@ -577,7 +579,7 @@ export default async function LandingPage() {
                 },
                 {
                   q: "Can I cancel anytime?",
-                  a: "Yes. No credit card required to start. If you subscribe after your trial, you can cancel anytime from your Profile page and you won't be charged again.",
+                  a: "Yes. No credit card required to start. If you subscribe after your trial, you can cancel anytime from your Profile page and you won't be charged again. Your first paid charge has a 30-day money-back guarantee handled by support.",
                 },
               ].map(item => (
                 <div key={item.q} className="rounded-xl bg-white border border-slate-200 p-6">

@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "Terms of Service — TradePulse",
+  title: "Terms of Service - TradePulse",
   description: "The terms that govern your use of TradePulse.",
 };
 
@@ -59,7 +59,7 @@ export default function TermsPage() {
         <ul className="text-zinc-300 text-sm leading-relaxed mt-4 list-disc pl-5 space-y-1">
           <li>Share your account with other people</li>
           <li>Use TradePulse for any unlawful purpose</li>
-          <li>Attempt to access other users' data</li>
+          <li>Attempt to access other users&apos; data</li>
           <li>Reverse engineer or copy any part of the service</li>
         </ul>
 
@@ -74,8 +74,21 @@ export default function TermsPage() {
 
         <p className="text-zinc-300 text-sm leading-relaxed mt-4">
           Subscriptions are billed monthly. You can cancel at any time.
-          Cancellation takes effect at the end of the current billing period. We
-          do not offer refunds for partial months.
+          Cancellation takes effect at the end of the current billing period.
+        </p>
+
+        <p className="text-zinc-300 text-sm leading-relaxed mt-4">
+          TradePulse offers a 30-day money-back guarantee on your first paid
+          subscription charge. To request a refund, contact{" "}
+          <a
+            href="mailto:support@trytradepulse.com"
+            className="text-white underline"
+          >
+            support@trytradepulse.com
+          </a>{" "}
+          within 30 days of that charge. Refunds are reviewed and processed
+          manually through Stripe. After that first 30-day window, we do not
+          offer refunds for partial months.
         </p>
 
         <p className="text-zinc-300 text-sm leading-relaxed mt-4">
@@ -85,7 +98,7 @@ export default function TermsPage() {
 
         <p className="text-zinc-300 text-sm leading-relaxed mt-4">
           Payments are processed by Stripe. By subscribing, you also agree to
-          Stripe's terms of service.
+          Stripe&apos;s terms of service.
         </p>
 
         <h2 className="text-lg font-semibold mt-8 mb-2 text-white">

@@ -74,6 +74,7 @@ export function ProfileForm({
   const [copied, setCopied] = useState(false);
   const [upgrading, setUpgrading] = useState(false);
   const [upgraded, setUpgraded] = useState(false);
+  const [upgradeError, setUpgradeError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
   const reviewSectionRef = useRef<HTMLDivElement>(null);
@@ -119,7 +120,7 @@ export function ProfileForm({
       autoSaveTimerRef.current = null;
       setIsDirty(false);
 
-      // Resolve review link — don't save empty/invalid over a valid saved one
+      // Resolve review link. Do not save empty/invalid over a valid saved one.
       let linkToSave = googleReviewLink.trim();
       if (linkToSave && !linkToSave.includes("writereview")) {
         const converted = tryConvertToReviewLink(linkToSave);
@@ -172,7 +173,7 @@ export function ProfileForm({
       try {
         await navigator.share({ title: "TradePulse", url: referralUrl });
       } catch {
-        // user cancelled or not supported — fall through to copy
+        // User cancelled or sharing is not supported. Fall through to copy.
         await handleCopy();
       }
     } else {
@@ -182,9 +183,14 @@ export function ProfileForm({
 
   async function handleUpgrade() {
     setUpgrading(true);
+    setUpgradeError("");
     try {
       const res = await fetch("/api/billing/upgrade", { method: "POST" });
       const data = await res.json() as { upgraded?: boolean; redirectUrl?: string; error?: string };
+      if (!res.ok || data.error) {
+        setUpgradeError(data.error ?? "Could not start the upgrade. Email support if this keeps happening.");
+        return;
+      }
       if (data.redirectUrl) {
         window.location.href = data.redirectUrl;
         return;
@@ -194,7 +200,7 @@ export function ProfileForm({
         router.refresh();
       }
     } catch {
-      // fall through
+      setUpgradeError("Could not start the upgrade. Email support if this keeps happening.");
     } finally {
       setUpgrading(false);
     }
@@ -497,7 +503,7 @@ export function ProfileForm({
             onChange={(e) => setPreparedBy(e.target.value)}
             autoComplete="name"
           />
-          <p className="text-zinc-400 text-xs">Appears as "Prepared by" on estimates.</p>
+          <p className="text-zinc-400 text-xs">Appears as &quot;Prepared by&quot; on estimates.</p>
         </div>
 
         {/* Phone */}
@@ -529,7 +535,7 @@ export function ProfileForm({
           />
         </div>
 
-        {/* Google Reviews — Pro only */}
+        {/* Google Reviews - Pro only */}
         {plan === "pro" && (
         <div ref={reviewSectionRef} className="flex flex-col gap-2">
           <label className="text-sm font-medium text-zinc-400">Google Reviews</label>
@@ -761,11 +767,14 @@ export function ProfileForm({
                 onClick={handleUpgrade}
                 className="mt-2 w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-bold text-sm rounded-xl py-3 transition-colors min-h-[44px] flex items-center justify-center gap-2"
               >
-                {upgrading ? "Upgrading..." : "Upgrade to Pro — $69/month"}
+                {upgrading ? "Upgrading..." : "Upgrade to Pro, $69/month"}
               </button>
             )}
             {upgraded && (
               <p className="text-emerald-400 text-sm text-center font-medium mt-1">You&apos;re on Pro now.</p>
+            )}
+            {upgradeError && (
+              <p className="text-red-400 text-xs text-center mt-1">{upgradeError}</p>
             )}
           </div>
         )}
@@ -788,21 +797,27 @@ export function ProfileForm({
                     Upgrading...
                   </>
                 ) : (
-                  "Upgrade to Pro — $69/month"
+                  "Upgrade to Pro, $69/month"
                 )}
               </button>
             )}
             {upgraded && (
               <p className="text-emerald-400 text-sm text-center font-medium">You&apos;re on Pro now.</p>
             )}
+            {upgradeError && (
+              <p className="text-red-400 text-xs text-center">{upgradeError}</p>
+            )}
             <form action="/api/billing/portal" method="POST">
               <button
                 type="submit"
                 className="w-full text-zinc-600 hover:text-zinc-400 text-xs py-2 transition-colors"
               >
-                Manage billing
+                Manage or cancel subscription
               </button>
             </form>
+            <p className="text-center text-zinc-600 text-xs leading-relaxed">
+              Need a refund? Email support within 30 days of your first paid charge. Refunds are handled manually.
+            </p>
           </div>
         )}
       </div>
