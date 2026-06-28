@@ -70,7 +70,6 @@ export default async function EstimatesPage() {
             businessId={business.id}
             hasBusinessName={Boolean(business.name?.trim())}
             hasEstimates={items.length > 0}
-            hasWebsiteQuotes={items.some((e) => e.source === "website_quote")}
           />
         )}
         {items.length === 0 ? (

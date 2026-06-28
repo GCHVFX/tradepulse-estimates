@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useBusinessProfile } from "@/lib/hooks/use-business-profile";
@@ -12,6 +13,27 @@ export function BottomNav({ onNewClick }: BottomNavProps = {}) {
   const pathname = usePathname();
   const router = useRouter();
   const { isPro, isLoading } = useBusinessProfile();
+  const [upgrading, setUpgrading] = useState(false);
+
+  async function handleUpgradeTap() {
+    setUpgrading(true);
+    try {
+      const res = await fetch("/api/billing/upgrade", { method: "POST" });
+      const data = await res.json() as { upgraded?: boolean; redirectUrl?: string };
+      if (data.redirectUrl) {
+        window.location.href = data.redirectUrl;
+        return;
+      }
+      if (data.upgraded) {
+        router.push("/payments");
+        router.refresh();
+        return;
+      }
+    } catch {
+      // fall through
+    }
+    setUpgrading(false);
+  }
 
   const handleNew = () => {
     if (onNewClick) {
@@ -50,23 +72,36 @@ export function BottomNav({ onNewClick }: BottomNavProps = {}) {
         <span className="text-xs font-medium">Estimates</span>
       </Link>
 
-      <Link
-        href="/payments"
-        className={`relative flex-1 flex flex-col items-center gap-1 pt-2.5 pb-7 min-h-[44px] transition-colors ${
-          pathname === "/payments" ? "text-amber-500" : "text-zinc-300 hover:text-white"
-        }`}
-      >
-        {!isLoading && !isPro && (
+      {!isLoading && !isPro ? (
+        <button
+          type="button"
+          disabled={upgrading}
+          onClick={handleUpgradeTap}
+          className="relative flex-1 flex flex-col items-center gap-1 pt-2.5 pb-7 min-h-[44px] transition-colors text-zinc-300 hover:text-white"
+        >
           <span className="absolute top-1 right-2 text-[9px] font-bold leading-none text-amber-500 bg-amber-500/10 border border-amber-500/30 rounded px-1 py-0.5">
             PRO
           </span>
-        )}
-        <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5" aria-hidden="true">
-          <circle cx="10" cy="10" r="8.5" stroke="currentColor" strokeWidth="1.5" />
-          <path d="M10 5.5v9M12.25 7.5c-.45-.7-1.25-1.1-2.25-1.1-1.25 0-2.25.7-2.25 1.7 0 2.3 4.5 1.2 4.5 3.5 0 1-1 1.7-2.25 1.7-1 0-1.8-.4-2.25-1.1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-        </svg>
-        <span className="text-xs font-medium">Payments</span>
-      </Link>
+          <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5" aria-hidden="true">
+            <circle cx="10" cy="10" r="8.5" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M10 5.5v9M12.25 7.5c-.45-.7-1.25-1.1-2.25-1.1-1.25 0-2.25.7-2.25 1.7 0 2.3 4.5 1.2 4.5 3.5 0 1-1 1.7-2.25 1.7-1 0-1.8-.4-2.25-1.1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+          <span className="text-xs font-medium">Payments</span>
+        </button>
+      ) : (
+        <Link
+          href="/payments"
+          className={`relative flex-1 flex flex-col items-center gap-1 pt-2.5 pb-7 min-h-[44px] transition-colors ${
+            pathname === "/payments" ? "text-amber-500" : "text-zinc-300 hover:text-white"
+          }`}
+        >
+          <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5" aria-hidden="true">
+            <circle cx="10" cy="10" r="8.5" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M10 5.5v9M12.25 7.5c-.45-.7-1.25-1.1-2.25-1.1-1.25 0-2.25.7-2.25 1.7 0 2.3 4.5 1.2 4.5 3.5 0 1-1 1.7-2.25 1.7-1 0-1.8-.4-2.25-1.1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+          <span className="text-xs font-medium">Payments</span>
+        </Link>
+      )}
 
       <Link
         href="/rates"

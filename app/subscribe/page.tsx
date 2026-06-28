@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createSupabaseServerClient, supabaseAdmin } from "@/lib/supabase-server";
+import { PlanPicker } from "@/app/components/plan-picker";
 
 export default async function SubscribePage({ searchParams }: { searchParams: Promise<{ preview?: string }> }) {
   const { preview } = await searchParams;
@@ -14,7 +15,7 @@ export default async function SubscribePage({ searchParams }: { searchParams: Pr
   const { data: business } = user
     ? await supabaseAdmin
         .from("tpe_businesses")
-        .select("subscription_status, trial_ends_at, name")
+        .select("subscription_status, trial_ends_at, name, plan")
         .eq("owner_user_id", user.id)
         .maybeSingle()
     : { data: null };
@@ -56,54 +57,13 @@ export default async function SubscribePage({ searchParams }: { searchParams: Pr
           </p>
         </div>
 
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 mb-4">
-          <div className="flex items-end gap-2 mb-1">
-            <span className="text-4xl font-bold">$39</span>
-            <span className="text-zinc-400 mb-1">/month</span>
-          </div>
-          <p className="text-zinc-400 text-sm mb-4">Cancel anytime from your profile.</p>
+        <div className="mb-4">
+          <p className="text-zinc-400 text-sm mb-4 text-center">Cancel anytime from your profile.</p>
 
-          <div className="bg-zinc-800/50 rounded-xl px-4 py-3 mb-6">
-            <p className="text-zinc-300 text-sm leading-relaxed">
-              Most contractors spend 30–60 minutes creating an estimate. TradePulse helps create professional estimates in seconds.
-            </p>
-          </div>
-
-          <ul className="space-y-2.5 mb-6">
-            {[
-              "Unlimited estimates",
-              "SMS and email sending",
-              "Custom rates and price book",
-              "Your logo on estimates",
-              "PDF download",
-            ].map(feature => (
-              <li key={feature} className="flex items-center gap-3 text-sm text-zinc-300">
-                <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4 text-emerald-500 shrink-0" aria-hidden="true">
-                  <path d="M3 8l3.5 3.5 6.5-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                {feature}
-              </li>
-            ))}
-          </ul>
-
-          {isPreview ? (
-            <button
-              type="button"
-              disabled
-              className="w-full bg-amber-500 opacity-40 cursor-not-allowed text-zinc-950 font-bold text-base rounded-xl py-4 min-h-[56px]"
-            >
-              Subscribe, $39/month
-            </button>
-          ) : (
-            <form action="/api/billing/checkout" method="POST">
-              <button
-                type="submit"
-                className="w-full bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
-              >
-                Subscribe, $39/month
-              </button>
-            </form>
-          )}
+          <PlanPicker
+            defaultPlan={business?.plan === "pro" ? "pro" : "starter"}
+            disabled={isPreview}
+          />
         </div>
 
         <p className="text-center text-zinc-500 text-xs">

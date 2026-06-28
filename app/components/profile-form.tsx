@@ -72,6 +72,8 @@ export function ProfileForm({
   const [reviewLinkSaveError, setReviewLinkSaveError] = useState("");
   const [reviewLinkAdded, setReviewLinkAdded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [upgrading, setUpgrading] = useState(false);
+  const [upgraded, setUpgraded] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
   const reviewSectionRef = useRef<HTMLDivElement>(null);
@@ -175,6 +177,26 @@ export function ProfileForm({
       }
     } else {
       await handleCopy();
+    }
+  }
+
+  async function handleUpgrade() {
+    setUpgrading(true);
+    try {
+      const res = await fetch("/api/billing/upgrade", { method: "POST" });
+      const data = await res.json() as { upgraded?: boolean; redirectUrl?: string; error?: string };
+      if (data.redirectUrl) {
+        window.location.href = data.redirectUrl;
+        return;
+      }
+      if (data.upgraded) {
+        setUpgraded(true);
+        router.refresh();
+      }
+    } catch {
+      // fall through
+    } finally {
+      setUpgrading(false);
     }
   }
 
@@ -658,15 +680,7 @@ export function ProfileForm({
           )
         )}
 
-        {businessId && (
-          <div className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3.5">
-            <p className="text-sm font-medium text-white">TradePulse Business ID</p>
-            <p className="mt-2 break-all rounded-lg bg-zinc-950 px-3 py-2 font-mono text-xs text-zinc-300">
-              {businessId}
-            </p>
-            <p className="mt-2 text-xs text-zinc-400">Use this as TP_BUSINESS_ID when connecting a standalone contractor website.</p>
-          </div>
-        )}
+
 
         <a
           href="/rates"
@@ -740,18 +754,56 @@ export function ProfileForm({
                 Subscribe now to keep access
               </a>
             )}
+            {plan === "starter" && (
+              <button
+                type="button"
+                disabled={upgrading}
+                onClick={handleUpgrade}
+                className="mt-2 w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-bold text-sm rounded-xl py-3 transition-colors min-h-[44px] flex items-center justify-center gap-2"
+              >
+                {upgrading ? "Upgrading..." : "Upgrade to Pro — $69/month"}
+              </button>
+            )}
+            {upgraded && (
+              <p className="text-emerald-400 text-sm text-center font-medium mt-1">You&apos;re on Pro now.</p>
+            )}
           </div>
         )}
 
         {subscriptionStatus === "active" && (
-          <form action="/api/billing/portal" method="POST">
-            <button
-              type="submit"
-              className="w-full text-zinc-600 hover:text-zinc-400 text-xs py-2 transition-colors"
-            >
-              Manage billing
-            </button>
-          </form>
+          <div className="flex flex-col gap-2">
+            {plan === "starter" && (
+              <button
+                type="button"
+                disabled={upgrading}
+                onClick={handleUpgrade}
+                className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-bold text-sm rounded-xl py-3.5 transition-colors min-h-[44px] flex items-center justify-center gap-2"
+              >
+                {upgrading ? (
+                  <>
+                    <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Upgrading...
+                  </>
+                ) : (
+                  "Upgrade to Pro — $69/month"
+                )}
+              </button>
+            )}
+            {upgraded && (
+              <p className="text-emerald-400 text-sm text-center font-medium">You&apos;re on Pro now.</p>
+            )}
+            <form action="/api/billing/portal" method="POST">
+              <button
+                type="submit"
+                className="w-full text-zinc-600 hover:text-zinc-400 text-xs py-2 transition-colors"
+              >
+                Manage billing
+              </button>
+            </form>
+          </div>
         )}
       </div>
 

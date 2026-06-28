@@ -7,7 +7,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
 
-  let body: { email?: unknown; password?: unknown; signup_source?: unknown };
+  let body: { email?: unknown; password?: unknown; signup_source?: unknown; plan?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -15,6 +15,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const { email, password, signup_source } = body;
+  const plan = body.plan === "pro" ? "pro" : "starter";
   const url = new URL(request.url);
   const refParam = url.searchParams.get("ref")?.trim() || undefined;
   const signupSource =
@@ -68,7 +69,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const subscription = await stripe.subscriptions.create({
       customer: customer.id,
-      items: [{ price: process.env.STRIPE_PRICE_ID! }],
+      items: [{ price: plan === "pro" ? process.env.STRIPE_PRO_PRICE_ID! : process.env.STRIPE_PRICE_ID! }],
       trial_period_days: 14,
       payment_settings: {
         save_default_payment_method: "on_subscription",
@@ -87,7 +88,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           owner_user_id: userId,
           name: "",
           slug: userId,
-          plan: "starter",
+          plan,
           subscription_status: "trial",
           trial_ends_at: trialEndsAt,
           stripe_customer_id: customer.id,

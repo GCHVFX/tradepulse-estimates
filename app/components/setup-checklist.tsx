@@ -7,7 +7,6 @@ interface SetupChecklistProps {
   businessId: string;
   hasBusinessName: boolean;
   hasEstimates: boolean;
-  hasWebsiteQuotes: boolean;
 }
 
 const DISMISS_KEY = "tpe_setup_checklist_dismissed";
@@ -29,7 +28,7 @@ function EmptyIcon() {
   );
 }
 
-export function SetupChecklist({ businessId, hasBusinessName, hasEstimates, hasWebsiteQuotes }: SetupChecklistProps) {
+export function SetupChecklist({ businessId, hasBusinessName, hasEstimates }: SetupChecklistProps) {
   const [dismissed, setDismissed] = useState(true);
   const [hasPricebook, setHasPricebook] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -53,7 +52,6 @@ export function SetupChecklist({ businessId, hasBusinessName, hasEstimates, hasW
   const steps = [
     { done: hasBusinessName, label: "Set up your business profile", href: "/profile" },
     { done: hasPricebook, label: "Add your rates and price book", href: "/rates" },
-    { done: hasWebsiteQuotes, label: "Connect your website", href: null },
     { done: hasEstimates, label: "Create your first estimate", href: "/new" },
   ];
 
@@ -148,14 +146,6 @@ export function SetupChecklist({ businessId, hasBusinessName, hasEstimates, hasW
                           {copied ? "Copied" : "Copy"}
                         </button>
                       </div>
-                      <details className="mt-2">
-                        <summary className="text-xs text-zinc-500 cursor-pointer hover:text-zinc-400 transition-colors">
-                          Developer setup
-                        </summary>
-                        <p className="mt-1 text-xs text-zinc-500">
-                          Set as an environment variable: <code className="text-zinc-400">TP_BUSINESS_ID={businessId}</code>
-                        </p>
-                      </details>
                     </div>
                   </div>
                 )}

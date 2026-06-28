@@ -17,6 +17,7 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [signupSource, setSignupSource] = useState("");
+  const [plan, setPlan] = useState("starter");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -24,6 +25,7 @@ export default function SignupPage() {
     const utm = params.get("utm_source");
     if (ref) setSignupSource(ref);
     else if (utm) setSignupSource(utm);
+    if (params.get("plan") === "pro") setPlan("pro");
   }, []);
 
   async function handleSignUp() {
@@ -37,7 +39,7 @@ export default function SignupPage() {
       const res = await fetch(apiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, plan }),
       });
 
       const data = await res.json();

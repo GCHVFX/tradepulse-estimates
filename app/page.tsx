@@ -435,53 +435,17 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        {/* Coming Soon */}
-        <section className="py-8 sm:py-10 bg-white border-t border-slate-100">
-          <div className="mx-auto max-w-3xl px-6 sm:px-10">
-            <div className="text-center mb-5">
-              <p className="text-sm font-semibold uppercase tracking-widest mb-2" style={{ color: "#f59e0b" }}>Coming Soon</p>
-              <h2 className="text-xl sm:text-2xl font-bold text-slate-900">More ways to keep jobs moving</h2>
-              <p className="mt-2 text-sm text-slate-500 max-w-lg mx-auto leading-relaxed">
-                TradePulse is expanding beyond estimates with tools that help contractors collect reviews, follow up on unpaid invoices, and stay connected with past customers.
-              </p>
-            </div>
-
-            <div className="grid sm:grid-cols-3 gap-3 mb-5">
-              {[
-                { title: "Google Review Requests", description: "Ask customers for Google reviews after completed jobs." },
-                { title: "Payment Reminders", description: "Follow up on unpaid invoices." },
-                { title: "Customer Follow-Ups", description: "Stay connected with past customers and generate repeat business." },
-              ].map(item => (
-                <div key={item.title} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5">
-                  <div className="flex items-start gap-2.5">
-                    <svg className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                      <path d="M3 8l3.5 3.5 6.5-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">{item.title}</p>
-                      <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{item.description}</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <p className="text-center text-xs text-slate-500">Available in a future TradePulse Pro plan.</p>
-          </div>
-        </section>
-
         {/* Pricing */}
         <section id="pricing" className="py-12 sm:py-16 bg-white">
           <div className="mx-auto max-w-3xl px-6 sm:px-10">
             <div className="text-center mb-8">
               <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: "#0D1B2E", opacity: 0.4 }}>Pricing</p>
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Simple, flat pricing</h2>
-              <p className="mt-4 text-lg text-slate-500">No per-estimate fees. No seat charges. One flat rate.</p>
+              <p className="mt-4 text-lg text-slate-500">No per-estimate fees. No seat charges. Two flat rates.</p>
             </div>
 
-            {/* Competitor comparison */}
             <p className="text-xs font-semibold uppercase tracking-widest text-center mb-3" style={{ color: "#94A3B8" }}>How we compare</p>
-            <div className="grid grid-cols-3 gap-0 mb-8 rounded-2xl overflow-hidden border border-slate-200">
+            <div className="grid grid-cols-3 gap-0 mb-10 rounded-2xl overflow-hidden border border-slate-200">
               {[
                 { name: "ServiceTitan", price: "$250+", note: "per month" },
                 { name: "Jobber", price: "$69+", note: "per month" },
@@ -492,55 +456,91 @@ export default async function LandingPage() {
                   <p className="text-xs font-semibold mb-3" style={{ color: c.highlight ? "rgba(255,255,255,0.5)" : "#94A3B8" }}>{c.name}</p>
                   <p className="text-2xl sm:text-3xl font-bold" style={{ color: c.highlight ? "#f59e0b" : "#CBD5E1" }}>{c.price}</p>
                   <p className="text-xs mt-1" style={{ color: c.highlight ? "rgba(255,255,255,0.4)" : "#CBD5E1" }}>{c.note}</p>
-                  {c.highlight && <p className="text-xs font-semibold mt-2" style={{ color: "#f59e0b" }}>Everything included</p>}
+                  {c.highlight && <p className="text-xs font-semibold mt-2" style={{ color: "#f59e0b" }}>Everything starts here</p>}
                 </div>
               ))}
             </div>
+          </div>
 
-            <div className="rounded-2xl border-2 p-8 sm:p-10 relative" style={{ borderColor: "#0D1B2E" }}>
-              <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
-                <span className="px-4 py-1 rounded-full text-xs font-semibold text-white" style={{ background: "#0D1B2E" }}>
-                  14-day free trial
-                </span>
+          <div className="mx-auto max-w-4xl px-6 sm:px-10">
+            <div className="grid sm:grid-cols-2 gap-6">
+
+              <div className="rounded-2xl border-2 p-8 relative" style={{ borderColor: "#E2E8F0" }}>
+                <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: "#94A3B8" }}>Starter</p>
+                <div className="flex items-end gap-2 mb-2">
+                  <span className="text-4xl font-bold text-slate-900">$39</span>
+                  <span className="text-slate-500 mb-1">/month CAD</span>
+                </div>
+                <p className="text-sm text-slate-400 mb-6">Estimates only. No card required for a 14-day trial.</p>
+
+                <div className="flex flex-col gap-2.5 mb-8">
+                  {[
+                    "Unlimited estimates",
+                    "SMS and email sending",
+                    "Your logo on every estimate",
+                    "Custom rates and price book",
+                    "Customer details saved",
+                    "PDF download",
+                  ].map(feature => (
+                    <div key={feature} className="flex items-center gap-3">
+                      <svg className="w-5 h-5 shrink-0 text-emerald-500" viewBox="0 0 16 16" fill="none">
+                        <circle cx="8" cy="8" r="7" fill="#ECFDF5" />
+                        <path d="M5 8l2 2 4-4" stroke="#10B981" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      <span className="text-sm text-slate-600">{feature}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <Link href={ctaHref}
+                  className="flex items-center justify-center w-full h-12 rounded-xl text-base font-semibold text-white transition hover:opacity-90"
+                  style={{ background: "#64748B" }}>
+                  {ctaLabel}
+                </Link>
               </div>
 
-              <div className="flex flex-col sm:flex-row sm:items-end gap-2 mb-2">
-                <span className="text-5xl font-bold text-slate-900">$39</span>
-                <span className="text-slate-500 mb-1">/month CAD</span>
+              <div className="rounded-2xl border-2 p-8 relative" style={{ borderColor: "#0D1B2E" }}>
+                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
+                  <span className="px-4 py-1 rounded-full text-xs font-semibold" style={{ background: "#f59e0b", color: "#0D1B2E" }}>
+                    Everything included
+                  </span>
+                </div>
+                <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: "#0D1B2E" }}>Pro</p>
+                <div className="flex items-end gap-2 mb-2">
+                  <span className="text-4xl font-bold text-slate-900">$69</span>
+                  <span className="text-slate-500 mb-1">/month CAD</span>
+                </div>
+                <p className="text-sm text-slate-400 mb-6">Everything in Starter, plus:</p>
+
+                <div className="flex flex-col gap-3 mb-8">
+                  {[
+                    { title: "Google Review Requests", description: "Ask customers for Google reviews after completed jobs." },
+                    { title: "Payment Reminders", description: "Automatic follow-up on unpaid invoices." },
+                    { title: "Customer Follow-Ups", description: "Stay connected with past customers and generate repeat business." },
+                  ].map(item => (
+                    <div key={item.title} className="flex items-start gap-3">
+                      <svg className="w-5 h-5 shrink-0 text-emerald-500 mt-0.5" viewBox="0 0 16 16" fill="none">
+                        <circle cx="8" cy="8" r="7" fill="#ECFDF5" />
+                        <path d="M5 8l2 2 4-4" stroke="#10B981" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">{item.title}</p>
+                        <p className="text-xs text-slate-500">{item.description}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <Link href="/signup?plan=pro"
+                  className="flex items-center justify-center w-full h-12 rounded-xl text-base font-semibold text-white transition hover:opacity-90"
+                  style={{ background: "#0D1B2E" }}>
+                  Try free for 14 days
+                </Link>
               </div>
-              <p className="text-sm text-slate-400 mb-8">No card required for trial. Cancel any time before day 14 and pay nothing.</p>
 
-              <div className="grid sm:grid-cols-2 gap-3 mb-8">
-                {[
-                  "Unlimited estimates",
-                  "SMS and email sending",
-                  "Your logo on every estimate",
-                  "Custom rates and price book",
-                  "Customer details saved",
-                  "PDF download",
-                  "Share link for customers",
-                  "Works on phone and desktop",
-                ].map(feature => (
-                  <div key={feature} className="flex items-center gap-3">
-                    <svg className="w-5 h-5 shrink-0 text-emerald-500" viewBox="0 0 16 16" fill="none">
-                      <circle cx="8" cy="8" r="7" fill="#ECFDF5" />
-                      <path d="M5 8l2 2 4-4" stroke="#10B981" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    <span className="text-sm text-slate-600">{feature}</span>
-                  </div>
-                ))}
-              </div>
-
-              <Link href={ctaHref}
-                className="flex items-center justify-center w-full h-12 rounded-xl text-base font-semibold text-white transition hover:opacity-90"
-                style={{ background: "#0D1B2E" }}>
-                {ctaLabel}
-              </Link>
-
-              <p className="text-center text-xs text-slate-400 mt-4">
-                Reviews, Payments, and Follow-Up tools coming soon on Pro plan
-              </p>
             </div>
+
+            <p className="text-center text-xs text-slate-400 mt-6">14-day free trial on both plans. No card required.</p>
           </div>
         </section>
 

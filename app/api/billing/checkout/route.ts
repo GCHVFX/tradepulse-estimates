@@ -79,19 +79,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
     }
 
+    const url = new URL(request.url);
+    const plan = url.searchParams.get("plan") === "pro" ? "pro" : "starter";
+    const priceId = plan === "pro" ? process.env.STRIPE_PRO_PRICE_ID : process.env.STRIPE_PRICE_ID;
+
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: "subscription",
       payment_method_types: ["card"],
       line_items: [
         {
-          price: process.env.STRIPE_PRICE_ID,
+          price: priceId,
           quantity: 1,
         },
       ],
       success_url: `${origin}/new?subscribed=1`,
       cancel_url: `${origin}/subscribe`,
-      metadata: { user_id: user.id },
+      metadata: { user_id: user.id, plan },
     });
 
     if (!session.url) {
