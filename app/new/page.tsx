@@ -406,7 +406,9 @@ function FormView({
 
       <main className="flex-1 px-5 pb-52 flex flex-col gap-5">
         <div className="flex flex-col gap-2">
-          <p className="text-xs text-zinc-300">Describe the job.</p>
+          {!isFirstTime && (
+            <p className="text-xs text-zinc-300">Describe the job.</p>
+          )}
           <textarea
             ref={textareaRef}
             className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3.5 text-white placeholder-zinc-400 text-base leading-relaxed resize-none focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-40"
