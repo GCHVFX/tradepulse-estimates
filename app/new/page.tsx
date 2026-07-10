@@ -30,6 +30,8 @@ const EXAMPLE_CHIPS = [
   { label: "Electrical Panel Upgrade", text: "Upgrade 100A panel to 200A. Pull permit, new Square D panel, reconnect all circuits, about 6 hours." },
 ] as const;
 
+const PHOTO_PRO_GATE_MESSAGE = "Photo estimates are a Pro feature. Upgrade to Pro to use your camera.";
+
 const jobPlaceholders = [
   "Replace hot water tank in basement",
   "Install 200 amp electrical panel",
@@ -496,9 +498,7 @@ function FormView({
           ) : (
             <button
               type="button"
-              onClick={() =>
-                setPhotoError("Photo estimates are a Pro feature. Upgrade to Pro to use your camera.")
-              }
+              onClick={() => setPhotoError(PHOTO_PRO_GATE_MESSAGE)}
               className="w-full flex items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm font-medium text-zinc-600 transition-colors min-h-[44px]"
             >
               <CameraIcon className="w-5 h-5" />
@@ -530,7 +530,21 @@ function FormView({
               {photos.length === 1 ? "Photo analysed." : `All ${photos.length} photos analysed.`}
             </p>
           )}
-          {photoError && <p className="text-red-400 text-sm">{photoError}</p>}
+          {photoError && (
+            <p className="text-red-400 text-sm">
+              {photoError === PHOTO_PRO_GATE_MESSAGE ? (
+                <>
+                  Photo estimates are a Pro feature.{" "}
+                  <Link href="/subscribe" className="underline hover:text-red-300">
+                    Upgrade to Pro
+                  </Link>{" "}
+                  to use your camera.
+                </>
+              ) : (
+                photoError
+              )}
+            </p>
+          )}
           {isFirstTime && (
             <div className="flex flex-col gap-1.5 mt-1">
               <p className="text-xs text-zinc-300">Try:</p>
