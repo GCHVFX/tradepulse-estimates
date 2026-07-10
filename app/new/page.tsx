@@ -27,7 +27,6 @@ const PREFILLS: Record<string, string> = {
 
 const EXAMPLE_CHIPS = [
   { label: "Water Heater Replacement", text: "Replace 50-gallon gas water heater. New unit, expansion tank, about 3 hours labour." },
-  { label: "Lawn Mowing Service", text: "Mow front and back lawn, trim edges and curb, blow off driveway, about 2 hours." },
   { label: "Electrical Panel Upgrade", text: "Upgrade 100A panel to 200A. Pull permit, new Square D panel, reconnect all circuits, about 6 hours." },
 ] as const;
 
@@ -400,6 +399,9 @@ function FormView({
     <div className="min-h-dvh bg-zinc-950 text-white flex flex-col">
       <header className="px-5 pt-10 pb-6 shrink-0">
         <Logo />
+        {isFirstTime && (
+          <p className="text-zinc-400 text-sm mt-3">Try it with any job description, or tap a preset below.</p>
+        )}
       </header>
 
       <main className="flex-1 px-5 pb-52 flex flex-col gap-5">
