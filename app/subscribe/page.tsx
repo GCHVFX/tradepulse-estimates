@@ -15,7 +15,7 @@ export default async function SubscribePage({ searchParams }: { searchParams: Pr
   const { data: business } = user
     ? await supabaseAdmin
         .from("tpe_businesses")
-        .select("subscription_status, trial_ends_at, name, plan, stripe_customer_id")
+        .select("subscription_status, trial_ends_at, name, plan, stripe_customer_id, stripe_subscription_id")
         .eq("owner_user_id", user.id)
         .maybeSingle()
     : { data: null };
@@ -35,13 +35,17 @@ export default async function SubscribePage({ searchParams }: { searchParams: Pr
   const isStarter = business?.plan !== "pro";
   const isPro = business?.plan === "pro";
   const isPastDue = business?.subscription_status === "past_due";
-  const canManageBilling = Boolean(business?.stripe_customer_id) && (isActive || isPastDue);
+  // Only offer the Stripe Portal when there is a subscription on file to manage.
+  // A lapsed trial has a customer but no paid subscription; they need Checkout.
+  const hasStripeSubscription = Boolean(business?.stripe_customer_id && business?.stripe_subscription_id);
+  const needsPortal = isPastDue && hasStripeSubscription;
+  const canManageBilling = hasStripeSubscription && (isActive || isPastDue);
   const showProOnly = (isActive && isStarter) || neverHadTrial;
   const proBillingReady = Boolean(process.env.STRIPE_PRO_PRICE_ID);
   const availablePlans: Array<"starter" | "pro"> = showProOnly
     ? proBillingReady ? ["pro"] : []
     : proBillingReady ? ["starter", "pro"] : ["starter"];
-  const showPlanPicker = !isComplimentary && !(isActive && isPro) && !isPastDue && availablePlans.length > 0;
+  const showPlanPicker = !isComplimentary && !(isActive && isPro) && !needsPortal && availablePlans.length > 0;
   const proOnlyUnavailable = showProOnly && !proBillingReady;
 
   const title = isComplimentary
@@ -50,8 +54,10 @@ export default async function SubscribePage({ searchParams }: { searchParams: Pr
     ? "You're on Pro"
     : isActive && isStarter
     ? "Upgrade to Pro"
-    : isPastDue
+    : needsPortal
     ? "Update your billing"
+    : isPastDue
+    ? "Subscribe to keep using TradePulse"
     : neverHadTrial
     ? "Finish setting up Pro"
     : trialExpired
@@ -64,8 +70,10 @@ export default async function SubscribePage({ searchParams }: { searchParams: Pr
     ? "Manage or cancel your TradePulse Pro subscription from Stripe."
     : isActive && isStarter
     ? "Add photo estimates, review requests, and payment reminders."
-    : isPastDue
+    : needsPortal
     ? "Update your payment method in Stripe to keep using TradePulse."
+    : isPastDue
+    ? "Your trial has ended. Choose a plan to keep creating estimates and sending quotes."
     : neverHadTrial
     ? "Subscribe to start using TradePulse Pro."
     : trialExpired
@@ -107,12 +115,12 @@ export default async function SubscribePage({ searchParams }: { searchParams: Pr
           ) : (
             <div className="rounded-2xl bg-zinc-900 border border-zinc-800 p-6 text-center">
               <p className="text-white font-semibold">
-                {proOnlyUnavailable ? "Pro billing is not ready" : isPastDue ? "Payment needs attention" : "No upgrade needed"}
+                {proOnlyUnavailable ? "Pro billing is not ready" : needsPortal ? "Payment needs attention" : "No upgrade needed"}
               </p>
               <p className="text-zinc-400 text-sm mt-2">
                 {proOnlyUnavailable
                   ? "Pro checkout is not configured yet. Email support if you need this upgrade right away."
-                  : isPastDue
+                  : needsPortal
                   ? "Open Stripe to update your card or manage your subscription."
                   : "You already have every TradePulse feature."}
               </p>
