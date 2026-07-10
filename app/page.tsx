@@ -122,7 +122,7 @@ export default async function LandingPage() {
   if (user) {
     const { data: business } = await supabaseAdmin
       .from("tpe_businesses")
-      .select("subscription_status, trial_ends_at, name, phone, email, logo_url, prepared_by")
+      .select("subscription_status, trial_ends_at")
       .eq("owner_user_id", user.id)
       .maybeSingle();
 
@@ -135,16 +135,10 @@ export default async function LandingPage() {
     const isComplimentary = business.subscription_status === "complimentary";
     hasAccess = isTrialing || isActive || isComplimentary;
 
-    const needsBusinessSetup = business &&
-      !business.name &&
-      !business.phone &&
-      !business.email &&
-      !business.logo_url &&
-      !business.prepared_by;
-
-    // Logged-in users never see the marketing homepage. Send them to setup,
-    // the app, or the paywall depending on their account state.
-    if (hasAccess && needsBusinessSetup) redirect("/onboarding");
+    // Logged-in users never see the marketing homepage. Send them to the app
+    // or the paywall depending on their account state. An incomplete profile
+    // (no name, logo, etc.) is nudged via the setup checklist on /estimates,
+    // not a hard redirect, so it doesn't fight the /new landing after signup.
     redirect(hasAccess ? "/estimates" : "/subscribe");
   }
 
@@ -515,7 +509,7 @@ export default async function LandingPage() {
 
                 <div className="flex flex-col gap-3 mb-8">
                   {[
-                    { title: "AI Photo Estimates", description: "Take photos of the job site and AI writes the description for you." },
+                    { title: "AI Photo Estimates", description: "Take a photo of the problem and AI writes the description for you." },
                     { title: "Google Review Requests", description: "Ask customers for Google reviews after completed jobs." },
                     { title: "Payment Reminders", description: "Automatic follow-up on unpaid invoices." },
                     { title: "Customer Follow-Ups", description: "Stay connected with past customers and generate repeat business." },
