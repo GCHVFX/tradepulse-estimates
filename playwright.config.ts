@@ -33,6 +33,12 @@
  * is keyed by IP. The dedicated rate-limit test deliberately exhausts that
  * budget — running serially means it can't race with (and spuriously 429)
  * the other tests that also call signup.
+ *
+ * globalSetup resets that same IP's signup rate-limit bucket once before any
+ * test runs, so every signup-based test always starts with a full budget
+ * regardless of execution order or how many signup tests exist — a floor for
+ * the whole suite, not a replacement for signup-rate-limit.spec.ts's own
+ * before/after reset, which it still needs to isolate itself mid-run.
  */
 import { defineConfig, devices } from "@playwright/test";
 import { config as loadEnv } from "dotenv";
@@ -41,6 +47,7 @@ loadEnv({ path: ".env.local" });
 
 export default defineConfig({
   testDir: "./tests/smoke",
+  globalSetup: "./tests/smoke/global-setup.ts",
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,
