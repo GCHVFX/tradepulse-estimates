@@ -30,6 +30,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 });
   }
 
+  const { allowed } = await checkRateLimit(supabaseAdmin, ip, "signup", 5, 3600);
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "Too many signup attempts. Please try again later." },
+      { status: 429 }
+    );
+  }
+
   // Cookies from signUp are collected here and applied to the final response,
   // once the body (which now includes userId) is known.
   const pendingCookies: { name: string; value: string; options: Record<string, unknown> }[] = [];

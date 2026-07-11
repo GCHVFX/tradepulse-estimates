@@ -27,6 +27,12 @@
  * trial subscriptions on whichever Stripe mode the target deployment is
  * wired to — cleaned up immediately after each test, but don't point
  * PLAYWRIGHT_BASE_URL at production unless that side effect is acceptable.
+ *
+ * Runs with a single worker (no parallelism): every test in this suite runs
+ * from the same source IP (this machine), and /api/auth/signup's rate limit
+ * is keyed by IP. The dedicated rate-limit test deliberately exhausts that
+ * budget — running serially means it can't race with (and spuriously 429)
+ * the other tests that also call signup.
  */
 import { defineConfig, devices } from "@playwright/test";
 import { config as loadEnv } from "dotenv";
@@ -35,7 +41,8 @@ loadEnv({ path: ".env.local" });
 
 export default defineConfig({
   testDir: "./tests/smoke",
-  fullyParallel: true,
+  fullyParallel: false,
+  workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: [["list"]],

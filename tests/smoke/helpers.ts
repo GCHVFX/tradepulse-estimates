@@ -136,3 +136,13 @@ export async function expireTrial(userId: string): Promise<void> {
     .update({ trial_ends_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() })
     .eq("owner_user_id", userId);
 }
+
+// Clears every tracked "signup" rate-limit window, regardless of key. The
+// signup rate limit is keyed by source IP, which every test in this suite
+// shares (same CI runner), so the dedicated rate-limit test resets this
+// before and after itself to avoid stealing budget from (or leaving debt
+// for) the other signup-based tests and future runs from the same IP.
+export async function resetSignupRateLimit(): Promise<void> {
+  const supabaseAdmin = adminClient();
+  await supabaseAdmin.from("tpe_rate_limits").delete().eq("action", "signup");
+}
