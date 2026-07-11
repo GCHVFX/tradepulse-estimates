@@ -30,8 +30,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 });
   }
 
-  // Build the response early so session cookies from signUp can be written onto it
-  const response = NextResponse.json({ success: true });
+  // Cookies from signUp are collected here and applied to the final response,
+  // once the body (which now includes userId) is known.
+  const pendingCookies: { name: string; value: string; options: Record<string, unknown> }[] = [];
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -39,11 +40,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     {
       cookies: {
         getAll() { return request.cookies.getAll(); },
-        setAll(cookies) {
-          cookies.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, options);
-          });
-        },
+        setAll(cookies) { pendingCookies.push(...(cookies as typeof pendingCookies)); },
       },
     }
   );
@@ -122,5 +119,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 
+  const response = NextResponse.json({ success: true, userId });
+  pendingCookies.forEach(({ name, value, options }) =>
+    response.cookies.set(name, value, options as Parameters<typeof response.cookies.set>[2])
+  );
   return response;
 }

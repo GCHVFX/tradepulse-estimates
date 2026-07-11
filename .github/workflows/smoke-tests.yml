@@ -1,0 +1,33 @@
+name: Smoke tests
+
+# There's no existing CI in this repo. Pushes to main go through Vercel's
+# GitHub App integration, which already creates a GitHub Deployment and
+# fires deployment_status events (confirmed via the linked Vercel project)
+# for every push, succeeded or failed, preview or production. Reacting to
+# that event is more reliable than sleeping a fixed amount of time after
+# push and hoping the build finished by then.
+on:
+  deployment_status:
+
+jobs:
+  smoke:
+    if: github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'Production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      - run: npx playwright install --with-deps chromium
+
+      - run: npm run test:smoke
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ github.event.deployment_status.target_url }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
