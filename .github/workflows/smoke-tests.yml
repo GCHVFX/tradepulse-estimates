@@ -6,6 +6,14 @@ name: Smoke tests
 # for every push, succeeded or failed, preview or production. Reacting to
 # that event is more reliable than sleeping a fixed amount of time after
 # push and hoping the build finished by then.
+#
+# We deliberately don't use github.event.deployment_status.target_url: it's
+# the immutable per-deployment URL, which Vercel's Standard Protection
+# (enabled by default on projects with a custom production domain) blocks at
+# the edge for anyone without a Vercel SSO session — every request 401s
+# before it reaches the app. trytradepulse.com is the aliased custom domain
+# and is public. Once deployment_status reports success for Production, the
+# alias has already been repointed, so there's no timing gap from hardcoding it.
 on:
   deployment_status:
 
@@ -27,7 +35,7 @@ jobs:
 
       - run: npm run test:smoke
         env:
-          PLAYWRIGHT_BASE_URL: ${{ github.event.deployment_status.target_url }}
+          PLAYWRIGHT_BASE_URL: https://trytradepulse.com
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
