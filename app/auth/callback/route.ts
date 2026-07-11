@@ -87,6 +87,7 @@ async function ensureBusiness(userId: string, email?: string): Promise<boolean> 
           stripe_customer_id: customer.id,
           stripe_subscription_id: subscription.id,
           signup_source: 'google',
+          email: email ?? '',
         },
         { onConflict: 'owner_user_id' }
       );

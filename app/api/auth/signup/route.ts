@@ -101,6 +101,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           trial_ends_at: trialEndsAt,
           stripe_customer_id: customer.id,
           stripe_subscription_id: stripeSubscriptionId,
+          email,
           ...(signupSource ? { signup_source: signupSource } : {}),
         },
         { onConflict: "owner_user_id" }
