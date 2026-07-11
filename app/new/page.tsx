@@ -14,6 +14,7 @@ import { CustomerDetailsBlock } from "@/app/components/customer-details-block";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { useBusinessProfile } from "@/lib/hooks/use-business-profile";
 import { Spinner } from "@/app/components/spinner";
+import { usePostHog } from "posthog-js/react";
 
 const inputClass =
   "w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3.5 text-white placeholder-zinc-600 text-base focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]";
@@ -350,6 +351,18 @@ function FormView({
   const [photoAnalysing, setPhotoAnalysing] = useState(false);
   const [photoError, setPhotoError] = useState("");
   const [analysed, setAnalysed] = useState(false);
+
+  const posthog = usePostHog();
+  useEffect(() => {
+    if (isFirstTime) {
+      const supabase = createSupabaseBrowserClient();
+      supabase.auth.getUser().then(({ data }) => {
+        if (data.user) {
+          posthog.identify(data.user.id, { email: data.user.email });
+        }
+      });
+    }
+  }, [isFirstTime, posthog]);
 
   async function handlePhotoAdded(file: File) {
     if (photos.length >= 5) return;
