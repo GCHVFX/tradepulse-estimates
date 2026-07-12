@@ -71,6 +71,9 @@ app/
   onboarding/page.tsx            First-run business setup; creates missing starter trial business row if needed
   rates/page.tsx                 Price book
   subscribe/page.tsx             Paywall / trial expired
+  login/page.tsx                 Email/password sign in (public)
+  signup/page.tsx                Account creation; starter default, pro via ?plan=pro (public)
+  reset-password/page.tsx        Password reset request/confirm (public)
   demo/page.tsx                  Public demo page
   go/
     electricians-postcard/page.tsx  UTM postcard redirect → /electricians
@@ -80,9 +83,13 @@ app/
   trades/page.tsx                SEO landing page
   plumbing-cost/page.tsx         SEO cost guide
   electrical-cost/page.tsx       SEO cost guide
+  plumbing-estimate-template/page.tsx  SEO template landing page
+  privacy/page.tsx               Privacy policy (public)
+  terms/page.tsx                 Terms of service (public)
   components/                    Shared UI components (see below)
   api/                           Route handlers (see below)
   auth/callback/route.ts         Supabase auth code exchange
+  auth/google/route.ts           Google OAuth sign-in start/callback
 lib/
   supabase-server.ts             supabaseAdmin, createApiClient, createSupabaseServerClient
   supabase-browser.ts            createSupabaseBrowserClient
@@ -272,6 +279,8 @@ import { stripe } from "@/lib/stripe";
 - `POST /api/estimates/[id]/review-request` — sends Google review SMS via Twilio, Pro-gated
 - `PATCH /api/estimates/[id]/invoice` — sets invoice amount + due date, starts payment reminders
 - `PATCH /api/estimates/[id]/mark-paid` — marks invoice paid, stops reminders
+- `POST /api/estimates/[id]/photos` — uploads estimate photos to the `tpe-estimate-photos` bucket, writes `tpe_estimate_photos` metadata
+- `DELETE /api/estimates/[id]/photos` — removes an estimate photo (storage object + `tpe_estimate_photos` row)
 - `GET /api/cron/payment-reminders` — daily reminder cron, auth via `Authorization: Bearer CRON_SECRET` (not user auth)
 - `POST /api/analyze-photo` — vision analysis of a job site photo, Pro-gated
   - Accepts `{ imageBase64, mediaType }` (JPEG/PNG/WebP/GIF, base64 capped at ~6MB), returns `{ description }`
@@ -284,6 +293,12 @@ import { stripe } from "@/lib/stripe";
 - `POST /api/profile/find-review-link` — Google Places API search, returns ranked `{ matches, hasStrongMatch }`
 - `POST /api/upload-logo` — accepts base64 `{ data, type }`, uploads to Supabase Storage `{userId}/logo`, returns `{ url }`
 
+**Price Book**
+- `GET /api/price-book` — returns the business pricing settings (labour rate, markup %, deposit %) from `tpe_businesses`
+- `PATCH /api/price-book` — updates those business-level pricing fields
+- `GET/POST/PATCH/DELETE /api/price-book-items` — CRUD on `tpe_pricebook_items` (common line items)
+- `POST /api/price-book-items/import` — bulk import of `tpe_pricebook_items`
+
 **Comms**
 - `POST /api/send-sms` — Twilio SMS (`{ to, estimateId }`)
 - `POST /api/send-email` — Resend email; do not include `reply_to` / `replyTo` (TypeScript conflict)
@@ -292,10 +307,13 @@ import { stripe } from "@/lib/stripe";
 **Billing**
 - `POST /api/billing/checkout` — creates Stripe Checkout session, redirects to Stripe
 - `POST /api/billing/portal` — creates Stripe billing portal session, redirects to Stripe
+- `POST /api/billing/upgrade` — starts Stripe Checkout to move a Starter user to Pro (guards already-Pro); `GET` redirects to `/subscribe`
 - `POST /api/billing/webhook` — Stripe webhook handler (handles subscription.created/updated/deleted, invoice.payment_succeeded)
 
 **Auth / Internal**
 - `POST /api/auth/signup` — creates Supabase user + Stripe trial subscription + `tpe_businesses` row
+- `POST /api/auth/login` — email/password sign in via `signInWithPassword`
+- `GET /auth/google` — starts Google OAuth (`signInWithOAuth`), redirects to `/auth/callback?next=` (default `/onboarding`); note: under `/auth`, not `/api`
 - `GET /api/exchange-recovery` — exchanges Supabase auth code for session (password reset flow)
 - `POST /api/notify-error` — emails `support@trytradepulse.com` on Anthropic API errors; always returns 200
 - `POST /api/webhooks/new-signup` — Supabase auth hook → email notification on new signup; auth via `x-webhook-secret` header

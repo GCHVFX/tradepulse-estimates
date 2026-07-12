@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Logo } from "@/app/components/logo";
@@ -18,6 +18,10 @@ export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [signupSource, setSignupSource] = useState("");
   const [plan, setPlan] = useState("starter");
+  // Guards against double-submit. `loading` state only stops the button on the
+  // next render, so an Enter keypress can fire handleSignUp again before that.
+  // A ref flips synchronously and covers both the click and Enter paths.
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -29,6 +33,8 @@ export default function SignupPage() {
   }, []);
 
   async function handleSignUp() {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setError("");
     setLoading(true);
 
@@ -47,11 +53,13 @@ export default function SignupPage() {
       if (!res.ok) {
         setError(data.error ?? "Something went wrong. Try again.");
         setLoading(false);
+        submittingRef.current = false;
         return;
       }
     } catch {
       setError("Something went wrong. Try again.");
       setLoading(false);
+      submittingRef.current = false;
       return;
     }
 

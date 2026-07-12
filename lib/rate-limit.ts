@@ -17,44 +17,37 @@ export async function checkRateLimit(
   const now = new Date();
   const resetAt = new Date(now.getTime() + windowSeconds * 1000);
 
-  // Try to find existing record
-  const { data: existing } = await supabaseAdmin
-    .from("tpe_rate_limits")
-    .select("count, expires_at")
-    .eq("key", key)
-    .eq("action", action)
-    .maybeSingle();
+  // Increment the active window atomically. A single UPDATE ... SET count =
+  // count + 1 in the database (via increment_rate_limit) avoids the
+  // check-then-update race where concurrent requests read the same stale count
+  // and both slip under the limit. Returns the incremented row when an active
+  // window exists, and nothing when it does not (missing or expired).
+  const { data: incremented } = await supabaseAdmin.rpc("increment_rate_limit", {
+    p_key: key,
+    p_action: action,
+  });
 
-  if (existing && new Date(existing.expires_at) > now) {
-    // Window still active
-    const newCount = existing.count + 1;
-    const allowed = newCount <= limit;
-
-    // Increment counter
-    await supabaseAdmin
-      .from("tpe_rate_limits")
-      .update({ count: newCount })
-      .eq("key", key)
-      .eq("action", action);
-
+  const row = incremented?.[0];
+  if (row) {
+    const newCount = row.new_count;
     return {
-      allowed,
+      allowed: newCount <= limit,
       remaining: Math.max(0, limit - newCount),
-      resetAt: new Date(existing.expires_at),
-    };
-  } else {
-    // New window
-    await supabaseAdmin.from("tpe_rate_limits").upsert({
-      key,
-      action,
-      count: 1,
-      expires_at: resetAt.toISOString(),
-    });
-
-    return {
-      allowed: true,
-      remaining: limit - 1,
-      resetAt,
+      resetAt: new Date(row.window_expires_at),
     };
   }
+
+  // New window
+  await supabaseAdmin.from("tpe_rate_limits").upsert({
+    key,
+    action,
+    count: 1,
+    expires_at: resetAt.toISOString(),
+  });
+
+  return {
+    allowed: true,
+    remaining: limit - 1,
+    resetAt,
+  };
 }

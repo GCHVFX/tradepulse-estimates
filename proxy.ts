@@ -14,7 +14,6 @@ const PUBLIC_PATHS = [
   "/reset-password",
   "/auth",
   "/share",
-  "/onboarding",
   "/electricians",
   "/plumbers",
   "/trades",
@@ -94,6 +93,12 @@ export async function proxy(request: NextRequest) {
     .maybeSingle();
 
   if (!business) {
+    // The onboarding page creates the missing business row, so it has to be
+    // reachable here. Without this guard, redirecting a no-business user to
+    // /onboarding would immediately re-trigger this redirect and loop forever.
+    if (pathname === "/onboarding") {
+      return response;
+    }
     const onboardingUrl = new URL("/onboarding", request.url);
     onboardingUrl.searchParams.set("next", pathname);
     return withSessionCookies(NextResponse.redirect(onboardingUrl), response);

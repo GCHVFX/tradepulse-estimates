@@ -478,7 +478,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      increment_rate_limit: {
+        Args: {
+          p_key: string
+          p_action: string
+        }
+        Returns: {
+          new_count: number
+          window_expires_at: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
