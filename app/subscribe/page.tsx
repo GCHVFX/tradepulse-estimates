@@ -84,11 +84,8 @@ export default async function SubscribePage({ searchParams }: { searchParams: Pr
     <div className="min-h-dvh bg-zinc-950 text-white flex flex-col items-center justify-center px-5 py-16">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-amber-500 flex items-center justify-center mx-auto mb-5">
-            <svg viewBox="0 0 20 20" fill="none" className="w-7 h-7" aria-hidden="true">
-              <path d="M9 2L4 9h4l-1 5 5-7H8l1-5z" fill="#09090b" />
-            </svg>
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/favicon.png" alt="TradePulse" className="w-14 h-14 rounded-2xl mx-auto mb-5" />
           <h1 className="text-2xl font-bold">{title}</h1>
           <p className="text-zinc-400 text-sm mt-2">
             {description}

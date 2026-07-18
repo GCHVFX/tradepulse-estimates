@@ -15,7 +15,7 @@ const plans = [
     id: "pro" as const,
     name: "Pro",
     price: 69,
-    features: ["Everything in Starter", "Google review requests", "Payment tracking and reminders", "Follow-up (coming soon)"],
+    features: ["Everything in Starter", "AI photo analysis", "Google review requests", "Payment tracking and reminders", "Follow-up (coming soon)"],
   },
 ];
 
