@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { DollarSign, Tag, Plus, FileText, User } from "lucide-react";
-import { useBusinessProfile } from "@/lib/hooks/use-business-profile";
+import { Tag, Plus, FileText, User } from "lucide-react";
 
 interface BottomNavProps {
   onNewClick?: () => void;
@@ -12,7 +11,6 @@ interface BottomNavProps {
 export function BottomNav({ onNewClick }: BottomNavProps = {}) {
   const pathname = usePathname();
   const router = useRouter();
-  const { isPro, isLoading } = useBusinessProfile();
 
   const handleNew = () => {
     if (onNewClick) {
@@ -25,21 +23,6 @@ export function BottomNav({ onNewClick }: BottomNavProps = {}) {
   return (
     <nav className="bg-zinc-950 border-t border-zinc-800 flex">
       <Link
-        href="/payments"
-        className={`relative flex-1 flex flex-col items-center gap-1 pt-2.5 pb-7 min-h-[56px] transition-colors ${
-          pathname === "/payments" ? "text-amber-500" : "text-zinc-300 hover:text-white"
-        }`}
-      >
-        {!isLoading && !isPro && (
-          <span className="absolute top-1 right-2 text-[9px] font-bold leading-none text-amber-500 bg-amber-500/10 border border-amber-500/30 rounded px-1 py-0.5">
-            PRO
-          </span>
-        )}
-        <DollarSign className="w-6 h-6" aria-hidden="true" />
-        <span className="text-xs font-medium">Payments</span>
-      </Link>
-
-      <Link
         href="/rates"
         className={`flex-1 flex flex-col items-center gap-1 pt-2.5 pb-7 min-h-[56px] transition-colors ${
           pathname === "/rates" ? "text-amber-500" : "text-zinc-300 hover:text-white"
@@ -47,6 +30,16 @@ export function BottomNav({ onNewClick }: BottomNavProps = {}) {
       >
         <Tag className="w-6 h-6" aria-hidden="true" />
         <span className="text-xs font-medium">Rates</span>
+      </Link>
+
+      <Link
+        href="/estimates"
+        className={`flex-1 flex flex-col items-center gap-1 pt-2.5 pb-7 min-h-[56px] transition-colors ${
+          pathname === "/estimates" ? "text-amber-500" : "text-zinc-300 hover:text-white"
+        }`}
+      >
+        <FileText className="w-6 h-6" aria-hidden="true" />
+        <span className="text-xs font-medium">Estimates</span>
       </Link>
 
       <button
@@ -62,16 +55,6 @@ export function BottomNav({ onNewClick }: BottomNavProps = {}) {
         </span>
         <span className="text-[11px] font-medium" style={{ color: "#f59e0b" }}>New</span>
       </button>
-
-      <Link
-        href="/estimates"
-        className={`flex-1 flex flex-col items-center gap-1 pt-2.5 pb-7 min-h-[56px] transition-colors ${
-          pathname === "/estimates" ? "text-amber-500" : "text-zinc-300 hover:text-white"
-        }`}
-      >
-        <FileText className="w-6 h-6" aria-hidden="true" />
-        <span className="text-xs font-medium">Estimates</span>
-      </Link>
 
       <Link
         href="/profile"

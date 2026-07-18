@@ -40,12 +40,30 @@ function XBtn({ onClick }: { onClick: () => void }) {
   );
 }
 
+// ── Pencil icon ───────────────────────────────────────────────────────────────
+
+function PencilIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" className={className} aria-hidden="true">
+      <path
+        d="M2 14l.7-2.8L10 3.9l2.1 2.1-7.3 7.3L2 14z"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M8.7 5.2l2.1 2.1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 // ── Section heading ───────────────────────────────────────────────────────────
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
     <h2 className="text-base font-bold text-zinc-900 mt-6 mb-2 uppercase tracking-wide border-l-[3px] border-amber-500 pl-2.5">
       {children}
+      <PencilIcon className="inline-block ml-1.5 w-3 h-3 text-amber-500 align-middle" />
     </h2>
   );
 }
@@ -370,7 +388,7 @@ export function EditableEstimateBody({
         <div className="mb-3">
           <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1 flex items-center gap-1">
             Photo notes
-            <span className="text-amber-500 text-sm" aria-hidden="true">{'✏︎'}</span>
+            <PencilIcon className="w-3 h-3 text-amber-500" />
           </p>
           <textarea
             ref={el => {
@@ -677,12 +695,7 @@ export function EditableEstimateBody({
       {/* Sections after pricing (Payment Terms, Notes) — inline editable */}
       {afterSections.map(s => (
         <div key={s.heading}>
-          <SectionHeading>
-            {s.heading}
-            <span className="ml-1.5 text-amber-500 text-sm" aria-hidden="true">
-              {'✏︎'}
-            </span>
-          </SectionHeading>
+          <SectionHeading>{s.heading}</SectionHeading>
           <textarea
             ref={el => {
               if (el) {

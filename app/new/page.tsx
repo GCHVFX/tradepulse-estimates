@@ -10,6 +10,7 @@ import { formatPhoneInput } from "@/lib/format-phone";
 import { Logo } from "@/app/components/logo";
 import { BottomNav } from "@/app/components/bottom-nav";
 import { SendEstimateSheet } from "@/app/components/send-estimate-sheet";
+import { PhotoSourceSheet } from "@/app/components/photo-source-sheet";
 import { CustomerDetailsBlock } from "@/app/components/customer-details-block";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { useBusinessProfile } from "@/lib/hooks/use-business-profile";
@@ -40,6 +41,11 @@ const jobPlaceholders = [
   "Install exhaust fan in upstairs bathroom",
   "Repair roof leak over garage",
 ];
+
+// Reject oversized files before the browser tries to decode them at native
+// resolution -- that decode happens before any downscaling and can freeze or
+// crash the tab on a very large source image
+const MAX_PHOTO_FILE_BYTES = 20 * 1024 * 1024;
 
 // Downscale to keep camera photos under the API image size limit
 async function resizePhotoToJpeg(file: File): Promise<{ dataUrl: string; base64: string }> {
@@ -85,6 +91,46 @@ function CameraIcon({ className }: { className?: string }) {
       <circle cx="12" cy="13" r="3.5" stroke="currentColor" strokeWidth="1.5" />
     </svg>
   );
+}
+
+function MicIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+      <rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" strokeWidth="1.5" />
+      <path
+        d="M5.5 11.5a6.5 6.5 0 0013 0M12 18v3"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+// Longest a dictation can run before it auto-stops and transcribes
+const MAX_RECORDING_SECONDS = 120;
+
+function pickAudioMimeType(): string {
+  if (typeof MediaRecorder === "undefined") return "";
+  for (const type of ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"]) {
+    if (MediaRecorder.isTypeSupported(type)) return type;
+  }
+  return "";
+}
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve((reader.result as string).split(",")[1] ?? "");
+    reader.onerror = () => reject(new Error("Could not process the recording."));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function formatRecordingTime(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
 interface EstimateViewProps {
@@ -278,7 +324,7 @@ function EstimateView({
       </main>
 
       <div className="fixed bottom-0 left-0 right-0">
-        <div className="px-5 pb-3 pt-4 bg-zinc-950 border-t border-zinc-800 flex flex-col gap-3">
+        <div className="px-5 pb-6 pt-4 bg-zinc-950 border-t border-zinc-800 flex flex-col gap-3">
           {generating && !estimateStarted && (
             <div className="flex items-center justify-center gap-2 text-zinc-400 text-sm">
               <Spinner className="w-4 h-4 text-amber-500" />
@@ -289,9 +335,12 @@ function EstimateView({
             <button
               type="button"
               onClick={onBack}
-              className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+              className="w-full flex items-center justify-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px]"
             >
-              Edit job
+              <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4" aria-hidden="true">
+                <path d="M10 12L6 8l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Back to Description
             </button>
           )}
           <button
@@ -347,10 +396,96 @@ function FormView({
 }: FormViewProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const libraryInputRef = useRef<HTMLInputElement>(null);
   const [photos, setPhotos] = useState<PhotoEntry[]>([]);
   const [photoAnalysing, setPhotoAnalysing] = useState(false);
   const [photoError, setPhotoError] = useState("");
   const [analysed, setAnalysed] = useState(false);
+  const [showPhotoSourceSheet, setShowPhotoSourceSheet] = useState(false);
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const autoStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
+  const [dictationError, setDictationError] = useState("");
+
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+      if (autoStopTimerRef.current) clearTimeout(autoStopTimerRef.current);
+    };
+  }, []);
+
+  function stopRecording() {
+    mediaRecorderRef.current?.stop();
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+    if (autoStopTimerRef.current) clearTimeout(autoStopTimerRef.current);
+    recordTimerRef.current = null;
+    autoStopTimerRef.current = null;
+    setRecording(false);
+  }
+
+  async function handleRecordingStopped(mimeType: string) {
+    setTranscribing(true);
+    try {
+      const blob = new Blob(audioChunksRef.current, { type: mimeType });
+      audioChunksRef.current = [];
+      const audioBase64 = await blobToBase64(blob);
+      const res = await fetch("/api/transcribe-audio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ audioBase64, mimeType: mimeType.split(";")[0] }),
+      });
+      const data = (await res.json().catch(() => null)) as
+        | { transcription?: string; error?: string }
+        | null;
+      if (!res.ok || !data?.transcription) {
+        throw new Error(data?.error || "Could not transcribe that recording. Try again.");
+      }
+      const trimmed = jobDescription.trim();
+      setJobDescription(trimmed ? `${trimmed} ${data.transcription}` : data.transcription);
+    } catch (err) {
+      setDictationError(
+        err instanceof Error ? err.message : "Could not transcribe that recording. Try again."
+      );
+    } finally {
+      setTranscribing(false);
+    }
+  }
+
+  async function startRecording() {
+    setDictationError("");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const mimeType = pickAudioMimeType();
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      audioChunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
+        void handleRecordingStopped(recorder.mimeType || mimeType || "audio/webm");
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setRecording(true);
+      setRecordSeconds(0);
+      recordTimerRef.current = setInterval(() => {
+        setRecordSeconds((s) => s + 1);
+      }, 1000);
+      autoStopTimerRef.current = setTimeout(stopRecording, MAX_RECORDING_SECONDS * 1000);
+    } catch {
+      setDictationError("Could not access the microphone. Check your browser permissions.");
+    }
+  }
 
   const posthog = usePostHog();
   useEffect(() => {
@@ -367,6 +502,10 @@ function FormView({
   async function handlePhotoAdded(file: File) {
     if (photos.length >= 5) return;
     setPhotoError("");
+    if (file.size > MAX_PHOTO_FILE_BYTES) {
+      setPhotoError("That photo is too large. Try a smaller one.");
+      return;
+    }
     try {
       const { dataUrl, base64 } = await resizePhotoToJpeg(file);
       setAnalysed(false);
@@ -421,18 +560,53 @@ function FormView({
 
       <main className="flex-1 px-5 pb-52 flex flex-col gap-5">
         <div className="flex flex-col gap-2">
-          {!isFirstTime && (
-            <p className="text-xs text-zinc-300">Describe the job.</p>
+          {(!isFirstTime || recording || transcribing) && (
+            <p className={`text-xs ${recording ? "text-red-400" : "text-zinc-300"}`}>
+              {recording
+                ? `Recording... ${formatRecordingTime(recordSeconds)} · tap mic to stop`
+                : transcribing
+                ? "Transcribing..."
+                : "Describe the job."}
+            </p>
           )}
-          <textarea
-            ref={textareaRef}
-            className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3.5 text-white placeholder-zinc-400 text-base leading-relaxed resize-none focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-40"
-            placeholder={placeholders[placeholderIndex]}
-            rows={6}
-            value={jobDescription}
-            onChange={(e) => setJobDescription(e.target.value)}
-            autoFocus
-          />
+          <div className="relative pb-6">
+            <textarea
+              ref={textareaRef}
+              className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3.5 text-white placeholder-zinc-400 text-base leading-relaxed resize-none focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-40"
+              placeholder={placeholders[placeholderIndex]}
+              rows={6}
+              value={jobDescription}
+              onChange={(e) => setJobDescription(e.target.value)}
+              autoFocus
+            />
+            <div className="absolute right-2.5 bottom-0 flex gap-2">
+              <button
+                type="button"
+                disabled={transcribing}
+                onClick={recording ? stopRecording : startRecording}
+                aria-label={recording ? "Stop recording" : "Dictate job description"}
+                className={`w-11 h-11 rounded-full flex items-center justify-center shadow-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
+                  recording ? "bg-red-500 text-white animate-pulse" : "bg-amber-500 text-zinc-950 hover:bg-amber-400"
+                }`}
+              >
+                {transcribing ? <Spinner className="w-4 h-4" /> : <MicIcon className="w-5 h-5" />}
+              </button>
+              <button
+                type="button"
+                disabled={photoAnalysing || photos.length >= 5}
+                onClick={() => (isPro ? setShowPhotoSourceSheet(true) : setPhotoError(PHOTO_PRO_GATE_MESSAGE))}
+                aria-label="Add photos for AI analysis"
+                className="relative w-11 h-11 rounded-full flex items-center justify-center bg-amber-500 text-zinc-950 hover:bg-amber-400 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+              >
+                <CameraIcon className="w-5 h-5" />
+                {!isPro && (
+                  <span className="absolute -top-1 -right-1 text-[8px] font-bold leading-none text-amber-500 bg-zinc-950 border border-amber-500/50 rounded px-1 py-0.5">
+                    PRO
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
           <input
             ref={photoInputRef}
             type="file"
@@ -445,6 +619,18 @@ function FormView({
               if (file) void handlePhotoAdded(file);
             }}
           />
+          <input
+            ref={libraryInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (file) void handlePhotoAdded(file);
+            }}
+          />
+          {dictationError && <p className="text-red-400 text-sm">{dictationError}</p>}
           {photos.length > 0 && (
             <p className="text-xs text-zinc-400 pt-1">Photos ({photos.length}/5)</p>
           )}
@@ -495,31 +681,6 @@ function FormView({
                 </div>
               ))}
             </div>
-          )}
-          {isPro ? (
-            photos.length < 5 && (
-              <button
-                type="button"
-                disabled={photoAnalysing}
-                onClick={() => photoInputRef.current?.click()}
-                className="w-full flex items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm font-medium text-zinc-300 hover:border-zinc-500 hover:text-white disabled:opacity-60 disabled:cursor-not-allowed transition-colors min-h-[44px]"
-              >
-                <CameraIcon className="w-5 h-5" />
-                <span>Add Photos for AI Analysis</span>
-              </button>
-            )
-          ) : (
-            <button
-              type="button"
-              onClick={() => setPhotoError(PHOTO_PRO_GATE_MESSAGE)}
-              className="w-full flex items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm font-medium text-zinc-600 transition-colors min-h-[44px]"
-            >
-              <CameraIcon className="w-5 h-5" />
-              <span>Add Photos for AI Analysis</span>
-              <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-500">
-                Pro
-              </span>
-            </button>
           )}
           {photos.length > 0 && (
             <button
@@ -714,7 +875,7 @@ function FormView({
 
       <div className="fixed bottom-0 left-0 right-0">
         {saved && (
-          <div className="px-5 pt-4 pb-3 bg-zinc-950 border-t border-zinc-800">
+          <div className="px-5 pt-4 pb-6 bg-zinc-950 border-t border-zinc-800">
             <button
               type="button"
               onClick={onViewEstimate}
@@ -726,6 +887,19 @@ function FormView({
         )}
         <BottomNav />
       </div>
+
+      <PhotoSourceSheet
+        isOpen={showPhotoSourceSheet}
+        onClose={() => setShowPhotoSourceSheet(false)}
+        onTakePhoto={() => {
+          setShowPhotoSourceSheet(false);
+          photoInputRef.current?.click();
+        }}
+        onChooseFromLibrary={() => {
+          setShowPhotoSourceSheet(false);
+          libraryInputRef.current?.click();
+        }}
+      />
     </div>
   );
 }

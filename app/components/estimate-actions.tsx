@@ -228,7 +228,7 @@ export function EstimateActions({
 
   return (
     <>
-      <div className="fixed bottom-[72px] left-0 right-0 px-5 pb-4 pt-4 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent flex flex-col gap-3 z-30">
+      <div className="fixed bottom-[102px] left-0 right-0 px-5 pb-4 pt-4 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent flex flex-col gap-3 z-30">
         {isQuoteRequest ? (
           <>
             {convertError && (

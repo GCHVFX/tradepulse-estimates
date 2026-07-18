@@ -132,12 +132,21 @@ docs/
 - "Mark Job Done" button only shown on estimate detail when `isPro === true` and status === 'sent'
 
 ### Photo Input (live, Pro-gated)
-- Camera button below the job description textarea in `app/new/page.tsx` FormView
-- Photo is downscaled client-side (1568px max edge, JPEG) then sent to `POST /api/analyze-photo`
-- Route sends the image to `claude-sonnet-4-6` (vision), returns a plain-English job description that populates the textarea — existing Generate flow unchanged
+- Camera icon in the twin-action row attached to the job description textarea in `app/new/page.tsx` FormView (mic + camera, both 44px circles overlapping the textarea's bottom-right corner)
+- Tapping camera opens `PhotoSourceSheet` (`photo-source-sheet.tsx`) — choice of Take Photo or Choose from Camera Roll, up to 5 photos, optional per-photo note
+- Each photo is downscaled client-side (1568px max edge, JPEG) then sent to `POST /api/analyze-photo`
+- Route accepts `{ photos: [{ base64, mediaType, note }] }` (1 to 5 photos), sends them to `claude-sonnet-4-6` (vision), returns one consolidated plain-English job description that populates the textarea — existing Generate flow unchanged
 - Photos are never stored. No DB columns involved.
-- Gated by `business.plan === 'pro'` server-side; Starter sees the button greyed out with a Pro badge
+- Gated by `business.plan === 'pro'` server-side; Starter sees a small "PRO" badge on the camera circle, tapping shows an upgrade message
 - Rate limited: 5 calls per user per 60 minutes
+
+### Dictation (live, all plans)
+- Mic icon in the same twin-action row as Photo Input, attached to the job description textarea in `app/new/page.tsx` FormView
+- Tap to start recording (`MediaRecorder`, `audio/webm` or `audio/mp4` depending on browser), tap again to stop; auto-stops at 120 seconds
+- Recorded clip is sent to `POST /api/transcribe-audio`, which transcribes it via Gemini (`gemini-3.5-flash`, `@google/genai`) and appends the result to the existing job description text
+- Not Pro-gated — available on Starter and Pro; requires `GEMINI_API_KEY` env var
+- Rate limited: 20 calls per user per 60 minutes via `tpe_rate_limits`
+- No audio is stored
 
 ### Payments Feature (live, Pro-gated)
 - Contractor marks a done estimate as invoiced (`invoice-sheet.tsx`, amount + due date), TradePulse sends automated reminders until marked paid. No payment processing, no Stripe Connect.
@@ -146,7 +155,7 @@ docs/
 - `PATCH /api/estimates/[id]/invoice` — sets `invoice_amount`, `due_date`, `payment_status = 'unpaid'`, resets `reminder_count`
 - `PATCH /api/estimates/[id]/mark-paid` — sets `payment_status = 'paid'`, `completed_at`
 - Estimate detail: "Mark as Invoiced" (status done, no invoice yet) and "Mark as Paid" (unpaid invoice, inline confirm) in `estimate-actions.tsx`
-- `/payments` page lists unpaid/overdue invoices, Pro-gated with upgrade prompt for Starter. Payments tab in `bottom-nav.tsx` shows a PRO badge for Starter users.
+- `/payments` page lists unpaid/overdue invoices, Pro-gated with upgrade prompt for Starter. Not in the bottom nav (freed up the slot — Payments is a filtered view of estimate data, not a separate domain); reached via an "Unpaid Invoices" pill above the list on `/estimates`, which shows a live count for Pro and a "PRO" badge for Starter.
 - `payment_link` field on profile (PayPal link or e-transfer email) is included in reminders; omitted cleanly when not set
 - Requires `CRON_SECRET` env var
 
@@ -282,10 +291,14 @@ import { stripe } from "@/lib/stripe";
 - `POST /api/estimates/[id]/photos` — uploads estimate photos to the `tpe-estimate-photos` bucket, writes `tpe_estimate_photos` metadata
 - `DELETE /api/estimates/[id]/photos` — removes an estimate photo (storage object + `tpe_estimate_photos` row)
 - `GET /api/cron/payment-reminders` — daily reminder cron, auth via `Authorization: Bearer CRON_SECRET` (not user auth)
-- `POST /api/analyze-photo` — vision analysis of a job site photo, Pro-gated
-  - Accepts `{ imageBase64, mediaType }` (JPEG/PNG/WebP/GIF, base64 capped at ~6MB), returns `{ description }`
-  - Uses `claude-sonnet-4-6`; image is never stored
+- `POST /api/analyze-photo` — vision analysis of 1 to 5 job site photos, Pro-gated
+  - Accepts `{ photos: [{ base64, mediaType, note }] }` (JPEG/PNG/WebP/GIF, each base64 capped at ~7MB), returns one consolidated `{ description }`
+  - Uses `claude-sonnet-4-6`; images are never stored
   - Rate limited: 5 calls per user per 60 minutes via `tpe_rate_limits`
+- `POST /api/transcribe-audio` — transcribes a dictated job description, not Pro-gated
+  - Accepts `{ audioBase64, mimeType }` (`audio/webm` or `audio/mp4`, base64 capped at ~2MB)
+  - Uses `gemini-3.5-flash` (`@google/genai`); requires `GEMINI_API_KEY`; audio is never stored
+  - Rate limited: 20 calls per user per 60 minutes via `tpe_rate_limits`
 
 **Profile**
 - `GET /api/profile` — returns `tpe_businesses` record (includes `plan`, `subscription_status`, `trial_ends_at`, `google_review_link`)
@@ -326,7 +339,8 @@ import { stripe } from "@/lib/stripe";
 - `useBusinessProfile()` — hook returning `{ logoUrl, businessName, businessEmail, preparedBy, isPro, googleReviewLink, isLoading }`. Use in any screen that shows business identity. Never fetch `/api/profile` inside an event handler.
 - `MarkJobDoneSheet` — bottom sheet for post-job review request flow. Shown after "Mark Job Done" on estimate detail. Takes `estimateId`, `googleReviewLink`, `reviewRequestedAt`, `isPro`.
 - `SendEstimateSheet` — bottom sheet for SMS / email / copy link / PDF. Takes `estimateId`, `currentStatus`, customer fields, business fields.
-- `EstimateActions` — fixed bottom action bar on estimate detail. Manages Send, Mark Job Done, and review request state.
+- `PhotoSourceSheet` — bottom sheet offering Take Photo or Choose from Camera Roll. Takes `isOpen`, `onClose`, `onTakePhoto`, `onChooseFromLibrary`.
+- `EstimateActions` — fixed bottom action bar on estimate detail. Manages Send, Mark Job Done, and review request state. Positioned `bottom-[102px]` to clear the bottom nav (nav is ~93.5px tall including the floating New circle) — if the nav height ever changes, this offset needs to move with it.
 - `CustomerDetailsBlock` — editable customer info block on estimate view.
 - `CompanyEstimateHeader` — logo + business name header on the white estimate card.
 
