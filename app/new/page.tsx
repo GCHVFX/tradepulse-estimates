@@ -594,26 +594,26 @@ function FormView({
               onChange={(e) => setJobDescription(e.target.value)}
               autoFocus
             />
-            <div className="absolute right-2.5 bottom-0 flex gap-2">
+            <div className="absolute right-2.5 bottom-0 flex gap-3">
               <button
                 type="button"
                 disabled={transcribing}
                 onClick={recording ? stopRecording : startRecording}
                 aria-label={recording ? "Stop recording" : "Dictate job description"}
-                className={`w-11 h-11 rounded-full flex items-center justify-center shadow-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
+                className={`w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
                   recording ? "bg-red-500 text-white animate-pulse" : "bg-amber-500 text-zinc-950 hover:bg-amber-400"
                 }`}
               >
-                {transcribing ? <Spinner className="w-4 h-4" /> : <MicIcon className="w-5 h-5" />}
+                {transcribing ? <Spinner className="w-5 h-5" /> : <MicIcon className="w-6 h-6" />}
               </button>
               <button
                 type="button"
                 disabled={photoAnalysing || photos.length >= 5}
                 onClick={() => (isPro ? setShowPhotoSourceSheet(true) : setPhotoError(PHOTO_PRO_GATE_MESSAGE))}
                 aria-label="Add photos for AI analysis"
-                className="relative w-11 h-11 rounded-full flex items-center justify-center bg-amber-500 text-zinc-950 hover:bg-amber-400 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                className="relative w-12 h-12 rounded-full flex items-center justify-center bg-amber-500 text-zinc-950 hover:bg-amber-400 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
               >
-                <CameraIcon className="w-5 h-5" />
+                <CameraIcon className="w-6 h-6" />
                 {!isPro && (
                   <span className="absolute -top-1 -right-1 text-[8px] font-bold leading-none text-amber-500 bg-zinc-950 border border-amber-500/50 rounded px-1 py-0.5">
                     PRO
