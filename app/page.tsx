@@ -203,7 +203,6 @@ export default async function LandingPage() {
           mask-composite: exclude;
           pointer-events: none;
         }
-        .dash-glow { box-shadow: 0 0 0 1px rgba(13,27,46,0.08), 0 24px 64px rgba(13,27,46,0.12); }
       `}</style>
 
       <div style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }} className="min-h-screen bg-white text-slate-900 overflow-x-hidden">
@@ -339,71 +338,6 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        {/* App mock */}
-        <section className="py-12 sm:py-16 overflow-hidden" style={{ background: "linear-gradient(180deg, #F8FAFC 0%, #F1F5F9 100%)" }}>
-          <div className="mx-auto max-w-5xl px-6 sm:px-10">
-            <div className="text-center mb-8">
-              <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: "#0D1B2E", opacity: 0.4 }}>The estimate</p>
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Professional. Ready to send. Every time.</h2>
-              <p className="mt-4 text-lg text-slate-500 max-w-lg mx-auto">
-                Scope of work, line items, your logo, and payment terms. Looks like it came from a proper business.
-              </p>
-            </div>
-
-            <div className="dash-glow rounded-2xl bg-white overflow-hidden max-w-2xl mx-auto">
-              <div className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: "1px solid #F1F5F9", background: "#FAFBFC" }}>
-                <div className="flex items-center gap-3">
-                  <div className="w-3 h-3 rounded-full bg-red-400" />
-                  <div className="w-3 h-3 rounded-full bg-amber-400" />
-                  <div className="w-3 h-3 rounded-full bg-emerald-400" />
-                </div>
-                <span className="hidden sm:inline text-xs font-medium text-slate-400">tradepulse.app/share/est_abc123</span>
-                <div className="w-16" />
-              </div>
-              <div className="p-6 sm:p-8">
-                <div className="mb-1 text-xs text-slate-400">Prepared for: Mike Johnson · 604-555-0182</div>
-                <div className="mb-4 text-xs text-slate-400">Prepared by: Smith Plumbing Co. · Date: March 28, 2026</div>
-                <h3 className="text-xl font-bold text-slate-900 mb-1">Hot Water Heater Replacement</h3>
-                <p className="text-sm text-slate-500 mb-5">Replace existing 50-gallon electric water heater with a new unit. Includes disposal of old unit, new expansion tank, and full system check on completion.</p>
-
-                <div className="text-xs font-semibold uppercase tracking-wide text-amber-600 mb-3">Scope of Work</div>
-                <ul className="space-y-1.5 mb-5">
-                  {["Drain and disconnect existing water heater", "Remove old unit and dispose off-site", "Install new 50-gallon electric water heater", "Install new expansion tank", "Test all connections and confirm operation"].map(item => (
-                    <li key={item} className="flex gap-2 text-sm text-slate-600">
-                      <span className="text-amber-500 shrink-0">•</span>{item}
-                    </li>
-                  ))}
-                </ul>
-
-                <div className="rounded-xl overflow-hidden border border-slate-200 mb-5">
-                  <table className="w-full text-sm">
-                    <thead style={{ background: "#F8FAFC" }}>
-                      <tr>
-                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">Item</th>
-                        <th className="px-4 py-2.5 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide">Cost</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[["Labour (3 hrs @ $85/hr)", "$255"], ["50-gal water heater (AO Smith)", "$680"], ["Expansion tank", "$95"], ["Materials & fittings", "$45"]].map(([item, price]) => (
-                        <tr key={item} style={{ borderTop: "1px solid #F1F5F9" }}>
-                          <td className="px-4 py-2.5 text-slate-700">{item}</td>
-                          <td className="px-4 py-2.5 text-right text-slate-700">{price}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="flex justify-between text-sm font-bold text-slate-900 mb-1">
-                  <span>Total</span><span style={{ color: "#0D1B2E" }}>$1,075.00</span>
-                </div>
-                <p className="text-xs text-slate-400 mb-2">Deposit: $537.50 on acceptance · Balance due on completion</p>
-                <p className="text-xs text-slate-400">This estimate is valid for 30 days.</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
         {/* Benefits */}
         <section className="py-12 sm:py-16 bg-white">
           <div className="mx-auto max-w-5xl px-6 sm:px-10">
@@ -436,22 +370,6 @@ export default async function LandingPage() {
               <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: "#0D1B2E", opacity: 0.4 }}>Pricing</p>
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Simple, flat pricing</h2>
               <p className="mt-4 text-lg text-slate-500">No per-estimate fees. No seat charges. Two flat rates.</p>
-            </div>
-
-            <p className="text-xs font-semibold uppercase tracking-widest text-center mb-3" style={{ color: "#94A3B8" }}>How we compare</p>
-            <div className="grid grid-cols-2 gap-0 mb-10 rounded-2xl overflow-hidden border border-slate-200">
-              {[
-                { name: "ServiceTitan", price: "$250+", note: "per month" },
-                { name: "TradePulse", price: "$39", note: "per month", highlight: true },
-              ].map(c => (
-                <div key={c.name} className="p-5 text-center"
-                  style={{ background: c.highlight ? "#0D1B2E" : "#F8FAFC", borderRight: c.highlight ? "none" : "1px solid #E2E8F0" }}>
-                  <p className="text-xs font-semibold mb-3" style={{ color: c.highlight ? "rgba(255,255,255,0.5)" : "#94A3B8" }}>{c.name}</p>
-                  <p className="text-2xl sm:text-3xl font-bold" style={{ color: c.highlight ? "#f59e0b" : "#CBD5E1" }}>{c.price}</p>
-                  <p className="text-xs mt-1" style={{ color: c.highlight ? "rgba(255,255,255,0.4)" : "#CBD5E1" }}>{c.note}</p>
-                  {c.highlight && <p className="text-xs font-semibold mt-2" style={{ color: "#f59e0b" }}>Everything starts here</p>}
-                </div>
-              ))}
             </div>
           </div>
 

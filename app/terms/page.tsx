@@ -23,7 +23,7 @@ export default function TermsPage() {
           <br />
           Effective date: June 15, 2026
           <br />
-          Last updated: June 15, 2026
+          Last updated: July 18, 2026
         </p>
 
         <p className="text-zinc-300 text-sm leading-relaxed mt-4">
@@ -38,8 +38,8 @@ export default function TermsPage() {
 
         <p className="text-zinc-300 text-sm leading-relaxed mt-4">
           TradePulse provides tools for contractors and tradespeople to create
-          estimates, collect payments, request reviews, and manage customer
-          follow-up. The service is available via subscription.
+          estimates, track invoices and payment reminders, and request
+          customer reviews. The service is available via subscription.
         </p>
 
         <h2 className="text-lg font-semibold mt-8 mb-2 text-white">

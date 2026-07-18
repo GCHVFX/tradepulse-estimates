@@ -456,15 +456,10 @@ export function EstimateDemo() {
           )}
 
           {/* Nav bar */}
-          <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-around', padding:'6px 8px 8px', background:'#09090b', borderTop:'1px solid #18181b', flexShrink:0 }}>
+          <div style={{ display:'flex', justifyContent:'space-around', padding:'6px 8px 10px', background:'#09090b', borderTop:'1px solid #18181b', flexShrink:0 }}>
             <NavItem icon={<svg width="18" height="18" viewBox="0 0 22 22" fill="none"><path d="M12 3H6a1.1 1.1 0 00-1.1 1.1v6.6l11 11 7-7L12 3z" stroke="#52525b" strokeWidth="1.6" strokeLinejoin="round"/><circle cx="9" cy="8" r="1.4" fill="#52525b"/></svg>} label="Rates" />
             <NavItem icon={<svg width="18" height="18" viewBox="0 0 22 22" fill="none"><rect x="4" y="2" width="14" height="18" rx="2" stroke="#52525b" strokeWidth="1.6"/><line x1="7.5" y1="7" x2="14.5" y2="7" stroke="#52525b" strokeWidth="1.3" strokeLinecap="round"/><line x1="7.5" y1="10.5" x2="14.5" y2="10.5" stroke="#52525b" strokeWidth="1.3" strokeLinecap="round"/><line x1="7.5" y1="14" x2="12" y2="14" stroke="#52525b" strokeWidth="1.3" strokeLinecap="round"/></svg>} label="Estimates" />
-            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
-              <div style={{ width:40, height:40, borderRadius:'50%', background:'#f59e0b', display:'flex', alignItems:'center', justifyContent:'center', marginTop:-16 }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#09090b" strokeWidth="2.4" strokeLinecap="round"/></svg>
-              </div>
-              <span style={{ fontSize:9, color:'#f59e0b' }}>New</span>
-            </div>
+            <NavItem icon={<svg width="18" height="18" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="9" stroke="#f59e0b" strokeWidth="1.8"/><path d="M11 7v8M7 11h8" stroke="#f59e0b" strokeWidth="1.8" strokeLinecap="round"/></svg>} label="New" active />
             <NavItem icon={<svg width="18" height="18" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="8" r="3.5" stroke="#52525b" strokeWidth="1.6"/><path d="M4 20 Q4 14 11 14 Q18 14 18 20" stroke="#52525b" strokeWidth="1.6" strokeLinecap="round" fill="none"/></svg>} label="Profile" />
           </div>
 

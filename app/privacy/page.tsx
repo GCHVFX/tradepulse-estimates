@@ -23,7 +23,7 @@ export default function PrivacyPage() {
           <br />
           Effective date: June 15, 2026
           <br />
-          Last updated: June 15, 2026
+          Last updated: July 18, 2026
         </p>
 
         <p className="text-zinc-300 text-sm leading-relaxed mt-4">
@@ -72,8 +72,25 @@ export default function PrivacyPage() {
           <strong className="text-white">Payment information</strong>
           <br />
           Payments are processed by Stripe. We do not store or have access to
-          your credit card number or banking details. Stripe's privacy policy
-          applies to payment data.
+          your credit card number or banking details. Stripe&apos;s privacy
+          policy applies to payment data.
+        </p>
+
+        <p className="text-zinc-300 text-sm leading-relaxed mt-4">
+          <strong className="text-white">Photos</strong>
+          <br />
+          If you use the camera or photo upload feature on an estimate, those
+          photos are sent to Anthropic for AI analysis and are not stored by
+          TradePulse. If you choose to attach photos to a saved estimate
+          instead, those photos are stored in our cloud storage on your behalf.
+        </p>
+
+        <p className="text-zinc-300 text-sm leading-relaxed mt-4">
+          <strong className="text-white">Voice recordings</strong>
+          <br />
+          If you use voice dictation, your recording is sent to
+          Google&apos;s Gemini API for transcription into text. TradePulse
+          does not store the audio recording itself.
         </p>
 
         <h2 className="text-lg font-semibold mt-8 mb-2 text-white">
@@ -155,7 +172,19 @@ export default function PrivacyPage() {
               <tr>
                 <td className="border border-zinc-800 px-3 py-2">Anthropic</td>
                 <td className="border border-zinc-800 px-3 py-2">
-                  AI estimate generation
+                  AI estimate generation, photo analysis
+                </td>
+              </tr>
+              <tr>
+                <td className="border border-zinc-800 px-3 py-2">Google Gemini</td>
+                <td className="border border-zinc-800 px-3 py-2">
+                  Voice dictation transcription
+                </td>
+              </tr>
+              <tr>
+                <td className="border border-zinc-800 px-3 py-2">Google Places</td>
+                <td className="border border-zinc-800 px-3 py-2">
+                  Business search for review link lookup
                 </td>
               </tr>
               <tr>
