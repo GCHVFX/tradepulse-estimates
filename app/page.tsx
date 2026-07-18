@@ -282,7 +282,7 @@ export default async function LandingPage() {
               </div>
 
               {/* Estimate mock */}
-              <div className="fade-up delay-300 hidden md:block">
+              <div className="fade-up delay-300">
                 <EstimateDemo />
               </div>
             </div>
@@ -314,13 +314,13 @@ export default async function LandingPage() {
               </p>
             </div>
 
-            <div className="relative grid md:grid-cols-3 gap-8 md:gap-6">
+            <div className="relative grid md:grid-cols-3 gap-4 md:gap-6">
               <div className="hidden md:block absolute top-12 left-1/4 right-1/4 h-px"
                 style={{ background: "linear-gradient(to right, transparent, #0D1B2E 20%, #0D1B2E 80%, transparent)", opacity: 0.15 }} />
               {STEPS.map((step, i) => (
-                <div key={step.number} className="card-lift gradient-border relative rounded-2xl p-7">
-                  <div className="flex items-start gap-4 mb-4">
-                    <span className="text-4xl font-bold leading-none" style={{ color: "#f59e0b", opacity: 0.7 }}>
+                <div key={step.number} className="card-lift gradient-border relative rounded-2xl p-5 md:p-7">
+                  <div className="flex items-start gap-4 mb-3 md:mb-4">
+                    <span className="text-3xl md:text-4xl font-bold leading-none" style={{ color: "#f59e0b", opacity: 0.7 }}>
                       {step.number}
                     </span>
                     {i < STEPS.length - 1 && (
@@ -414,15 +414,15 @@ export default async function LandingPage() {
                 Contractors who quote faster win more jobs. Customers say yes while the work is still top of mind.
               </p>
             </div>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-5">
               {BENEFITS.map(b => (
-                <div key={b.title} className="card-lift gradient-border rounded-2xl p-6">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4 text-lg font-bold"
+                <div key={b.title} className="card-lift gradient-border rounded-2xl p-4 sm:p-6">
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center mb-3 sm:mb-4 text-lg font-bold"
                     style={{ background: "#FEF3C7", color: "#92400E" }}>
                     {b.icon}
                   </div>
-                  <h3 className="font-semibold text-slate-900 mb-2">{b.title}</h3>
-                  <p className="text-sm leading-relaxed text-slate-500">{b.description}</p>
+                  <h3 className="text-sm sm:text-base font-semibold text-slate-900 mb-1.5 sm:mb-2">{b.title}</h3>
+                  <p className="text-xs sm:text-sm leading-relaxed text-slate-500">{b.description}</p>
                 </div>
               ))}
             </div>
@@ -439,10 +439,9 @@ export default async function LandingPage() {
             </div>
 
             <p className="text-xs font-semibold uppercase tracking-widest text-center mb-3" style={{ color: "#94A3B8" }}>How we compare</p>
-            <div className="grid grid-cols-3 gap-0 mb-10 rounded-2xl overflow-hidden border border-slate-200">
+            <div className="grid grid-cols-2 gap-0 mb-10 rounded-2xl overflow-hidden border border-slate-200">
               {[
                 { name: "ServiceTitan", price: "$250+", note: "per month" },
-                { name: "Jobber", price: "$69+", note: "per month" },
                 { name: "TradePulse", price: "$39", note: "per month", highlight: true },
               ].map(c => (
                 <div key={c.name} className="p-5 text-center"
@@ -470,6 +469,7 @@ export default async function LandingPage() {
                 <div className="flex flex-col gap-2.5 mb-8">
                   {[
                     "Unlimited estimates",
+                    "Voice dictation",
                     "SMS and email sending",
                     "Your logo on every estimate",
                     "Custom rates and price book",
@@ -504,7 +504,6 @@ export default async function LandingPage() {
                   <span className="text-4xl font-bold text-slate-900">$69</span>
                   <span className="text-slate-500 mb-1">/month CAD</span>
                 </div>
-                <p className="text-sm text-slate-400 mb-1">Same price as Jobber&apos;s starting plan.</p>
                 <p className="text-sm text-slate-400 mb-6">Everything in Starter, plus:</p>
 
                 <div className="flex flex-col gap-3 mb-8">
@@ -512,7 +511,7 @@ export default async function LandingPage() {
                     { title: "AI Photo Estimates", description: "Take a photo of the problem and AI writes the description for you." },
                     { title: "Google Review Requests", description: "Ask customers for Google reviews after completed jobs." },
                     { title: "Payment Reminders", description: "Automatic follow-up on unpaid invoices." },
-                    { title: "Customer Follow-Ups", description: "Stay connected with past customers and generate repeat business." },
+                    { title: "Customer Follow-Ups (Coming Soon)", description: "Stay connected with past customers and generate repeat business." },
                   ].map(item => (
                     <div key={item.title} className="flex items-start gap-3">
                       <svg className="w-5 h-5 shrink-0 text-emerald-500 mt-0.5" viewBox="0 0 16 16" fill="none">
