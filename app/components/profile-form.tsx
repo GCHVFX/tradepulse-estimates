@@ -535,119 +535,122 @@ export function ProfileForm({
           />
         </div>
 
-        {/* Google Reviews - Pro only */}
         {plan === "pro" && (
-        <div ref={reviewSectionRef} className="flex flex-col gap-2">
-          <label className="text-sm font-medium text-zinc-400">Google Reviews</label>
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.04] p-4 flex flex-col gap-5">
+            <p className="text-xs font-semibold text-amber-500 uppercase tracking-widest">Pro Features</p>
 
-          {googleReviewLink.trim() ? (
-            <>
-              <div className="bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3.5 flex items-center gap-3">
-                <svg viewBox="0 0 20 20" fill="none" className="w-4 h-4 text-emerald-400 shrink-0" aria-hidden="true">
-                  <path d="M4 10l4.5 4.5L16 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                <div>
-                  <p className="text-emerald-400 text-sm font-medium">Connected</p>
-                  {connectedBusinessName && (
-                    <p className="text-zinc-400 text-xs mt-0.5">{connectedBusinessName}</p>
+            {/* Google Reviews */}
+            <div ref={reviewSectionRef} className="flex flex-col gap-2">
+              <label className="text-sm font-medium text-zinc-400">Google Reviews</label>
+
+              {googleReviewLink.trim() ? (
+                <>
+                  <div className="bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3.5 flex items-center gap-3">
+                    <svg viewBox="0 0 20 20" fill="none" className="w-4 h-4 text-emerald-400 shrink-0" aria-hidden="true">
+                      <path d="M4 10l4.5 4.5L16 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <div>
+                      <p className="text-emerald-400 text-sm font-medium">Connected</p>
+                      {connectedBusinessName && (
+                        <p className="text-zinc-400 text-xs mt-0.5">{connectedBusinessName}</p>
+                      )}
+                    </div>
+                  </div>
+                  {reviewLinkAdded && (
+                    <p className="text-emerald-400 text-xs">Review link added.</p>
                   )}
-                </div>
-              </div>
-              {reviewLinkAdded && (
-                <p className="text-emerald-400 text-xs">Review link added.</p>
+                  <button
+                    type="button"
+                    onClick={openFinder}
+                    className="text-xs text-amber-400 hover:text-amber-300 transition-colors min-h-[32px] self-start font-medium"
+                  >
+                    Change Business
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={openFinder}
+                  className="w-full bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-white font-semibold text-base rounded-xl py-3.5 transition-colors min-h-[56px]"
+                >
+                  Find My Review Link
+                </button>
               )}
+              <p className="text-zinc-400 text-xs">Included in review requests so customers can leave you a review.</p>
+
               <button
                 type="button"
-                onClick={openFinder}
-                className="text-xs text-amber-400 hover:text-amber-300 transition-colors min-h-[32px] self-start font-medium"
+                onClick={() => setShowManualEntry(!showManualEntry)}
+                className="text-xs text-zinc-400 hover:text-zinc-300 transition-colors min-h-[32px] self-start"
               >
-                Change Business
+                Can&apos;t find your business?
               </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              onClick={openFinder}
-              className="w-full bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-white font-semibold text-base rounded-xl py-3.5 transition-colors min-h-[56px]"
-            >
-              Find My Review Link
-            </button>
-          )}
 
-          <button
-            type="button"
-            onClick={() => setShowManualEntry(!showManualEntry)}
-            className="text-xs text-zinc-400 hover:text-zinc-300 transition-colors min-h-[32px] self-start"
-          >
-            Can&apos;t find your business?
-          </button>
+              {showManualEntry && (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-medium text-zinc-400">Google Review Link</label>
+                  <input
+                    type="url"
+                    className={inputClass}
+                    placeholder="https://g.page/r/..."
+                    value={googleReviewLink}
+                    onChange={(e) => {
+                      setGoogleReviewLink(e.target.value);
+                      setConnectedBusinessName("");
+                      setReviewLinkSaveError("");
+                      setReviewLinkAdded(false);
+                    }}
+                    autoComplete="url"
+                    autoCorrect="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                  />
+                  {reviewLinkSaveError && (
+                    <p className="text-amber-400 text-xs">{reviewLinkSaveError}</p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowReviewLinkHelp(!showReviewLinkHelp)}
+                    className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-300 transition-colors min-h-[32px]"
+                  >
+                    <svg
+                      viewBox="0 0 16 16"
+                      fill="none"
+                      className={`w-3.5 h-3.5 transition-transform ${showReviewLinkHelp ? "rotate-90" : ""}`}
+                      aria-hidden="true"
+                    >
+                      <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    How do I find it?
+                  </button>
+                  {showReviewLinkHelp && (
+                    <ol className="ml-1 flex flex-col gap-1 text-xs text-zinc-400 list-decimal list-inside">
+                      <li>Open your Google Business Profile.</li>
+                      <li>Click &ldquo;Manage your Business Profile&rdquo;.</li>
+                      <li>Click &ldquo;Ask for reviews&rdquo;.</li>
+                      <li>Copy the review link.</li>
+                      <li>Paste it here.</li>
+                    </ol>
+                  )}
+                </div>
+              )}
+            </div>
 
-          {showManualEntry && (
+            {/* Payment link */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-zinc-400">Google Review Link</label>
+              <label className="text-sm font-medium text-zinc-400">Payment link</label>
               <input
-                type="url"
+                type="text"
                 className={inputClass}
-                placeholder="https://g.page/r/..."
-                value={googleReviewLink}
-                onChange={(e) => {
-                  setGoogleReviewLink(e.target.value);
-                  setConnectedBusinessName("");
-                  setReviewLinkSaveError("");
-                  setReviewLinkAdded(false);
-                }}
-                autoComplete="url"
+                placeholder="e.g. paypal.me/yourbusiness or your e-transfer email"
+                value={paymentLink}
+                onChange={(e) => setPaymentLink(e.target.value)}
                 autoCorrect="off"
                 autoCapitalize="none"
                 spellCheck={false}
               />
-              {reviewLinkSaveError && (
-                <p className="text-amber-400 text-xs">{reviewLinkSaveError}</p>
-              )}
-              <button
-                type="button"
-                onClick={() => setShowReviewLinkHelp(!showReviewLinkHelp)}
-                className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-300 transition-colors min-h-[32px]"
-              >
-                <svg
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  className={`w-3.5 h-3.5 transition-transform ${showReviewLinkHelp ? "rotate-90" : ""}`}
-                  aria-hidden="true"
-                >
-                  <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                How do I find it?
-              </button>
-              {showReviewLinkHelp && (
-                <ol className="ml-1 flex flex-col gap-1 text-xs text-zinc-400 list-decimal list-inside">
-                  <li>Open your Google Business Profile.</li>
-                  <li>Click &ldquo;Manage your Business Profile&rdquo;.</li>
-                  <li>Click &ldquo;Ask for reviews&rdquo;.</li>
-                  <li>Copy the review link.</li>
-                  <li>Paste it here.</li>
-                </ol>
-              )}
+              <p className="text-zinc-400 text-xs">Included in payment reminders so customers can pay you.</p>
             </div>
-          )}
-        </div>
-        )}
-
-        {/* Payment link (Pro only) */}
-        {plan === "pro" && (
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-zinc-400">Payment link</label>
-            <input
-              type="text"
-              className={inputClass}
-              placeholder="e.g. paypal.me/yourbusiness or your e-transfer email"
-              value={paymentLink}
-              onChange={(e) => setPaymentLink(e.target.value)}
-              autoCorrect="off"
-              autoCapitalize="none"
-              spellCheck={false}
-            />
-            <p className="text-zinc-400 text-xs">Included in payment reminders so customers can pay you.</p>
           </div>
         )}
 
