@@ -462,6 +462,10 @@ function FormView({
 
   async function startRecording() {
     setDictationError("");
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setDictationError("This browser doesn't support microphone recording. Try updating it or use a different browser.");
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
@@ -482,8 +486,19 @@ function FormView({
         setRecordSeconds((s) => s + 1);
       }, 1000);
       autoStopTimerRef.current = setTimeout(stopRecording, MAX_RECORDING_SECONDS * 1000);
-    } catch {
-      setDictationError("Could not access the microphone. Check your browser permissions.");
+    } catch (err) {
+      const name = err instanceof Error ? err.name : "";
+      if (name === "NotAllowedError" || name === "SecurityError") {
+        setDictationError(
+          "Microphone access is blocked for this site. Tap the icon next to the address bar, allow microphone access, then tap the mic again. No need to reload."
+        );
+      } else if (name === "NotFoundError") {
+        setDictationError("No microphone found on this device.");
+      } else if (name === "NotReadableError") {
+        setDictationError("Your microphone is being used by another app. Close it and try again.");
+      } else {
+        setDictationError("Could not access the microphone. Try again.");
+      }
     }
   }
 
