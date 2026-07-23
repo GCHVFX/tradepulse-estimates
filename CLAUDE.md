@@ -427,3 +427,35 @@ Never use interactive widgets or custom HTML boxes for CC prompts.
 4. Flag uncertainty explicitly. If you're unsure about something, see point 1 above. If it makes sense to do so, conduct a small, localised and low-risk experiment and bring the hypothesis and results to me to discuss. Confidence without certainty causes more damage than admitting a gap.
 
 5. If you see a clearly better approach, say so before implementing. Explain the tradeoff in 2-4 bullets. If the current request is still reasonable, proceed unless the alternative avoids serious risk or wasted work.
+
+<!-- ai-control-centre:managed-block:start v2 -->
+## AI Control Centre tracking
+
+This project is tracked by AI Control Centre. Compatible coding agents
+(Claude Code, Codex, GLM, Kimi, Antigravity, and others) should:
+
+1. Use this repository's AI Control Centre activity helper at the beginning
+   and end of substantial work, recording a session-start and a
+   session-complete event.
+2. When recording a session, include whichever of these can actually be
+   confirmed: the provider, the exact model id, the model's display name,
+   and the effort or reasoning level used. Never guess an unavailable
+   value — omit the field, or use "Unknown", instead.
+3. Give the session a short, descriptive title or reference so it can be
+   told apart from other sessions later.
+4. Record a concise summary and the exact next action with each recorded
+   event.
+5. Report only verification that was actually performed — pass the exact
+   commands or checks run via `--verification`, never claim untested
+   results.
+6. Update HANDOFF.md when this project's state materially changes.
+7. Avoid manually editing `.ai-control-centre/activity.jsonl` or
+   `current-session.json` when the helper is available; let the helper
+   write them.
+
+See the AI Control Centre repository's `docs/agent-integration.md` for
+exact commands, including the `--model`, `--model-display-name`,
+`--effort`, `--reasoning-level`, and `--verification` flags.
+
+Claude Code specifically: run the commands above via `npm run aicc --` from the AI Control Centre repository, pointing `--project` at this directory. Claude Code does not expose its selected model or effort level through any documented, reliable mechanism a shelled-out command can read — pass `--model`, `--model-display-name`, and `--effort` explicitly based on what you actually know for this session, or omit them rather than guessing.
+<!-- ai-control-centre:managed-block:end -->

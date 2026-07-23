@@ -49,3 +49,33 @@ Follow the product, architecture, billing, auth, UI, writing, and scalability ru
 - Stripe sends `canceled`; app status is `cancelled`. Normalize at the webhook boundary.
 - Pro checkout depends on `STRIPE_PRO_PRICE_ID`; handle a missing value with clear UI instead of a broken upgrade path.
 - Customer Portal cancellation is configured in Stripe Dashboard, not code. Confirm it is enabled before launch.
+
+<!-- ai-control-centre:managed-block:start v2 -->
+## AI Control Centre tracking
+
+This project is tracked by AI Control Centre. Compatible coding agents
+(Claude Code, Codex, GLM, Kimi, Antigravity, and others) should:
+
+1. Use this repository's AI Control Centre activity helper at the beginning
+   and end of substantial work, recording a session-start and a
+   session-complete event.
+2. When recording a session, include whichever of these can actually be
+   confirmed: the provider, the exact model id, the model's display name,
+   and the effort or reasoning level used. Never guess an unavailable
+   value — omit the field, or use "Unknown", instead.
+3. Give the session a short, descriptive title or reference so it can be
+   told apart from other sessions later.
+4. Record a concise summary and the exact next action with each recorded
+   event.
+5. Report only verification that was actually performed — pass the exact
+   commands or checks run via `--verification`, never claim untested
+   results.
+6. Update HANDOFF.md when this project's state materially changes.
+7. Avoid manually editing `.ai-control-centre/activity.jsonl` or
+   `current-session.json` when the helper is available; let the helper
+   write them.
+
+See the AI Control Centre repository's `docs/agent-integration.md` for
+exact commands, including the `--model`, `--model-display-name`,
+`--effort`, `--reasoning-level`, and `--verification` flags.
+<!-- ai-control-centre:managed-block:end -->
