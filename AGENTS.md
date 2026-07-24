@@ -74,6 +74,8 @@ This project is tracked by AI Control Centre. Compatible coding agents
 7. Avoid manually editing `.ai-control-centre/activity.jsonl` or
    `current-session.json` when the helper is available; let the helper
    write them.
+8. Before substantial work and before ending a session, read and follow
+   AI_WORKFLOW.md.
 
 See the AI Control Centre repository's `docs/agent-integration.md` for
 exact commands, including the `--model`, `--model-display-name`,

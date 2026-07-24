@@ -2,6 +2,10 @@
 
 Durable product/architecture decisions worth remembering the reasoning behind, not just the outcome. Most recent first. Entries below were recorded together during an AI Control Centre backfill on 2026-07-23, covering decisions made across the session they document.
 
+## AI_WORKFLOW.md is the single source of truth for AI Control Centre workflow rules
+
+AGENTS.md and CLAUDE.md's managed instruction blocks summarized the tracking contract inline. As the workflow contract grew (source-of-truth rules, git safety, warning resolution, dashboard verification), embedding all of it directly in both files risked drift between them and bloated files that are read for many other purposes too. Created `AI_WORKFLOW.md` as the one place this contract lives, and pointed both managed blocks at it with a single instruction line instead of duplicating content.
+
 ## Dictation is available on all plans, not Pro-gated
 
 Typing with gloved, dirty, or cold hands is a genuine field-usability problem for the target user (contractors on a job site). Field-worker UX research supported treating this as a core usability fix rather than a Pro upsell, unlike Photo Input (AI photo analysis), which stays Pro-gated.
