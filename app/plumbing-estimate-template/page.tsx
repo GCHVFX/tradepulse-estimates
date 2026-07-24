@@ -149,10 +149,17 @@ export default function PlumbingEstimateTemplatePage() {
       </main>
 
       <footer className="text-center py-8 text-sm text-slate-500">
-        TradePulse Estimates,{" "}
-        <a href="https://trytradepulse.com" className="hover:text-slate-300 transition-colors">
-          trytradepulse.com
-        </a>
+        <p>
+          TradePulse Estimates,{" "}
+          <a href="https://trytradepulse.com" className="hover:text-slate-300 transition-colors">
+            trytradepulse.com
+          </a>
+        </p>
+        <div className="mt-2 flex items-center justify-center gap-4 text-xs flex-wrap">
+          <a href="mailto:support@trytradepulse.com" className="hover:text-slate-300 transition-colors">support@trytradepulse.com</a>
+          <a href="/terms" className="hover:text-slate-300 transition-colors">Terms of Service</a>
+          <a href="/privacy" className="hover:text-slate-300 transition-colors">Privacy Policy</a>
+        </div>
       </footer>
     </div>
   );
