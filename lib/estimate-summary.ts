@@ -85,6 +85,25 @@ export function withComputedCost(item: LineItem): LineItem {
   return { ...item, cost: formatMoney(lineItemCost(item)) };
 }
 
+// "hrs" reads as "/hr", "gal" stays "/gal". Units are freeform text the model
+// writes, so this only trims a trailing plural rather than trying to be clever.
+function perUnit(unit: string): string {
+  const u = unit.trim();
+  return u.length > 1 && u.endsWith('s') ? u.slice(0, -1) : u;
+}
+
+// How a quantity-based item reads to the contractor and the customer:
+// "Labour (8 hrs @ $65.00/hr)". The quantity lives in the description, the
+// arithmetic stays in code.
+export function lineItemDisplayLabel(item: LineItem): string {
+  if (!isQuantityItem(item)) return item.label;
+  const quantity = (item.quantity ?? '').trim();
+  const unit = (item.unit ?? '').trim();
+  const rate = formatMoney(parseCost(item.rate ?? ''));
+  const detail = unit ? `${quantity} ${unit} @ ${rate}/${perUnit(unit)}` : `${quantity} @ ${rate}`;
+  return `${item.label} (${detail})`;
+}
+
 export function computeTotals(lineItems: LineItem[], taxRate = 5): {
   subtotal: number;
   tax: number;
@@ -219,9 +238,25 @@ function scopeBlock(scopeItems: ScopeItem[]): string {
   return `## Scope of Work\n${scopeItems.map(i => `- ${i.text}`).join('\n')}`;
 }
 
+// What the contractor and the customer see: two columns, with the quantity and
+// rate folded into the description. A five-column table is unreadable on a
+// phone, and nobody needs to see the arithmetic broken out. The stored form
+// keeps the parts separate so the app can do the multiplying (see
+// lineItemsBlock).
+function displayLineItemsBlock(lineItems: LineItem[]): string {
+  const table = [
+    '| Item | Cost |',
+    '|------|------|',
+    ...lineItems.map(i => `| ${lineItemDisplayLabel(i)} | ${formatMoney(lineItemCost(i))} |`),
+  ].join('\n');
+  return `## Line Items\n${table}`;
+}
+
 function lineItemsBlock(lineItems: LineItem[]): string {
-  // Only estimates that actually have quantity-based items get the wider
-  // table. Older estimates keep the exact two-column layout they were saved in.
+  // Storage form. Only estimates that actually have quantity-based items get
+  // the wider table; older estimates keep the exact two-column layout they were
+  // saved in. Keeping quantity, unit, and rate as separate columns here is what
+  // lets the cost be recalculated instead of trusted.
   const structured = lineItems.some(isQuantityItem);
   const table = structured
     ? [
@@ -299,14 +334,15 @@ export function calculateEstimateTotal(summary: string): number {
 // Re-serializes a stored summary in the spec order (assumptions before
 // pricing: Scope of Work, Line Items, Assumptions and Exclusions, Pricing
 // Summary, Payment Terms, Notes) with the pricing table recomputed from line
-// items and rounded to whole dollars.
+// items and rounded to whole dollars. Line items collapse to two columns here,
+// which is what the share page and the PDF render.
 
 export function formatEstimateForDisplay(summary: string): string {
   const p = parseSummary(summary);
   const parts: string[] = [];
   if (p.preamble) parts.push(syncPreambleTotal(p.preamble, p.lineItems, p.taxRate));
   parts.push(scopeBlock(p.scopeItems));
-  parts.push(lineItemsBlock(p.lineItems));
+  parts.push(displayLineItemsBlock(p.lineItems));
   for (const s of p.beforePricingSections) parts.push(beforeBlock(s));
   parts.push(pricingBlock(p.lineItems, p.depositPercent, p.taxLabel, p.taxRate));
   for (const s of p.afterPricingSections) parts.push(`## ${s.heading}\n${s.content}`);

@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { EditableEstimateBody } from "@/app/components/editable-estimate-body";
 import { CompanyEstimateHeader } from "@/app/components/company-estimate-header";
 import { EstimateMarkdown } from "@/app/components/estimate-markdown";
+import { formatEstimateForDisplay } from "@/lib/estimate-summary";
 import { formatPhoneInput } from "@/lib/format-phone";
 import { Logo } from "@/app/components/logo";
 import { BottomNav } from "@/app/components/bottom-nav";
@@ -299,12 +300,14 @@ function EstimateView({
                   estimateId={savedEstimateId}
                 />
               ) : (
-                <EstimateMarkdown
-                  content={estimate
-                    .split("\n")
-                    .filter((l) => !l.startsWith("# "))
-                    .join("\n")}
-                />
+                // Before the estimate is saved (still streaming, no ID yet),
+                // there's no EditableEstimateBody to collapse the AI's raw
+                // Qty/Unit/Rate table down to two columns. Run it through the
+                // same display formatter so the live-typing view never shows
+                // the wide table, even for the few seconds before the swap.
+                // formatEstimateForDisplay strips the H1 line itself and
+                // never throws on a mid-stream, partially-written string.
+                <EstimateMarkdown content={formatEstimateForDisplay(estimate)} />
               )}
               {saved && !generating && !error && (
                 <p className="mt-4 text-xs text-zinc-400 flex items-center gap-1.5">

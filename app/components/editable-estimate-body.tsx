@@ -111,6 +111,10 @@ export function EditableEstimateBody({
   const [newCost, setNewCost] = useState('');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [focusId, setFocusId] = useState<string | null>(null);
+  // Which quantity-based line item currently has its qty/unit/rate fields
+  // expanded for editing. Only one at a time, collapsed by default so the
+  // table reads as a plain two-column Item/Cost list.
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   // Leave-page warning when a save is pending
   useEffect(() => {
@@ -142,7 +146,6 @@ export function EditableEstimateBody({
     return parts.join('\n\n');
   }
 
-  const hasQuantityItems = lineItems.some(isQuantityItem);
   const subtotal = lineItems.reduce((sum, i) => sum + lineItemCost(i), 0);
   const tax = Math.round(subtotal * (taxRate / 100));
   const total = subtotal + tax;
@@ -256,6 +259,15 @@ export function EditableEstimateBody({
   // junk entry falls back to $0.00 rather than a dash.
   function formatRate(raw: string): string {
     return formatMoney(parseCost(raw));
+  }
+
+  // Collapsed-state summary shown under the description, e.g. "8 hrs @
+  // $65.00/hr". Tapping it opens the qty/unit/rate fields for editing.
+  function quantityDetail(item: LineItem): string {
+    const quantity = (item.quantity ?? '').trim();
+    const unit = (item.unit ?? '').trim();
+    const rate = formatMoney(parseCost(item.rate ?? ''));
+    return unit ? `${quantity} ${unit} @ ${rate}` : `${quantity} @ ${rate}`;
   }
 
   function updateLine(
@@ -479,19 +491,6 @@ export function EditableEstimateBody({
               <th className="px-3 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide text-left">
                 Item
               </th>
-              {hasQuantityItems && (
-                <>
-                  <th className="px-3 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide text-left">
-                    Qty
-                  </th>
-                  <th className="px-3 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide text-left">
-                    Unit
-                  </th>
-                  <th className="px-3 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide text-left">
-                    Rate
-                  </th>
-                </>
-              )}
               <th className="px-3 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide text-left">
                 Cost
               </th>
@@ -515,11 +514,9 @@ export function EditableEstimateBody({
                     aria-label="Item description"
                     className="block w-full resize-none overflow-hidden bg-transparent rounded-lg border border-transparent px-3 py-2.5 text-sm text-zinc-700 leading-snug focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]"
                   />
-                </td>
-                {hasQuantityItems && (
-                  <>
-                    <td className="border-t border-zinc-200">
-                      {isQuantityItem(item) && (
+                  {isQuantityItem(item) &&
+                    (expandedId === item.id ? (
+                      <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2.5">
                         <input
                           type="text"
                           inputMode="decimal"
@@ -528,24 +525,17 @@ export function EditableEstimateBody({
                             updateLine(item.id, 'quantity', e.target.value.replace(/[^0-9.]/g, ''))
                           }
                           aria-label="Item quantity"
-                          className="w-16 bg-transparent rounded-lg border border-transparent px-3 py-2.5 text-sm text-zinc-700 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]"
+                          className="w-14 rounded-lg border border-zinc-200 px-2 py-2 text-sm text-zinc-700 text-center focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]"
                         />
-                      )}
-                    </td>
-                    <td className="border-t border-zinc-200">
-                      {isQuantityItem(item) && (
                         <input
                           type="text"
                           value={item.unit ?? ''}
                           onChange={e => updateLine(item.id, 'unit', e.target.value)}
                           placeholder="hrs"
                           aria-label="Item unit"
-                          className="w-20 bg-transparent rounded-lg border border-transparent px-3 py-2.5 text-sm text-zinc-700 placeholder-zinc-400 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]"
+                          className="w-16 rounded-lg border border-zinc-200 px-2 py-2 text-sm text-zinc-700 text-center placeholder-zinc-400 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]"
                         />
-                      )}
-                    </td>
-                    <td className="border-t border-zinc-200">
-                      {isQuantityItem(item) && (
+                        <span className="text-sm text-zinc-400">@</span>
                         <input
                           type="text"
                           inputMode="decimal"
@@ -561,13 +551,29 @@ export function EditableEstimateBody({
                           }}
                           onBlur={() => updateLine(item.id, 'rate', formatRate(item.rate ?? ''))}
                           aria-label="Item unit rate"
-                          className="w-24 bg-transparent rounded-lg border border-transparent px-3 py-2.5 text-sm text-zinc-700 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]"
+                          className="w-20 rounded-lg border border-zinc-200 px-2 py-2 text-sm text-zinc-700 text-center focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]"
                         />
-                      )}
-                    </td>
-                  </>
-                )}
-                <td className="border-t border-zinc-200">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedId(null)}
+                          className="ml-auto px-2 text-sm font-semibold text-amber-600 hover:text-amber-500 min-h-[44px]"
+                        >
+                          Done
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setExpandedId(item.id)}
+                        aria-label={`Edit quantity and rate for ${item.label}`}
+                        className="flex items-center gap-1 px-3 pb-2.5 -mt-1 text-xs text-zinc-500 hover:text-amber-600 transition-colors min-h-[44px]"
+                      >
+                        {quantityDetail(item)}
+                        <PencilIcon className="w-3 h-3 text-amber-500 shrink-0" />
+                      </button>
+                    ))}
+                </td>
+                <td className="border-t border-zinc-200 align-top">
                   {isQuantityItem(item) ? (
                     <span className="block px-3 py-2.5 text-sm text-zinc-700">
                       {formatMoney(lineItemCost(item))}
@@ -594,7 +600,7 @@ export function EditableEstimateBody({
                     />
                   )}
                 </td>
-                <td className="border-t border-zinc-200 pr-1" style={{ width: 40, minWidth: 40 }}>
+                <td className="border-t border-zinc-200 pr-1 align-top" style={{ width: 40, minWidth: 40 }}>
                   <XBtn onClick={() => removeLine(item.id)} />
                 </td>
               </tr>
