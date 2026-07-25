@@ -57,6 +57,15 @@ export async function signUpFreshAccount(page: Page): Promise<TestAccount> {
   const email = `gchansen+audit-${Date.now()}-${crypto.randomBytes(4).toString("hex")}@gmail.com`;
   const password = crypto.randomBytes(12).toString("hex");
 
+  // /api/auth/signup allows 5 signups per hour per IP, and every test in this
+  // suite runs from this one machine's IP. The suite now needs more than 5
+  // accounts per run, so clear the bucket before each provisioning signup
+  // rather than letting an arbitrary test fail once the budget runs out.
+  // signup-rate-limit.spec.ts is unaffected: it calls /api/auth/signup
+  // directly rather than through this helper, and does its own before/after
+  // resets to isolate the limit it deliberately exhausts.
+  await resetSignupRateLimit();
+
   try {
     await page.goto("/signup");
     await page.locator("#email").fill(email);
