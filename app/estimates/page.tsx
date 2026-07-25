@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { DollarSign } from "lucide-react";
 import { supabaseAdmin, createSupabaseServerClient } from "@/lib/supabase-server";
 import { Logo } from "@/app/components/logo";
 import { BottomNav } from "@/app/components/bottom-nav";
@@ -74,9 +75,7 @@ export default async function EstimatesPage() {
           href="/payments"
           className="relative inline-flex items-center gap-1.5 mb-4 rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:border-zinc-700 hover:text-white transition-colors min-h-[32px]"
         >
-          <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5" aria-hidden="true">
-            <path d="M8 1.5v13M11.5 4.5c-.5-.8-1.5-1.2-2.5-1.2-1.5 0-2.8.9-2.8 2 0 1.7 3.3 1.4 3.3 3.2 0 1.1-1.3 2-2.8 2-1 0-2-.4-2.5-1.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-          </svg>
+          <DollarSign className="w-3.5 h-3.5" strokeWidth={2} aria-hidden="true" />
           Unpaid Invoices{isPro && unpaidCount > 0 ? ` · ${unpaidCount}` : ""}
           {!isPro && (
             <span className="text-[9px] font-bold leading-none text-amber-500 bg-amber-500/10 border border-amber-500/30 rounded px-1 py-0.5">

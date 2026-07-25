@@ -111,8 +111,28 @@ export default async function PaymentsPage() {
 
       <main className="flex-1 px-5 pb-28">
         {invoices.length === 0 ? (
-          <div className="mt-8 text-center">
-            <p className="text-zinc-400 text-sm">No outstanding invoices.</p>
+          <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
+            <svg viewBox="0 0 48 48" fill="none" className="w-12 h-12 text-zinc-700" aria-hidden="true">
+              <path
+                d="M14 6h20a2 2 0 012 2v34l-5-3.5-4 3.5-4-3.5-4 3.5-4-3.5-5 3.5V8a2 2 0 012-2z"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinejoin="round"
+              />
+              <path d="M18 17h12M18 23h12M18 29h7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+            <div>
+              <p className="text-zinc-300 text-sm font-medium">No outstanding invoices yet</p>
+              <p className="text-zinc-500 text-sm mt-1 max-w-xs">
+                Mark a completed job as invoiced from its estimate page and it will show up here, with reminders sent automatically until it is paid.
+              </p>
+            </div>
+            <Link
+              href="/estimates"
+              className="mt-1 bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950 font-bold text-sm rounded-xl px-6 py-3 transition-colors min-h-[44px] flex items-center"
+            >
+              Go to Estimates
+            </Link>
           </div>
         ) : (
           <div className="flex flex-col gap-3 mt-2">
