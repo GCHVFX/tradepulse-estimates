@@ -228,7 +228,15 @@ export function EstimateActions({
 
   return (
     <>
-      <div className="fixed bottom-[102px] left-0 right-0 px-5 pb-4 pt-4 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent flex flex-col gap-3 z-30">
+      {/* BottomNav renders at 93.5px tall (measured, verified via
+          getBoundingClientRect). bottom-[102px] left an 8.5px gap above the
+          nav through which the scrolling page content behind both fixed
+          bars was visible. 90px gives a small deliberate overlap instead of
+          an exact match, so the gap can't reopen from a sub-pixel rounding
+          difference. Both bars are solid zinc-950 here, so the overlap is
+          invisible; if BottomNav's own layout changes height, remeasure and
+          update this number too. */}
+      <div className="fixed bottom-[90px] left-0 right-0 px-5 pb-4 pt-4 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent flex flex-col gap-3 z-30">
         {isQuoteRequest ? (
           <>
             {convertError && (

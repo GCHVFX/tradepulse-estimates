@@ -340,7 +340,7 @@ import { stripe } from "@/lib/stripe";
 - `MarkJobDoneSheet` — bottom sheet for post-job review request flow. Shown after "Mark Job Done" on estimate detail. Takes `estimateId`, `googleReviewLink`, `reviewRequestedAt`, `isPro`.
 - `SendEstimateSheet` — bottom sheet for SMS / email / copy link / PDF. Takes `estimateId`, `currentStatus`, customer fields, business fields.
 - `PhotoSourceSheet` — bottom sheet offering Take Photo or Choose from Camera Roll. Takes `isOpen`, `onClose`, `onTakePhoto`, `onChooseFromLibrary`.
-- `EstimateActions` — fixed bottom action bar on estimate detail. Manages Send, Mark Job Done, and review request state. Positioned `bottom-[102px]` to clear the bottom nav (nav is ~93.5px tall including the floating New circle) — if the nav height ever changes, this offset needs to move with it.
+- `EstimateActions` — fixed bottom action bar on estimate detail. Manages Send, Mark Job Done, and review request state. Positioned `bottom-[90px]` (nav measures 93.5px tall; 90px is a deliberate small overlap, not an exact match, so a 1px rounding difference can't reopen a gap) — if the nav's own layout ever changes height, remeasure and update this offset too. A previous mismatch (102px vs. 93.5px) left an 8.5px gap that exposed the scrolling page content behind both fixed bars.
 - `CustomerDetailsBlock` — editable customer info block on estimate view.
 - `CompanyEstimateHeader` — logo + business name header on the white estimate card.
 
