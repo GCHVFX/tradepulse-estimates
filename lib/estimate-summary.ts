@@ -7,10 +7,16 @@ export interface ScopeItem {
   text: string;
 }
 
+// A line item is either quantity-based (quantity x unit rate, cost calculated)
+// or a flat fee (one description, one hand-typed cost). Estimates saved before
+// the structured format shipped only ever have label + cost, and stay that way.
 export interface LineItem {
   id: string;
   label: string;
   cost: string;
+  quantity?: string;
+  unit?: string;
+  rate?: string;
 }
 
 export interface AssumptionItem {
@@ -50,12 +56,41 @@ export function formatDollars(amount: number): string {
   return '$' + Math.round(amount).toLocaleString('en-CA');
 }
 
+export function parseQuantity(raw: string | undefined): number {
+  if (!raw) return 0;
+  return parseFloat(raw.replace(/[^0-9.\-]/g, '')) || 0;
+}
+
+// Quantity-based items carry both a quantity and a unit rate. Anything else is
+// a flat fee, including every line item on a pre-structured-format estimate.
+export function isQuantityItem(item: LineItem): boolean {
+  return !!item.quantity?.trim() && !!item.rate?.trim();
+}
+
+export function formatMoney(amount: number): string {
+  return '$' + amount.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Cost for a quantity-based item is always quantity x unit rate, never the
+// stored cost cell. Flat fees keep whatever cost was typed.
+export function lineItemCost(item: LineItem): number {
+  if (isQuantityItem(item)) {
+    return parseQuantity(item.quantity) * parseCost(item.rate ?? '');
+  }
+  return parseCost(item.cost);
+}
+
+export function withComputedCost(item: LineItem): LineItem {
+  if (!isQuantityItem(item)) return item;
+  return { ...item, cost: formatMoney(lineItemCost(item)) };
+}
+
 export function computeTotals(lineItems: LineItem[], taxRate = 5): {
   subtotal: number;
   tax: number;
   total: number;
 } {
-  const subtotal = lineItems.reduce((sum, i) => sum + parseCost(i.cost), 0);
+  const subtotal = lineItems.reduce((sum, i) => sum + lineItemCost(i), 0);
   const tax = Math.round(subtotal * (taxRate / 100));
   return { subtotal, tax, total: subtotal + tax };
 }
@@ -120,7 +155,22 @@ export function parseSummary(rawSummary: string): ParsedSummary {
             !cells[0].toLowerCase().startsWith('item') &&
             !/^[-: ]+$/.test(cells[0]),
         )
-        .map(cells => ({ id: newId(), label: cells[0], cost: cells[1] }));
+        .map(cells => {
+          // Structured format: Item | Qty | Unit | Rate | Cost. Older estimates
+          // only have Item | Cost and are read as flat fees.
+          if (cells.length >= 5) {
+            const item: LineItem = {
+              id: newId(),
+              label: cells[0],
+              quantity: cells[1],
+              unit: cells[2],
+              rate: cells[3],
+              cost: cells[4],
+            };
+            return withComputedCost(item);
+          }
+          return { id: newId(), label: cells[0], cost: cells[1] };
+        });
     } else if (h.toLowerCase() === 'pricing summary') {
       seenPricing = true;
       for (const line of sec.lines) {
@@ -170,11 +220,24 @@ function scopeBlock(scopeItems: ScopeItem[]): string {
 }
 
 function lineItemsBlock(lineItems: LineItem[]): string {
-  const table = [
-    '| Item | Cost |',
-    '|------|------|',
-    ...lineItems.map(i => `| ${i.label} | ${i.cost} |`),
-  ].join('\n');
+  // Only estimates that actually have quantity-based items get the wider
+  // table. Older estimates keep the exact two-column layout they were saved in.
+  const structured = lineItems.some(isQuantityItem);
+  const table = structured
+    ? [
+        '| Item | Qty | Unit | Rate | Cost |',
+        '|------|-----|------|------|------|',
+        ...lineItems.map(i =>
+          isQuantityItem(i)
+            ? `| ${i.label} | ${i.quantity} | ${i.unit ?? ''} | ${i.rate} | ${formatMoney(lineItemCost(i))} |`
+            : `| ${i.label} |  |  |  | ${i.cost} |`,
+        ),
+      ].join('\n')
+    : [
+        '| Item | Cost |',
+        '|------|------|',
+        ...lineItems.map(i => `| ${i.label} | ${i.cost} |`),
+      ].join('\n');
   return `## Line Items\n${table}`;
 }
 

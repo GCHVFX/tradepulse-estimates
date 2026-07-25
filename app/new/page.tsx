@@ -154,6 +154,7 @@ interface EstimateViewProps {
   setShowSendSheet: (v: boolean) => void;
   onBack: () => void;
   onNewEstimate: () => void;
+  onSent: () => void;
 }
 
 interface FormViewProps {
@@ -176,7 +177,12 @@ interface FormViewProps {
   needsProfileSetup: boolean;
   isPro: boolean;
   error: string;
-  onGenerate: (photos: PhotoEntry[]) => void;
+  photos: PhotoEntry[];
+  setPhotos: React.Dispatch<React.SetStateAction<PhotoEntry[]>>;
+  photoError: string;
+  setPhotoError: (v: string) => void;
+  photoAnalysing: boolean;
+  onGenerate: () => void;
   onViewEstimate: () => void;
 }
 
@@ -201,6 +207,7 @@ function EstimateView({
   setShowSendSheet,
   onBack,
   onNewEstimate,
+  onSent,
 }: EstimateViewProps) {
   const estimateScrollRef = useRef<HTMLElement | null>(null);
 
@@ -358,6 +365,7 @@ function EstimateView({
       <SendEstimateSheet
         isOpen={showSendSheet}
         onClose={() => setShowSendSheet(false)}
+        onSent={onSent}
         estimateId={savedEstimateId ?? undefined}
         customerPhone={customerPhone}
         customerEmail={customerEmail}
@@ -391,16 +399,17 @@ function FormView({
   needsProfileSetup,
   isPro,
   error,
+  photos,
+  setPhotos,
+  photoError,
+  setPhotoError,
+  photoAnalysing,
   onGenerate,
   onViewEstimate,
 }: FormViewProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const libraryInputRef = useRef<HTMLInputElement>(null);
-  const [photos, setPhotos] = useState<PhotoEntry[]>([]);
-  const [photoAnalysing, setPhotoAnalysing] = useState(false);
-  const [photoError, setPhotoError] = useState("");
-  const [analysed, setAnalysed] = useState(false);
   const [showPhotoSourceSheet, setShowPhotoSourceSheet] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -523,7 +532,6 @@ function FormView({
     }
     try {
       const { dataUrl, base64 } = await resizePhotoToJpeg(file);
-      setAnalysed(false);
       setPhotos((prev) =>
         prev.length >= 5
           ? prev
@@ -533,34 +541,6 @@ function FormView({
       setPhotoError(
         err instanceof Error ? err.message : "Could not read that photo. Try again."
       );
-    }
-  }
-
-  async function handleAnalysePhotos() {
-    setPhotoAnalysing(true);
-    setPhotoError("");
-    try {
-      const res = await fetch("/api/analyze-photo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          photos: photos.map((p) => ({ base64: p.base64, mediaType: "image/jpeg", note: p.note })),
-        }),
-      });
-      const data = (await res.json().catch(() => null)) as
-        | { description?: string; error?: string }
-        | null;
-      if (!res.ok || !data?.description) {
-        throw new Error(data?.error || "Could not analyse the photos. Try again.");
-      }
-      setJobDescription(data.description);
-      setAnalysed(true);
-    } catch (err) {
-      setPhotoError(
-        err instanceof Error ? err.message : "Could not analyse the photos. Try again."
-      );
-    } finally {
-      setPhotoAnalysing(false);
     }
   }
 
@@ -664,7 +644,6 @@ function FormView({
                       type="button"
                       aria-label="Remove photo"
                       onClick={() => {
-                        setAnalysed(false);
                         setPhotos((prev) => prev.filter((p) => p.id !== photo.id));
                       }}
                       className="absolute -top-1.5 -right-1.5 flex h-6 w-6 items-center justify-center rounded-full border border-zinc-600 bg-zinc-800 text-zinc-300 hover:text-white transition-colors"
@@ -696,28 +675,6 @@ function FormView({
                 </div>
               ))}
             </div>
-          )}
-          {photos.length > 0 && (
-            <button
-              type="button"
-              disabled={photoAnalysing}
-              onClick={() => void handleAnalysePhotos()}
-              className="w-full flex items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm font-medium text-zinc-300 hover:border-zinc-500 hover:text-white disabled:opacity-60 disabled:cursor-not-allowed transition-colors min-h-[44px]"
-            >
-              {photoAnalysing ? (
-                <>
-                  <Spinner className="w-4 h-4 text-amber-500" />
-                  <span>Analysing photos...</span>
-                </>
-              ) : (
-                <span>Analyse Photos</span>
-              )}
-            </button>
-          )}
-          {analysed && photos.length > 0 && (
-            <p className="text-sm text-green-400 text-center">
-              {photos.length === 1 ? "Photo analysed." : `All ${photos.length} photos analysed.`}
-            </p>
           )}
           {photoError && (
             <p className="text-red-400 text-sm">
@@ -768,11 +725,18 @@ function FormView({
 
         <button
           type="button"
-          disabled={!jobDescription.trim()}
-          onClick={() => onGenerate(photos)}
-          className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+          disabled={(!jobDescription.trim() && photos.length === 0) || photoAnalysing}
+          onClick={onGenerate}
+          className="w-full flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 active:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
         >
-          {saved ? "Regenerate Estimate" : "Generate Estimate"}
+          {photoAnalysing ? (
+            <>
+              <Spinner className="w-4 h-4" />
+              <span>Reading photos...</span>
+            </>
+          ) : (
+            <span>{saved ? "Regenerate Estimate" : "Generate Estimate"}</span>
+          )}
         </button>
 
         {needsProfileSetup && (
@@ -942,6 +906,13 @@ function NewPageInner() {
   const [isFirstTime, setIsFirstTime] = useState(false);
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
 
+  // Photos live here, not in FormView, so they survive the switch to the
+  // estimate view and back. Only sending or starting a new estimate clears them.
+  const [photos, setPhotos] = useState<PhotoEntry[]>([]);
+  const [photoError, setPhotoError] = useState("");
+  const [photoAnalysing, setPhotoAnalysing] = useState(false);
+  const photoAnalysisRef = useRef<{ signature: string; description: string } | null>(null);
+
   useEffect(() => {
     const interval = setInterval(() => {
       setPlaceholderIndex((prev) => (prev + 1) % jobPlaceholders.length);
@@ -976,7 +947,63 @@ function NewPageInner() {
     router.refresh();
   }
 
-  async function handleGenerate(photos: PhotoEntry[]) {
+  function clearPhotos() {
+    setPhotos([]);
+    setPhotoError("");
+    photoAnalysisRef.current = null;
+  }
+
+  // Photos and their notes are what the vision call sees, so the analysis is
+  // only stale when one of those changes.
+  function photoSignature(entries: PhotoEntry[]): string {
+    return entries.map((p) => `${p.id}:${p.note}`).join("|");
+  }
+
+  async function analysePhotos(): Promise<string> {
+    const signature = photoSignature(photos);
+    const cached = photoAnalysisRef.current;
+    if (cached && cached.signature === signature) return cached.description;
+
+    setPhotoAnalysing(true);
+    try {
+      const res = await fetch("/api/analyze-photo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          photos: photos.map((p) => ({ base64: p.base64, mediaType: "image/jpeg", note: p.note })),
+        }),
+      });
+      const data = (await res.json().catch(() => null)) as
+        | { description?: string; error?: string }
+        | null;
+      if (!res.ok || !data?.description) {
+        throw new Error(data?.error || "Could not analyse the photos. Try again.");
+      }
+      photoAnalysisRef.current = { signature, description: data.description };
+      return data.description;
+    } finally {
+      setPhotoAnalysing(false);
+    }
+  }
+
+  async function handleGenerate() {
+    setPhotoError("");
+
+    let photoAnalysis = "";
+    if (isPro && photos.length > 0) {
+      try {
+        photoAnalysis = await analysePhotos();
+      } catch (err) {
+        setPhotoError(
+          err instanceof Error ? err.message : "Could not analyse the photos. Try again."
+        );
+        return;
+      }
+    }
+
+    const description = jobDescription.trim() || photoAnalysis;
+    if (!description) return;
+
     setView("estimate");
     setGenerating(true);
     setEstimate("");
@@ -990,7 +1017,8 @@ function NewPageInner() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          jobDescription,
+          jobDescription: description,
+          photoAnalysis: photoAnalysis && photoAnalysis !== description ? photoAnalysis : undefined,
           customerName: customerName || undefined,
           customerPhone: customerPhone || undefined,
           customerEmail: customerEmail || undefined,
@@ -1103,6 +1131,7 @@ function NewPageInner() {
     setSavedEstimateId(null);
     setJobTitle("");
     setCustomerDetailsSaved(false);
+    clearPhotos();
   }
 
   if (view === "estimate") {
@@ -1128,6 +1157,7 @@ function NewPageInner() {
         setShowSendSheet={setShowSendSheet}
         onBack={handleBack}
         onNewEstimate={handleNewEstimate}
+        onSent={clearPhotos}
       />
     );
   }
@@ -1153,6 +1183,11 @@ function NewPageInner() {
       needsProfileSetup={needsProfileSetup}
       isPro={isPro}
       error={error}
+      photos={photos}
+      setPhotos={setPhotos}
+      photoError={photoError}
+      setPhotoError={setPhotoError}
+      photoAnalysing={photoAnalysing}
       onGenerate={handleGenerate}
       onViewEstimate={() => setView("estimate")}
     />

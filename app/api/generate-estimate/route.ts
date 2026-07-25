@@ -33,10 +33,15 @@ Output must follow this exact structure:
 4. Scope of Work (bullet list of specific tasks)
 5. Line Items (labour and materials, individually priced)
    Line Items MUST be formatted as markdown pipe tables, not bullet points or plain text. Use this exact format:
-   | Item | Cost |
-   |------|------|
-   | Labour (X hours @ $X/hr) | $XXX |
-   | Item description | $XXX |
+   | Item | Qty | Unit | Rate | Cost |
+   |------|-----|------|------|------|
+   | Labour | 3 | hrs | $95.00 | $285.00 |
+   | Interior paint | 4 | gal | $62.00 | $248.00 |
+   | Permit fee |  |  |  | $150.00 |
+   Decide per item which type it is:
+   - Quantity-based: anything measured in a natural unit, such as labour hours, paint by the gallon, wire by the foot, tile by the square foot. Fill in Qty, Unit, and Rate, and put quantity x rate in the Cost column.
+   - Flat fee: anything priced as one lump sum, such as a permit, trip charge, or disposal fee. Leave Qty, Unit, and Rate empty and put the amount in the Cost column.
+   Unit is short free text you choose (hrs, gal, sqft, ft, ea). Cost must always be filled in. Money columns use two decimal places.
    Never use bullet points or plain text for line items. Always use pipe table format.
    Do not include a Subtotal, Tax, Total, Deposit, or Balance row in the Line Items table. These are handled separately in the Pricing Summary section. The last row in the Line Items table must be a labour or material line item. Nothing else.
 6. Assumptions and Exclusions (what is included, what is not)
@@ -100,8 +105,9 @@ export async function POST(request: NextRequest) {
     return new Response("Invalid JSON", { status: 400 });
   }
 
-  const { jobDescription, customerName, customerPhone, customerEmail, jobAddress } = body as {
+  const { jobDescription, photoAnalysis, customerName, customerPhone, customerEmail, jobAddress } = body as {
     jobDescription?: unknown;
+    photoAnalysis?: unknown;
     customerName?: unknown;
     customerPhone?: unknown;
     customerEmail?: unknown;
@@ -117,6 +123,12 @@ export async function POST(request: NextRequest) {
 
   // Pass customer details to Claude for context only, not output in the estimate
   const lines: string[] = [jobDescription.trim()];
+  if (typeof photoAnalysis === "string" && photoAnalysis.trim()) {
+    if (photoAnalysis.length > 4000) {
+      return new Response("Photo analysis too long.", { status: 400 });
+    }
+    lines.push(`What the job site photos show: ${photoAnalysis.trim()}`);
+  }
   if (business?.name) lines.push(`Business name: ${business.name}`);
   if (typeof customerName === "string" && customerName.trim()) {
     lines.push(`Customer name (for context only, do not include in output): ${customerName.trim()}`);

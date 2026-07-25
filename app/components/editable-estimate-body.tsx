@@ -5,8 +5,12 @@ import {
   newId,
   parseCost,
   formatDollars,
+  formatMoney,
+  isQuantityItem,
+  lineItemCost,
   parseSummary,
   serializeSummary,
+  withComputedCost,
 } from '@/lib/estimate-summary';
 import type {
   ScopeItem,
@@ -138,7 +142,8 @@ export function EditableEstimateBody({
     return parts.join('\n\n');
   }
 
-  const subtotal = lineItems.reduce((sum, i) => sum + parseCost(i.cost), 0);
+  const hasQuantityItems = lineItems.some(isQuantityItem);
+  const subtotal = lineItems.reduce((sum, i) => sum + lineItemCost(i), 0);
   const tax = Math.round(subtotal * (taxRate / 100));
   const total = subtotal + tax;
   const deposit = Math.round((total * depositPercent) / 100);
@@ -247,8 +252,20 @@ export function EditableEstimateBody({
     return '—';
   }
 
-  function updateLine(id: string, field: 'label' | 'cost', value: string) {
-    const nextLine = lineItems.map(i => (i.id === id ? { ...i, [field]: value } : i));
+  // A rate must stay a number the cost can be calculated from, so an empty or
+  // junk entry falls back to $0.00 rather than a dash.
+  function formatRate(raw: string): string {
+    return formatMoney(parseCost(raw));
+  }
+
+  function updateLine(
+    id: string,
+    field: 'label' | 'cost' | 'quantity' | 'unit' | 'rate',
+    value: string,
+  ) {
+    const nextLine = lineItems.map(i =>
+      i.id === id ? withComputedCost({ ...i, [field]: value }) : i,
+    );
     setLineItems(nextLine);
     startCommitTimer(scopeItems, nextLine, beforeSections, afterSections, preambleText);
   }
@@ -450,7 +467,7 @@ export function EditableEstimateBody({
 
       {/* Line Items */}
       <SectionHeading>Line Items</SectionHeading>
-      {lineItems.length > 0 && lineItems.every(i => parseCost(i.cost) === 0) && (
+      {lineItems.length > 0 && lineItems.every(i => lineItemCost(i) === 0) && (
         <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
           <p className="text-amber-800 text-sm font-medium">Review and add pricing before sending this estimate.</p>
         </div>
@@ -462,6 +479,19 @@ export function EditableEstimateBody({
               <th className="px-3 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide text-left">
                 Item
               </th>
+              {hasQuantityItems && (
+                <>
+                  <th className="px-3 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide text-left">
+                    Qty
+                  </th>
+                  <th className="px-3 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide text-left">
+                    Unit
+                  </th>
+                  <th className="px-3 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide text-left">
+                    Rate
+                  </th>
+                </>
+              )}
               <th className="px-3 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide text-left">
                 Cost
               </th>
@@ -486,26 +516,83 @@ export function EditableEstimateBody({
                     className="block w-full resize-none overflow-hidden bg-transparent rounded-lg border border-transparent px-3 py-2.5 text-sm text-zinc-700 leading-snug focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]"
                   />
                 </td>
+                {hasQuantityItems && (
+                  <>
+                    <td className="border-t border-zinc-200">
+                      {isQuantityItem(item) && (
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={item.quantity ?? ''}
+                          onChange={e =>
+                            updateLine(item.id, 'quantity', e.target.value.replace(/[^0-9.]/g, ''))
+                          }
+                          aria-label="Item quantity"
+                          className="w-16 bg-transparent rounded-lg border border-transparent px-3 py-2.5 text-sm text-zinc-700 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]"
+                        />
+                      )}
+                    </td>
+                    <td className="border-t border-zinc-200">
+                      {isQuantityItem(item) && (
+                        <input
+                          type="text"
+                          value={item.unit ?? ''}
+                          onChange={e => updateLine(item.id, 'unit', e.target.value)}
+                          placeholder="hrs"
+                          aria-label="Item unit"
+                          className="w-20 bg-transparent rounded-lg border border-transparent px-3 py-2.5 text-sm text-zinc-700 placeholder-zinc-400 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]"
+                        />
+                      )}
+                    </td>
+                    <td className="border-t border-zinc-200">
+                      {isQuantityItem(item) && (
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={item.rate ?? ''}
+                          onChange={e => updateLine(item.id, 'rate', e.target.value)}
+                          onFocus={e => {
+                            const n = parseCost(item.rate ?? '');
+                            if (n > 0) {
+                              updateLine(item.id, 'rate', String(n));
+                            } else {
+                              e.target.select();
+                            }
+                          }}
+                          onBlur={() => updateLine(item.id, 'rate', formatRate(item.rate ?? ''))}
+                          aria-label="Item unit rate"
+                          className="w-24 bg-transparent rounded-lg border border-transparent px-3 py-2.5 text-sm text-zinc-700 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]"
+                        />
+                      )}
+                    </td>
+                  </>
+                )}
                 <td className="border-t border-zinc-200">
-                  <input
-                    type="text"
-                    value={item.cost}
-                    onChange={e => updateLine(item.id, 'cost', e.target.value)}
-                    onFocus={e => {
-                      const n = parseCost(item.cost);
-                      if (n > 0) {
-                        updateLine(item.id, 'cost', String(n));
-                      } else {
-                        e.target.select();
-                      }
-                    }}
-                    onBlur={() => updateLine(item.id, 'cost', formatLineCost(item.cost))}
-                    placeholder="$0"
-                    aria-label="Item cost"
-                    className={`w-28 bg-transparent rounded-lg border border-transparent px-3 py-2.5 text-sm focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px] ${
-                      parseCost(item.cost) === 0 && !/\d/.test(item.cost) ? 'text-amber-500 italic' : 'text-zinc-700'
-                    }`}
-                  />
+                  {isQuantityItem(item) ? (
+                    <span className="block px-3 py-2.5 text-sm text-zinc-700">
+                      {formatMoney(lineItemCost(item))}
+                    </span>
+                  ) : (
+                    <input
+                      type="text"
+                      value={item.cost}
+                      onChange={e => updateLine(item.id, 'cost', e.target.value)}
+                      onFocus={e => {
+                        const n = parseCost(item.cost);
+                        if (n > 0) {
+                          updateLine(item.id, 'cost', String(n));
+                        } else {
+                          e.target.select();
+                        }
+                      }}
+                      onBlur={() => updateLine(item.id, 'cost', formatLineCost(item.cost))}
+                      placeholder="$0"
+                      aria-label="Item cost"
+                      className={`w-28 bg-transparent rounded-lg border border-transparent px-3 py-2.5 text-sm focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px] ${
+                        parseCost(item.cost) === 0 && !/\d/.test(item.cost) ? 'text-amber-500 italic' : 'text-zinc-700'
+                      }`}
+                    />
+                  )}
                 </td>
                 <td className="border-t border-zinc-200 pr-1" style={{ width: 40, minWidth: 40 }}>
                   <XBtn onClick={() => removeLine(item.id)} />
