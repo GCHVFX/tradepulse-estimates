@@ -1,30 +1,29 @@
 # Handoff
 
-Updated: 2026-07-25 PDT (second session same day: payments smoke test rewrite)
+Updated: 2026-07-25 PDT (third session same day: line item display fix)
 
 ## Current state
 
-TradePulse Estimates' `main` branch carries the SPEC.md estimate-flow work (photo merge, photo persistence, structured line items), committed and pushed to `origin/main` along with the two previously unpushed commits (`240d0a8` AI_WORKFLOW.md, `12db30c` footer support email). SPEC.md is marked Done.
+TradePulse Estimates' `main` branch carries the SPEC.md estimate-flow work plus a same-day follow-up fix to how structured line items render, committed and pushed to `origin/main`. SPEC.md is marked Done.
 
 ## Work completed
 
-- **Analyze Photos merged into Generate Estimate.** The separate "Analyse Photos" button is gone. Generate Estimate now runs the vision call first when photos are attached, then feeds that analysis plus the typed description into `/api/generate-estimate` as a new optional `photoAnalysis` field (capped at 4000 chars server-side). The button reads "Reading photos..." while the vision call runs. Generate is enabled when there is a description or at least one photo; with photos only, the analysis becomes the description.
+- **Analyze Photos merged into Generate Estimate.** The separate "Analyse Photos" button is gone. Generate Estimate now runs the vision call first when photos are attached, then feeds that analysis plus the typed description into `/api/generate-estimate` as a new optional `photoAnalysis` field (capped at 4000 chars server-side). Generate is enabled when there is a description or at least one photo; with photos only, the analysis becomes the description.
 - **Vision analysis cached.** `app/new/page.tsx` keeps the last analysis keyed by a signature of photo ids plus notes. Regenerating without touching photos or notes reuses it instead of calling `/api/analyze-photo` again.
-- **Photo / description / note persistence fixed (real bug).** Photos, per-photo notes, and photo errors previously lived inside `FormView`, which unmounts when the page switches to the estimate view, so going "Back to Description" came back to an empty form. That state now lives in `NewPageInner`. Only sending the estimate (`SendEstimateSheet onSent`) or starting a new one clears it.
-- **Structured line items.** `lib/estimate-summary.ts` `LineItem` gained optional `quantity`, `unit`, `rate`. The Line Items markdown table is written as `| Item | Qty | Unit | Rate | Cost |` when any quantity-based item exists, and as the original `| Item | Cost |` otherwise. Quantity items show a read-only cost recalculated live as quantity x unit rate in `editable-estimate-body.tsx`; flat fees keep the single editable cost field. `computeTotals` now derives every subtotal from `lineItemCost()`, so a stale stored cost cell cannot drift from qty x rate. The generate-estimate system prompt tells the model to classify each item and pick a freeform unit.
-- **No migration.** Old two-column estimates parse, render, and re-serialize exactly as before, verified in the browser side by side with the new format.
-- Added `tests/smoke/photos-persist-after-generate.spec.ts`, a regression lock for the persistence bug. The AI endpoints and `/api/profile` are stubbed via `page.route` so the test is fast, free, and deterministic.
-- **Rewrote the stale payments smoke test** as `tests/smoke/payments-no-direct-stripe.spec.ts` (was `payments-nav-no-direct-stripe.spec.ts`). It was rewritten rather than deleted because the invariant it guards is still live: `/api/billing/upgrade` still exists and still returns a Stripe `redirectUrl`, so wiring a navigation-looking element back to it would reintroduce the bug fixed in `68e0c4b` (a non-Pro user tapping the Payments tab was thrown straight to Stripe Checkout with no confirmation). Only the old test's *implementation* was stale: it clicked a bottom-nav Payments link, so removing that tab in `d93768a` broke it even though the app was correct. The rewrite navigates to `/payments` directly, asserts the in-app Pro panel renders, asserts the upgrade path is a deliberate `<Link href="/subscribe">`, and waits to confirm nothing auto-navigates to a Stripe domain. A second test covers the current entry point, the "Unpaid Invoices" pill on `/estimates`. Neither test asserts anything about the bottom nav, so a future nav change cannot break them again.
-- **Raised the suite's signup headroom.** `/api/auth/signup` allows 5 signups per hour per IP and the whole suite shares this machine's IP. The suite was already sitting exactly at that ceiling, and the two tests added today pushed it over, so an arbitrary later test started failing with a 429. `signUpFreshAccount` now resets the IP signup bucket before each provisioning signup. `signup-rate-limit.spec.ts` is unaffected: it calls the API directly rather than through the helper and does its own before/after resets. The two payments tests also share one account via `beforeAll`/`afterAll` rather than signing up twice.
+- **Photo / description / note persistence fixed (real bug).** That state now lives in `NewPageInner`, not `FormView`, so it survives the estimate-view switch. Only sending the estimate or starting a new one clears it.
+- **Structured line items, then corrected the same day.** `lib/estimate-summary.ts` `LineItem` carries optional `quantity`, `unit`, `rate` in storage so the app can compute cost as quantity x rate. The first version of this also *displayed* those as separate Qty/Unit/Rate columns, which caused two real problems caught from a live screenshot: (1) the model's own stated cost for a quantity item could disagree with quantity x rate (one case showed $1,440.00 for "3 hours @ $45/hr", i.e. computed from 32 hours), and (2) the five-column table was unreadable on a phone, wrapping Item to one character per line and pushing Cost off screen. Fixed by keeping the two-column `Item | Cost` display everywhere (editor, the raw live-streaming preview before an estimate is saved, the share page, and the PDF, all now via `formatEstimateForDisplay` / `displayLineItemsBlock`), with quantity folded into the description text ("Labour (3 hours @ $45.00/hr)") and cost always computed in code, never trusted from the model. In the editor, a quantity item shows a small collapsed "3 hours @ $45.00" line under its description; tapping it opens qty/unit/rate fields, and the cost recalculates live. Flat-fee items are unchanged.
+- **No migration.** Old two-column estimates parse, render, and re-serialize exactly as before.
+- Added `tests/smoke/photos-persist-after-generate.spec.ts`, a regression lock for the persistence bug.
+- **Rewrote the stale payments smoke test** as `tests/smoke/payments-no-direct-stripe.spec.ts` (was `payments-nav-no-direct-stripe.spec.ts`, pinned to a bottom-nav Payments link removed in `d93768a`). Rewritten rather than deleted because the invariant from `68e0c4b` (a non-Pro user must never be auto-redirected to Stripe) is still live: `/api/billing/upgrade` still exists and still returns a Stripe `redirectUrl`. The rewrite asserts the invariant directly against `/payments`, not against the nav.
+- **Raised the suite's signup headroom.** `/api/auth/signup` allows 5 signups per hour per IP; the suite was at that ceiling. `signUpFreshAccount` now resets the bucket before each provisioning signup.
 
 ## Verification performed
 
-- `npx next build` — compiled successfully, TypeScript clean.
-- **Playwright smoke suite against a local dev server (`PLAYWRIGHT_BASE_URL=http://localhost:3000`): 11 passed, 0 failed.** The previously reported `payments-nav-no-direct-stripe.spec.ts` failure is resolved by the rewrite described above, and the suite is fully green.
-- Sanity-checked that the rewritten payments test actually catches the original bug: temporarily added a client component to the `/payments` non-Pro branch doing `window.location.href = "https://checkout.stripe.com/..."`, confirmed the test failed with `Received string: "https://checkout.stripe.com/c/pay/test-session"`, then reverted. Re-ran after the revert to confirm green.
-- The persistence test was confirmed to fail on the pre-change baseline and pass after, so it locks a real regression rather than passing vacuously.
-- Browser check of the estimate view with both table formats: the new-format estimate showed Qty/Unit/Rate columns with a read-only cost, and a flat-fee row with cost only; the old-format estimate rendered unchanged. Editing quantity from 3 to 6 moved the line cost $285.00 to $570.00 and the total $457 to $756 live.
-- Direct model call using the updated system prompt: the model produced the five-column table and correctly split quantity-based items (labour in hrs, paint in gal) from a flat-fee permit.
+- `npx next build` — compiled successfully, TypeScript clean (checked after each of the three same-day changes).
+- Playwright smoke suite against a local dev server (`PLAYWRIGHT_BASE_URL=http://localhost:3000`): 11 passed, 0 failed, most recently re-confirmed after the line-item display fix.
+- Sanity-checked the rewritten payments test catches the original bug by temporarily reintroducing a `window.location.href` Stripe redirect, confirming failure, then reverting.
+- The persistence test was confirmed to fail on the pre-change baseline and pass after.
+- Line-item display fix verified with a temporary Playwright check at a real 412px mobile viewport, simulating a wrong AI-stated cost (32h-equivalent instead of 3h): confirmed the app displays the correct recomputed cost ($135.00) and total ($488), not the model's wrong values ($1,440.00 / $1,858), confirmed the two-column table fits on screen with no wrapping, confirmed tapping the collapsed quantity line opens qty/unit/rate fields and editing quantity live-updates cost and total, and confirmed an old-format estimate renders exactly as before. Screenshots reviewed directly, not just asserted.
 
 ## Known problems
 
@@ -32,26 +31,30 @@ TradePulse Estimates' `main` branch carries the SPEC.md estimate-flow work (phot
 - `.ai-control-centre/` and four `.bak-*` timestamped backup files remain untracked, still an open decision (gitignore vs. commit).
 - Supabase custom domain for full Google OAuth consent-screen branding remains an open, optional decision.
 - Carried over from the imported ChatGPT planning session, still undecided: the data model for business types/templates, the inspection-estimate schema and prompt changes, whether business type can change after onboarding, whether a third business type is warranted.
+- Not independently re-verified today: the share page and PDF render of a quantity-based line item against a real saved estimate (both go through the same `formatEstimateForDisplay` path already verified for the editor and live-streaming preview, but a live DB-backed render of `/share/[id]` and a generated PDF file were not opened this session).
 
 ## Exact next action
 
-Nothing outstanding on the estimate flow or the smoke suite. The carried-over Inspection Services planning question is next: propose the smallest implementation plan for adding that business type without changing existing Trades behaviour.
+Nothing outstanding on the estimate flow or the smoke suite. If it matters before this ships further, spot-check `/share/[id]` and a downloaded PDF for a quantity-based estimate. Otherwise the carried-over Inspection Services planning question is next: propose the smallest implementation plan for adding that business type without changing existing Trades behaviour.
 
 ---
 aiControlCentre:
   schemaVersion: 1
   status: Stable
   currentState: >-
-    SPEC.md estimate-flow work is done and pushed to origin/main: Analyze Photos
-    merged into Generate Estimate with cached vision analysis, photo/description
-    /note state lifted so it survives the back-to-description flow, and
-    quantity/unit/rate structured line items alongside the untouched legacy
-    flat-fee format. The stale payments smoke test was then rewritten to assert
-    the no-direct-Stripe invariant instead of a removed nav element, and the
-    suite's signup headroom raised. Build clean, smoke suite fully green at 11
-    passed.
+    SPEC.md estimate-flow work is done and pushed to origin/main. A same-day
+    follow-up fixed two real bugs in the structured line items: the AI's stated
+    cost for a quantity item could disagree with quantity x rate (confirmed via
+    a live screenshot showing $1,440.00 for 3 hours at $45/hr), and the
+    five-column table was unreadable on a phone. Every display surface now
+    shows a two-column Item/Cost table with quantity folded into the
+    description and cost always computed in code. Storage still keeps
+    quantity/unit/rate separately so the app can do the multiplying. Build
+    clean, smoke suite fully green at 11 passed.
   nextAction: >-
-    Propose the smallest implementation plan for an Inspection Services business
-    type without changing existing Trades behaviour.
-  updatedAt: '2026-07-25T18:20:00.000Z'
+    Optionally spot-check the share page and a downloaded PDF for a
+    quantity-based estimate (not yet independently re-verified this session).
+    Otherwise, propose the smallest implementation plan for an Inspection
+    Services business type without changing existing Trades behaviour.
+  updatedAt: '2026-07-25T19:10:00.000Z'
 ---
