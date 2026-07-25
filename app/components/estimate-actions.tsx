@@ -235,8 +235,16 @@ export function EstimateActions({
           an exact match, so the gap can't reopen from a sub-pixel rounding
           difference. Both bars are solid zinc-950 here, so the overlap is
           invisible; if BottomNav's own layout changes height, remeasure and
-          update this number too. */}
-      <div className="fixed bottom-[90px] left-0 right-0 px-5 pb-4 pt-4 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent flex flex-col gap-3 z-30">
+          update this number too.
+
+          BottomNav's floating "New" circle (z-40, w-16 h-16 -mt-5) pokes up
+          about 19px above the nav's own top edge by design. With this div's
+          original pb-4, its bottom button's own bottom edge landed 6.5px
+          into that zone (measured), so the circle -- being on top -- could
+          intercept a tap meant for the button. pb-7 lifts the button clear
+          of it while the div's own edge still touches/overlaps the nav as
+          above, so no gap reopens either. */}
+      <div className="fixed bottom-[90px] left-0 right-0 px-5 pb-7 pt-4 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent flex flex-col gap-3 z-30">
         {isQuoteRequest ? (
           <>
             {convertError && (

@@ -90,7 +90,11 @@ export default async function EstimatePage({
         </a>
       </header>
 
-      <main className="flex-1 px-4 sm:px-5 overflow-auto pb-[14rem]">
+      {/* The wrapping div is min-h-dvh (a floor, not a cap), so once content
+          exceeds one screen this main never actually clips or scrolls on its
+          own -- overflow-auto here is a no-op, the whole document scrolls
+          normally instead. Left plain to match that reality. */}
+      <main className="flex-1 px-4 sm:px-5 pb-[14rem]">
         {isQuoteRequest ? (
           <>
             <div className="bg-white rounded-2xl p-5 mt-2">

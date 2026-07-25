@@ -24,6 +24,7 @@ Rules:
 - For automotive and vehicle parts, use American English spellings: tire not tyre, muffler not silencer, gas not petrol, truck not lorry.
 - Never show markup as a separate line item. Apply markup to material prices directly and list each material at its marked-up price. The customer sees final prices only.
 - In the Assumptions and Exclusions section, write each item as a plain bullet point. Do not use bold labels like **Included:**, **Excluded:**, or **Assumptions:**. Just write the assumption or exclusion directly.
+- Estimate labour hours the way an experienced tradesperson actually works, not with a built-in safety margin. Do not round up to a full day, a full shift, or a round number out of caution. A small, contained job, such as capping off one or two pipes, patching a small section of drywall, or swapping a single fixture, is typically 1 to 3 hours of hands-on labour, not more. Reserve larger hour counts for jobs that genuinely involve that much physical work, such as a full room repaint, a panel upgrade, or a multi-fixture rough-in.
 
 Output must follow this exact structure:
 

@@ -17,6 +17,11 @@ export interface LineItem {
   quantity?: string;
   unit?: string;
   rate?: string;
+  // Set once, when the item is first created (AI parse or the structured
+  // branch of the parser), and never re-derived from current field values
+  // after that. See isQuantityItem() for why this can't just be computed
+  // live from quantity/rate.
+  quantityBased?: boolean;
 }
 
 export interface AssumptionItem {
@@ -61,10 +66,28 @@ export function parseQuantity(raw: string | undefined): number {
   return parseFloat(raw.replace(/[^0-9.\-]/g, '')) || 0;
 }
 
-// Quantity-based items carry both a quantity and a unit rate. Anything else is
-// a flat fee, including every line item on a pre-structured-format estimate.
+// Whether an item is quantity-based (quantity x rate, cost calculated) or a
+// flat fee (one hand-typed cost). Reads the stable quantityBased flag set at
+// creation time, never re-derived live from the current quantity/rate values.
+//
+// Two failure modes if this were computed live from the current field values
+// instead:
+// - Requiring BOTH fields non-blank (AND): while editing, clearing one field
+//   to retype it (e.g. deleting "10" to change the quantity) flips the item
+//   to flat mid-edit. The editor's expand/collapse UI is gated on this same
+//   function, so the edit panel -- the very inputs being typed into --
+//   unmounts itself, with no way back in short of deleting the item.
+// - Requiring EITHER field non-blank (OR): the AI sometimes fills in Qty and
+//   Unit for a material but leaves Rate blank (or vice versa) rather than
+//   leaving all three blank as instructed. That row would then be treated as
+//   quantity-based with a zero rate, discarding the AI's stated cost and
+//   silently zeroing it out.
+// A flag set once at parse time, using a strict check, avoids both: it can't
+// be flipped by a user mid-edit, and an AI row that's genuinely incomplete
+// falls back to trusting its own stated cost instead of being recomputed to
+// zero.
 export function isQuantityItem(item: LineItem): boolean {
-  return !!item.quantity?.trim() && !!item.rate?.trim();
+  return item.quantityBased === true;
 }
 
 export function formatMoney(amount: number): string {
@@ -178,6 +201,12 @@ export function parseSummary(rawSummary: string): ParsedSummary {
           // Structured format: Item | Qty | Unit | Rate | Cost. Older estimates
           // only have Item | Cost and are read as flat fees.
           if (cells.length >= 5) {
+            // The one place quantityBased gets decided: strictly, from the raw
+            // cells, both present. A row where the AI left only one of the two
+            // blank (inconsistent with the prompt, but seen in practice) is
+            // treated as flat rather than a quantity item with a zero rate, so
+            // its stated cost is trusted instead of being recomputed to zero.
+            const quantityBased = Boolean(cells[1]?.trim()) && Boolean(cells[3]?.trim());
             const item: LineItem = {
               id: newId(),
               label: cells[0],
@@ -185,8 +214,9 @@ export function parseSummary(rawSummary: string): ParsedSummary {
               unit: cells[2],
               rate: cells[3],
               cost: cells[4],
+              quantityBased,
             };
-            return withComputedCost(item);
+            return quantityBased ? withComputedCost(item) : item;
           }
           return { id: newId(), label: cells[0], cost: cells[1] };
         });

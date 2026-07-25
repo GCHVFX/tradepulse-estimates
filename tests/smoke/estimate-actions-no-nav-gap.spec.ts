@@ -29,8 +29,10 @@ test("no visible gap between the estimate action bar and the bottom nav", async 
 
     // The estimate is saved asynchronously at the end of the stream, so poll
     // for it rather than assuming it's queryable the instant the UI updates.
+    // This test uses a real AI call (unlike most of this suite), so the DB
+    // insert can occasionally take a bit longer than a fixed short window.
     let estimateId: string | undefined;
-    for (let i = 0; i < 10 && !estimateId; i++) {
+    for (let i = 0; i < 20 && !estimateId; i++) {
       const listRes = await page.request.get("/api/estimates");
       const listBody = (await listRes.json()) as { estimates?: Array<{ id: string }> };
       estimateId = listBody.estimates?.[0]?.id;

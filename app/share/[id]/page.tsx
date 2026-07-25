@@ -146,22 +146,14 @@ export default async function ShareEstimatePage({
         </div>
       </main>
 
-      <footer className="px-5 py-8 border-t border-slate-200 bg-white text-center">
-        <Image
-          src="/tradepulse-logo.png"
-          alt="TradePulse Estimates"
-          width={120}
-          height={33}
-          className="object-contain mx-auto mb-3 opacity-60"
-          unoptimized
-        />
-        <p className="text-slate-500 text-base">
-          Create your own estimate at{" "}
+      <footer className="px-5 py-4 text-center">
+        <p className="text-slate-400 text-xs">
+          Powered by{" "}
           <a
             href="https://trytradepulse.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-amber-500 hover:text-amber-400 transition-colors font-medium"
+            className="text-slate-500 hover:text-amber-500 transition-colors font-medium"
           >
             TradePulse
           </a>
