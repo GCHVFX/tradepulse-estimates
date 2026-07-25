@@ -1,10 +1,10 @@
 # Handoff
 
-Updated: 2026-07-25 PDT (third session same day: line item display fix)
+Updated: 2026-07-25 PDT (fourth session same day: Payments empty-state and icon fix)
 
 ## Current state
 
-TradePulse Estimates' `main` branch carries the SPEC.md estimate-flow work plus a same-day follow-up fix to how structured line items render, committed and pushed to `origin/main`. SPEC.md is marked Done.
+TradePulse Estimates' `main` branch carries the SPEC.md estimate-flow work plus two same-day follow-ups (line item display fix, Payments empty-state/icon fix), committed and pushed to `origin/main`. SPEC.md is marked Done.
 
 ## Work completed
 
@@ -16,14 +16,17 @@ TradePulse Estimates' `main` branch carries the SPEC.md estimate-flow work plus 
 - Added `tests/smoke/photos-persist-after-generate.spec.ts`, a regression lock for the persistence bug.
 - **Rewrote the stale payments smoke test** as `tests/smoke/payments-no-direct-stripe.spec.ts` (was `payments-nav-no-direct-stripe.spec.ts`, pinned to a bottom-nav Payments link removed in `d93768a`). Rewritten rather than deleted because the invariant from `68e0c4b` (a non-Pro user must never be auto-redirected to Stripe) is still live: `/api/billing/upgrade` still exists and still returns a Stripe `redirectUrl`. The rewrite asserts the invariant directly against `/payments`, not against the nav.
 - **Raised the suite's signup headroom.** `/api/auth/signup` allows 5 signups per hour per IP; the suite was at that ceiling. `signUpFreshAccount` now resets the bucket before each provisioning signup.
+- **Payments empty state.** `/payments` for a Pro account with zero invoices used to just say "No outstanding invoices." with no way to tell where invoices come from, since there is no button on the page itself to create one. It now explains that a completed job becomes an invoice from its own estimate page, and links to `/estimates`.
+- **Unpaid Invoices icon.** The hand-drawn `$` SVG next to "Unpaid Invoices" on `/estimates` rendered lopsided. Replaced with `lucide-react`'s `DollarSign`, matching the icon set already used elsewhere (Tag, FileText, User, Plus in the bottom nav).
 
 ## Verification performed
 
-- `npx next build` — compiled successfully, TypeScript clean (checked after each of the three same-day changes).
-- Playwright smoke suite against a local dev server (`PLAYWRIGHT_BASE_URL=http://localhost:3000`): 11 passed, 0 failed, most recently re-confirmed after the line-item display fix.
+- `npx next build` — compiled successfully, TypeScript clean (checked after each of the four same-day changes).
+- Playwright smoke suite against a local dev server (`PLAYWRIGHT_BASE_URL=http://localhost:3000`): 11 passed, 0 failed, most recently re-confirmed after the Payments empty-state/icon fix.
 - Sanity-checked the rewritten payments test catches the original bug by temporarily reintroducing a `window.location.href` Stripe redirect, confirming failure, then reverting.
 - The persistence test was confirmed to fail on the pre-change baseline and pass after.
 - Line-item display fix verified with a temporary Playwright check at a real 412px mobile viewport, simulating a wrong AI-stated cost (32h-equivalent instead of 3h): confirmed the app displays the correct recomputed cost ($135.00) and total ($488), not the model's wrong values ($1,440.00 / $1,858), confirmed the two-column table fits on screen with no wrapping, confirmed tapping the collapsed quantity line opens qty/unit/rate fields and editing quantity live-updates cost and total, and confirmed an old-format estimate renders exactly as before. Screenshots reviewed directly, not just asserted.
+- Payments empty-state and icon fix verified with a temporary Playwright check: a throwaway account flipped to Pro directly in the DB (the pages read `plan` server-side, not through a client fetch), navigated to `/estimates` and `/payments` with zero invoices, screenshots reviewed directly at a 412px mobile viewport.
 
 ## Known problems
 
@@ -42,19 +45,19 @@ aiControlCentre:
   schemaVersion: 1
   status: Stable
   currentState: >-
-    SPEC.md estimate-flow work is done and pushed to origin/main. A same-day
-    follow-up fixed two real bugs in the structured line items: the AI's stated
-    cost for a quantity item could disagree with quantity x rate (confirmed via
-    a live screenshot showing $1,440.00 for 3 hours at $45/hr), and the
-    five-column table was unreadable on a phone. Every display surface now
-    shows a two-column Item/Cost table with quantity folded into the
-    description and cost always computed in code. Storage still keeps
-    quantity/unit/rate separately so the app can do the multiplying. Build
-    clean, smoke suite fully green at 11 passed.
+    SPEC.md estimate-flow work is done and pushed to origin/main, plus two
+    same-day follow-ups. First: two real bugs in the structured line items
+    (AI-stated cost disagreeing with quantity x rate, five-column table
+    unreadable on a phone), fixed by computing cost in code and collapsing
+    every display surface to a two-column table. Second: /payments' empty
+    state gave a Pro user with zero invoices no way to know where invoices
+    come from, now explains and links to /estimates; the lopsided hand-drawn
+    $ icon next to Unpaid Invoices swapped for lucide-react's DollarSign.
+    Build clean, smoke suite fully green at 11 passed.
   nextAction: >-
     Optionally spot-check the share page and a downloaded PDF for a
     quantity-based estimate (not yet independently re-verified this session).
     Otherwise, propose the smallest implementation plan for an Inspection
     Services business type without changing existing Trades behaviour.
-  updatedAt: '2026-07-25T19:10:00.000Z'
+  updatedAt: '2026-07-25T19:45:00.000Z'
 ---
