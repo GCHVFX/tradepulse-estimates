@@ -7,6 +7,7 @@ import { EditableEstimateBody } from "@/app/components/editable-estimate-body";
 import { CompanyEstimateHeader } from "@/app/components/company-estimate-header";
 import { EstimateMarkdown } from "@/app/components/estimate-markdown";
 import { formatEstimateForDisplay } from "@/lib/estimate-summary";
+import { STARTER_MONTHLY_PHOTO_LIMIT } from "@/lib/rate-limit";
 import { formatPhoneInput } from "@/lib/format-phone";
 import { Logo } from "@/app/components/logo";
 import { BottomNav } from "@/app/components/bottom-nav";
@@ -33,7 +34,7 @@ const EXAMPLE_CHIPS = [
   { label: "Electrical Panel Upgrade", text: "Upgrade 100A panel to 200A. Pull permit, new Square D panel, reconnect all circuits, about 6 hours." },
 ] as const;
 
-const PHOTO_PRO_GATE_MESSAGE = "Photo estimates are a Pro feature. Upgrade to Pro to use your camera.";
+const PHOTO_LIMIT_REACHED_MESSAGE = `You've used your ${STARTER_MONTHLY_PHOTO_LIMIT} free AI photo estimates this month. Upgrade to Pro for unlimited AI photo estimates.`;
 
 const jobPlaceholders = [
   "Replace hot water tank in basement",
@@ -177,6 +178,7 @@ interface FormViewProps {
   isFirstTime: boolean;
   needsProfileSetup: boolean;
   isPro: boolean;
+  aiPhotoEstimatesRemaining: number | null;
   error: string;
   photos: PhotoEntry[];
   setPhotos: React.Dispatch<React.SetStateAction<PhotoEntry[]>>;
@@ -401,6 +403,7 @@ function FormView({
   isFirstTime,
   needsProfileSetup,
   isPro,
+  aiPhotoEstimatesRemaining,
   error,
   photos,
   setPhotos,
@@ -414,6 +417,10 @@ function FormView({
   const photoInputRef = useRef<HTMLInputElement>(null);
   const libraryInputRef = useRef<HTMLInputElement>(null);
   const [showPhotoSourceSheet, setShowPhotoSourceSheet] = useState(false);
+  // Treat an unknown remaining count (still loading, or a Pro account where
+  // it's always null) as "let them tap" -- the server is the real gate per
+  // the /api/analyze-photo check, this is only ever a proactive UI hint.
+  const canUsePhotos = isPro || (aiPhotoEstimatesRemaining ?? 1) > 0;
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -592,19 +599,23 @@ function FormView({
               <button
                 type="button"
                 disabled={photoAnalysing || photos.length >= 5}
-                onClick={() => (isPro ? setShowPhotoSourceSheet(true) : setPhotoError(PHOTO_PRO_GATE_MESSAGE))}
+                onClick={() =>
+                  canUsePhotos
+                    ? setShowPhotoSourceSheet(true)
+                    : setPhotoError(PHOTO_LIMIT_REACHED_MESSAGE)
+                }
                 aria-label="Add photos for AI analysis"
                 className="relative w-12 h-12 rounded-full flex items-center justify-center bg-amber-500 text-zinc-950 hover:bg-amber-400 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
               >
                 <CameraIcon className="w-6 h-6" />
-                {!isPro && (
-                  <span className="absolute -top-1 -right-1 text-[8px] font-bold leading-none text-amber-500 bg-zinc-950 border border-amber-500/50 rounded px-1 py-0.5">
-                    PRO
-                  </span>
-                )}
               </button>
             </div>
           </div>
+          {!isPro && aiPhotoEstimatesRemaining !== null && aiPhotoEstimatesRemaining > 0 && (
+            <p className="text-xs text-zinc-400">
+              {aiPhotoEstimatesRemaining} of {STARTER_MONTHLY_PHOTO_LIMIT} AI photo estimates left this month
+            </p>
+          )}
           <input
             ref={photoInputRef}
             type="file"
@@ -681,13 +692,13 @@ function FormView({
           )}
           {photoError && (
             <p className="text-red-400 text-sm">
-              {photoError === PHOTO_PRO_GATE_MESSAGE ? (
+              {photoError === PHOTO_LIMIT_REACHED_MESSAGE ? (
                 <>
-                  Photo estimates are a Pro feature.{" "}
+                  You&apos;ve used your {STARTER_MONTHLY_PHOTO_LIMIT} free AI photo estimates this month.{" "}
                   <Link href="/subscribe" className="underline hover:text-red-300">
                     Upgrade to Pro
                   </Link>{" "}
-                  to use your camera.
+                  for unlimited AI photo estimates.
                 </>
               ) : (
                 photoError
@@ -904,7 +915,7 @@ function NewPageInner() {
   const [savedEstimateId, setSavedEstimateId] = useState<string | null>(null);
   const [showSendSheet, setShowSendSheet] = useState(false);
   const [customerDetailsSaved, setCustomerDetailsSaved] = useState(false);
-  const { logoUrl, businessName, businessEmail, preparedBy, isPro, isLoading: profileLoading } = useBusinessProfile();
+  const { logoUrl, businessName, businessEmail, preparedBy, isPro, aiPhotoEstimatesRemaining, isLoading: profileLoading } = useBusinessProfile();
   const [jobTitle, setJobTitle] = useState("");
   const [isFirstTime, setIsFirstTime] = useState(false);
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
@@ -977,10 +988,13 @@ function NewPageInner() {
         }),
       });
       const data = (await res.json().catch(() => null)) as
-        | { description?: string; error?: string }
+        | { description?: string; error?: string; message?: string }
         | null;
       if (!res.ok || !data?.description) {
-        throw new Error(data?.error || "Could not analyse the photos. Try again.");
+        // photo_limit_reached carries a human-readable message alongside the
+        // machine-readable error code; every other error just uses `error`
+        // as the message directly, same as before.
+        throw new Error(data?.message || data?.error || "Could not analyse the photos. Try again.");
       }
       photoAnalysisRef.current = { signature, description: data.description };
       return data.description;
@@ -993,7 +1007,7 @@ function NewPageInner() {
     setPhotoError("");
 
     let photoAnalysis = "";
-    if (isPro && photos.length > 0) {
+    if (photos.length > 0) {
       try {
         photoAnalysis = await analysePhotos();
       } catch (err) {
@@ -1185,6 +1199,7 @@ function NewPageInner() {
       isFirstTime={isFirstTime}
       needsProfileSetup={needsProfileSetup}
       isPro={isPro}
+      aiPhotoEstimatesRemaining={aiPhotoEstimatesRemaining}
       error={error}
       photos={photos}
       setPhotos={setPhotos}

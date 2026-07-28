@@ -1,6 +1,6 @@
 export const maxDuration = 60;
 
-import { checkRateLimit } from "@/lib/rate-limit";
+import { checkRateLimit, secondsUntilNextMonthUTC, STARTER_MONTHLY_PHOTO_LIMIT } from "@/lib/rate-limit";
 import { validateContentType } from "@/lib/api-utils";
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
@@ -29,12 +29,40 @@ export async function POST(request: NextRequest) {
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("plan")
+    .select("id, plan")
     .eq("owner_user_id", user.id)
     .maybeSingle();
 
-  if (!business || business.plan !== "pro") {
-    return applyTo(NextResponse.json({ error: "Pro plan required" }, { status: 403 }));
+  if (!business) {
+    return applyTo(NextResponse.json({ error: "Business not found" }, { status: 404 }));
+  }
+
+  // Starter gets STARTER_MONTHLY_PHOTO_LIMIT AI photo estimates per calendar
+  // month before hitting the paid vision model; Pro is unlimited here (still
+  // subject to the short-window abuse throttle below, same as Pro always
+  // was). Checked and incremented atomically before any Anthropic call, so a
+  // blocked request never spends API cost.
+  if (business.plan !== "pro") {
+    const monthly = await checkRateLimit(
+      supabaseAdmin,
+      business.id,
+      "analyze-photo-monthly",
+      STARTER_MONTHLY_PHOTO_LIMIT,
+      secondsUntilNextMonthUTC()
+    );
+    if (!monthly.allowed) {
+      return applyTo(
+        NextResponse.json(
+          {
+            error: "photo_limit_reached",
+            message: `You've used your ${STARTER_MONTHLY_PHOTO_LIMIT} free AI photo estimates this month. Upgrade to Pro for unlimited AI photo estimates.`,
+            remaining: 0,
+            limit: STARTER_MONTHLY_PHOTO_LIMIT,
+          },
+          { status: 403 }
+        )
+      );
+    }
   }
 
   const { allowed } = await checkRateLimit(supabaseAdmin, user.id, "analyze-photo", 5, 3600);

@@ -131,14 +131,15 @@ docs/
 - Gated by `business.plan === 'pro'` in `estimates/[id]/review-request/route.ts`
 - "Mark Job Done" button only shown on estimate detail when `isPro === true` and status === 'sent'
 
-### Photo Input (live, Pro-gated)
+### Photo Input (live, Starter capped / Pro unlimited)
 - Camera icon in the twin-action row attached to the job description textarea in `app/new/page.tsx` FormView (mic + camera, both 44px circles overlapping the textarea's bottom-right corner)
 - Tapping camera opens `PhotoSourceSheet` (`photo-source-sheet.tsx`) — choice of Take Photo or Choose from Camera Roll, up to 5 photos, optional per-photo note
 - Each photo is downscaled client-side (1568px max edge, JPEG) then sent to `POST /api/analyze-photo`
 - Route accepts `{ photos: [{ base64, mediaType, note }] }` (1 to 5 photos), sends them to `claude-sonnet-4-6` (vision), returns one consolidated plain-English job description that populates the textarea — existing Generate flow unchanged
 - Photos are never stored. No DB columns involved.
-- Gated by `business.plan === 'pro'` server-side; Starter sees a small "PRO" badge on the camera circle, tapping shows an upgrade message
-- Rate limited: 5 calls per user per 60 minutes
+- **Starter**: `STARTER_MONTHLY_PHOTO_LIMIT` (3, `lib/rate-limit.ts`) AI photo estimates per calendar month, enforced server-side in `/api/analyze-photo` before the Anthropic call via `checkRateLimit` keyed by `business.id`, action `analyze-photo-monthly`, window computed by `secondsUntilNextMonthUTC()` so it resets on the UTC calendar month boundary rather than a rolling 30 days. **Pro**: unlimited (this check is skipped entirely for `plan === 'pro'`).
+- `GET /api/profile` includes `ai_photo_estimates_remaining` (Starter: a number; Pro: `null`, meaning unlimited) via `useBusinessProfile()`. FormView shows "X of 3 AI photo estimates left this month" once Starter is under the cap, and blocks the camera tap client-side with an upgrade-to-Pro message once it hits 0 — client-side is UX only, the server route is the actual gate and cannot be bypassed by calling the API directly.
+- Rate limited: 5 calls per user per 60 minutes (separate short-window abuse throttle, applies to both plans, unchanged by the monthly cap above)
 
 ### Dictation (live, all plans)
 - Mic icon in the same twin-action row as Photo Input, attached to the job description textarea in `app/new/page.tsx` FormView
