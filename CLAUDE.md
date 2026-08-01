@@ -136,7 +136,7 @@ docs/
 - Tapping camera opens `PhotoSourceSheet` (`photo-source-sheet.tsx`) — choice of Take Photo or Choose from Camera Roll, up to 5 photos, optional per-photo note
 - Each photo is downscaled client-side (1568px max edge, JPEG) then sent to `POST /api/analyze-photo`
 - Route accepts `{ photos: [{ base64, mediaType, note }] }` (1 to 5 photos), sends them to `claude-sonnet-4-6` (vision), returns one consolidated plain-English job description that populates the textarea — existing Generate flow unchanged
-- Photos are never stored. No DB columns involved.
+- Photos sent to `/api/analyze-photo` are never stored. No DB columns involved. This is separate from estimate photos attached later via `POST /api/estimates/[id]/photos`, which are stored in `tpe_estimate_photos` and the `tpe-estimate-photos` bucket.
 - **Starter**: `STARTER_MONTHLY_PHOTO_LIMIT` (3, `lib/rate-limit.ts`) AI photo estimates per calendar month, enforced server-side in `/api/analyze-photo` before the Anthropic call via `checkRateLimit` keyed by `business.id`, action `analyze-photo-monthly`, window computed by `secondsUntilNextMonthUTC()` so it resets on the UTC calendar month boundary rather than a rolling 30 days. **Pro**: unlimited (this check is skipped entirely for `plan === 'pro'`).
 - `GET /api/profile` includes `ai_photo_estimates_remaining` (Starter: a number; Pro: `null`, meaning unlimited) via `useBusinessProfile()`. FormView shows "X of 3 AI photo estimates left this month" once Starter is under the cap, and blocks the camera tap client-side with an upgrade-to-Pro message once it hits 0 — client-side is UX only, the server route is the actual gate and cannot be bypassed by calling the API directly.
 - Rate limited: 5 calls per user per 60 minutes (separate short-window abuse throttle, applies to both plans, unchanged by the monthly cap above)
@@ -189,22 +189,35 @@ Public paths are listed in `proxy.ts PUBLIC_PATHS`. Every `/api/` path is alread
 
 **`tpe_businesses`**
 `id` (uuid PK), `owner_user_id` (FK to auth.users), `name`, `phone`, `email`, `logo_url`, `prepared_by`, `google_review_link`, `payment_link`, `plan` ('starter'|'pro', default 'starter'), `subscription_status`, `trial_ends_at`, `stripe_customer_id`, `stripe_subscription_id`, `signup_source`
+Pricing columns (the price book "rates"): `labour_rate`, `markup_percent`, `deposit_percent`, `deposit_threshold`, `tax_label` (default 'GST'), `tax_rate` (default 5)
 
 **`tpe_estimates`**
-`id`, `business_id` (FK to tpe_businesses.id), `title`, `summary` (full markdown content), `status` ('draft'|'sent'|'done'|'needs_review'), `source` ('app'|'website_quote'), `customer_name`, `customer_phone`, `customer_email`, `job_address`, `customer_id`, `prepared_by`, `deposit_amount`, `sent_via`, `sent_at`, `copied_at`, `completed_at`, `review_requested_at`, `created_at`
-Additional columns: `payment_status`, `invoice_amount`, `due_date`, `last_reminder_sent_at`, `reminder_count` (Payments feature)
+`id`, `business_id` (FK to tpe_businesses.id), `title`, `summary` (full markdown content), `status` ('draft'|'sent'|'done'|'needs_review'), `source` ('app'|'website_quote'), `customer_name`, `customer_phone`, `customer_email`, `job_address`, `prepared_by`, `deposit_amount`, `sent_via`, `sent_at`, `copied_at`, `completed_at`, `review_requested_at`, `created_at`, `updated_at`
+Inbound website-quote columns: `description`, `service_type`, `location`, `urgency`
+Photos: `include_photos` (boolean), controls whether attached photos render on the share page and in the PDF
+Payments columns: `payment_status`, `invoice_amount`, `due_date`, `last_reminder_sent_at`, `reminder_count`
+Grouped-pricing columns (added 2026-07-31, **not yet used by any code**): `pricing_source` ('markdown'|'structured', default 'markdown', check-constrained) and `customer_pricing_mode` ('detailed'|'grouped', default 'detailed', check-constrained). All existing estimates are 'markdown' and 'detailed'.
+Unused columns, present in the schema but never read or written by app code: `scope`, `assumptions`, `payment_terms`, `notes`. That content lives inside `summary`.
+There is no `customer_id` column.
+
+**`tpe_estimate_items`** (added 2026-07-31, **currently empty and unused by any code**)
+`id`, `estimate_id` (FK to tpe_estimates, ON DELETE CASCADE), `description`, `item_type` ('labour'|'material'|'service'|'allowance'|'other'), `is_allowance`, `quantity`, `unit`, `unit_price`, `line_total`, `labour_hours`, `labour_rate`, `markup_percent`, `group_label`, `customer_visible`, `display_order`, `taxable`, `created_at`, `updated_at`
+Structured priced rows for future grouped customer pricing. Money and quantities are `numeric`, never floating point. Percentages are whole numbers (20 means 20%). Markdown remains authoritative for pricing until `pricing_source` says otherwise. See `TRADEPULSE_ESTIMATE_ITEMS_SCHEMA.md`.
 
 **`tpe_estimate_photos`**
-`id`, `estimate_id` (FK to tpe_estimates), `storage_path`, `file_name`, `note`, `created_at` — photo metadata, files in `tpe-estimate-photos` bucket
+`id`, `estimate_id` (FK to tpe_estimates), `storage_path`, `original_filename`, `mime_type`, `file_size`, `created_at`, `updated_at`. Photo metadata, files in the private `tpe-estimate-photos` bucket, served via signed URLs. There is no `note` or `file_name` column.
 
 **`tpe_pricebook_items`**
-`id`, `business_id` (FK to tpe_businesses.id), `name`, `category`, `labour_price`, `material_price`, `created_at`
+`id`, `business_id` (FK to tpe_businesses.id), `name`, `description`, `category`, `labour_price`, `material_price`, `created_at`
+Note: `/api/generate-estimate` injects only `name` and `labour_price` into the prompt. `description` and `material_price` are stored but never reach generation.
 
 **`tpe_estimate_line_items`**
 `id`, `estimate_id` (FK to tpe_estimates), `description`, `quantity`, `unit_price`, `line_type`, `created_at`
+**Unused.** No application code reads or writes this table. Line items are stored as a markdown pipe table inside `tpe_estimates.summary` and parsed by `lib/estimate-summary.ts`.
 
 **`tpe_estimate_changes`**
 `id`, `estimate_id` (FK to tpe_estimates), `user_id`, `change_type` ('created'|'edited'|'sent'|'deleted'), `old_value`, `new_value`, `changed_at`, `created_at` — audit log, written by `lib/audit-log.ts logEstimateChange()`
+In practice only `'sent'` is ever written, from `/api/send-sms` and `/api/send-email`. Create, edit, and delete are not logged.
 
 **`tpe_payment_reminders`**
 `id`, `estimate_id` (FK to tpe_estimates), `business_id`, `channel`, `stage`, `message`, `sent_at`

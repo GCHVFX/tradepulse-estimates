@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
+import { hasProPaymentsAccess } from "@/lib/auth";
 
 export async function PATCH(
   request: NextRequest,
@@ -46,12 +47,19 @@ export async function PATCH(
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("id")
+    .select("id, plan, subscription_status, trial_ends_at")
     .eq("owner_user_id", user.id)
     .maybeSingle();
 
   if (!business) {
     return applyTo(NextResponse.json({ error: "Business not found" }, { status: 404 }));
+  }
+
+  // Payments is Pro-only. Marking an estimate invoiced is what starts the
+  // automated reminder schedule, so this gate has to hold server-side: the
+  // UI hiding the button is not enforcement.
+  if (!hasProPaymentsAccess(business)) {
+    return applyTo(NextResponse.json({ error: "Pro plan required" }, { status: 403 }));
   }
 
   const { data: estimate } = await supabaseAdmin

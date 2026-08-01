@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import twilio from "twilio";
 import { Resend } from "resend";
 import { supabaseAdmin } from "@/lib/supabase-server";
+import { hasProPaymentsAccess } from "@/lib/auth";
 
 type StageName = "pre_due" | "overdue_1" | "overdue_2" | "overdue_ongoing";
 
@@ -120,11 +121,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const businessIds = [...new Set(estimates.map((e) => e.business_id).filter((id): id is string => Boolean(id)))];
   const { data: businesses } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("id, name, payment_link")
+    .select("id, name, payment_link, plan, subscription_status, trial_ends_at")
     .in("id", businessIds);
 
+  // Payments is Pro-only, so only entitled businesses get reminders sent on
+  // their behalf. Filtering the map here (rather than per estimate) keeps
+  // this to the one batched lookup the cron already made, no extra queries.
+  // Ineligible businesses are simply absent from the map, and the loop below
+  // skips any estimate whose business is missing from it.
   const businessMap = new Map(
-    (businesses ?? []).map((b) => [b.id, b])
+    (businesses ?? [])
+      .filter((b) => hasProPaymentsAccess(b))
+      .map((b) => [b.id, b])
   );
 
   const smsConfigured = Boolean(
@@ -145,6 +153,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   for (const estimate of estimates) {
     if (!estimate.business_id || !estimate.due_date || estimate.invoice_amount === null) continue;
+
+    // Not entitled to Pro Payments (Starter, cancelled, past due, or an
+    // expired trial), so send nothing on their behalf. This has to be an
+    // explicit skip: the send path below reads the business with optional
+    // chaining and falls back to "your contractor", so a missing business
+    // would otherwise still deliver a reminder under a generic name.
+    if (!businessMap.has(estimate.business_id)) continue;
 
     const [year, month, day] = estimate.due_date.slice(0, 10).split("-").map(Number);
     if (!year || !month || !day) continue;

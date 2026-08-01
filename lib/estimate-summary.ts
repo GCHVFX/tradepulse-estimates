@@ -282,7 +282,10 @@ function displayLineItemsBlock(lineItems: LineItem[]): string {
   return `## Line Items\n${table}`;
 }
 
-function lineItemsBlock(lineItems: LineItem[]): string {
+// Exported so lib/estimate-items.ts can compare its structured round trip
+// against the one authoritative serializer instead of reimplementing it.
+// Export only: the body and behaviour are unchanged.
+export function lineItemsBlock(lineItems: LineItem[]): string {
   // Storage form. Only estimates that actually have quantity-based items get
   // the wider table; older estimates keep the exact two-column layout they were
   // saved in. Keeping quantity, unit, and rate as separate columns here is what

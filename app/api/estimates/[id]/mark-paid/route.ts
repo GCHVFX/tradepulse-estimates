@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
+import { hasProPaymentsAccess } from "@/lib/auth";
 
 export async function PATCH(
   request: NextRequest,
@@ -13,12 +14,18 @@ export async function PATCH(
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("id")
+    .select("id, plan, subscription_status, trial_ends_at")
     .eq("owner_user_id", user.id)
     .maybeSingle();
 
   if (!business) {
     return applyTo(NextResponse.json({ error: "Business not found" }, { status: 404 }));
+  }
+
+  // Payments is Pro-only. The UI never surfaces this action to Starter, but
+  // the UI is not the gate: this route is reachable directly.
+  if (!hasProPaymentsAccess(business)) {
+    return applyTo(NextResponse.json({ error: "Pro plan required" }, { status: 403 }));
   }
 
   const { data: estimate } = await supabaseAdmin
@@ -34,9 +41,14 @@ export async function PATCH(
 
   const { data: updated, error: updateError } = await supabaseAdmin
     .from("tpe_estimates")
+    // Payment state only. `completed_at` means "the job was marked done" and
+    // is owned by Mark Job Done (PATCH /api/estimates with status: 'done').
+    // Writing it here overwrote that timestamp, and on an estimate that was
+    // never marked done it invented a job-completion time that never
+    // happened. /estimates renders completed_at as the job-done date, so both
+    // cases showed the customer-facing list a wrong date.
     .update({
       payment_status: "paid",
-      completed_at: new Date().toISOString(),
     })
     .eq("id", id)
     .eq("business_id", business.id)

@@ -52,7 +52,11 @@ export default async function EstimatePage({
     .select("storage_path")
     .eq("estimate_id", id);
 
-  const photoUrls: string[] = [];
+  // Each photo carries both its signed URL (short-lived, for display only)
+  // and its storage_path (the stable identifier the delete API matches on).
+  // The signed URL must never be used as the identifier: it is regenerated on
+  // every render and expires, so it cannot address a row.
+  const photos: Array<{ url: string; storagePath: string }> = [];
   if (photoRecords && photoRecords.length > 0) {
     for (const record of photoRecords) {
       const { data: signedUrlData, error: signedUrlError } = await supabaseAdmin.storage
@@ -62,10 +66,11 @@ export default async function EstimatePage({
         console.error(`[estimate-photos] signed URL failed for ${record.storage_path}:`, signedUrlError.message);
       }
       if (signedUrlData?.signedUrl) {
-        photoUrls.push(signedUrlData.signedUrl);
+        photos.push({ url: signedUrlData.signedUrl, storagePath: record.storage_path });
       }
     }
   }
+  const photoUrls = photos.map((p) => p.url);
 
   const logoUrl = business?.logo_url ?? null;
   const businessName = business?.name ?? "";
@@ -147,7 +152,7 @@ export default async function EstimatePage({
 
               <EstimatePhotos
                 estimateId={estimate.id}
-                photoUrls={photoUrls}
+                photos={photos}
                 includePhotos={photoUrls.length > 0}
                 isPro={isPro}
               />
@@ -184,7 +189,7 @@ export default async function EstimatePage({
 
               <EstimatePhotos
                 estimateId={estimate.id}
-                photoUrls={photoUrls}
+                photos={photos}
                 includePhotos={estimate.include_photos ?? (photoUrls.length > 0)}
                 isPro={isPro}
               />

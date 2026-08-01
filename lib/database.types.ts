@@ -7,8 +7,10 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "13.0.4"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -134,6 +136,77 @@ export type Database = {
           },
         ]
       }
+      tpe_estimate_items: {
+        Row: {
+          created_at: string
+          customer_visible: boolean
+          description: string
+          display_order: number
+          estimate_id: string
+          group_label: string | null
+          id: string
+          is_allowance: boolean
+          item_type: string
+          labour_hours: number | null
+          labour_rate: number | null
+          line_total: number
+          markup_percent: number | null
+          quantity: number
+          taxable: boolean
+          unit: string | null
+          unit_price: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          customer_visible?: boolean
+          description: string
+          display_order?: number
+          estimate_id: string
+          group_label?: string | null
+          id?: string
+          is_allowance?: boolean
+          item_type?: string
+          labour_hours?: number | null
+          labour_rate?: number | null
+          line_total?: number
+          markup_percent?: number | null
+          quantity?: number
+          taxable?: boolean
+          unit?: string | null
+          unit_price?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          customer_visible?: boolean
+          description?: string
+          display_order?: number
+          estimate_id?: string
+          group_label?: string | null
+          id?: string
+          is_allowance?: boolean
+          item_type?: string
+          labour_hours?: number | null
+          labour_rate?: number | null
+          line_total?: number
+          markup_percent?: number | null
+          quantity?: number
+          taxable?: boolean
+          unit?: string | null
+          unit_price?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tpe_estimate_items_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "tpe_estimates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tpe_estimate_line_items: {
         Row: {
           created_at: string
@@ -245,6 +318,7 @@ export type Database = {
           customer_email: string
           customer_name: string
           customer_phone: string
+          customer_pricing_mode: string
           deposit_amount: string | null
           description: string
           due_date: string | null
@@ -258,6 +332,7 @@ export type Database = {
           payment_status: string | null
           payment_terms: string | null
           prepared_by: string
+          pricing_source: string
           reminder_count: number
           review_requested_at: string | null
           scope: string | null
@@ -280,6 +355,7 @@ export type Database = {
           customer_email: string
           customer_name: string
           customer_phone: string
+          customer_pricing_mode?: string
           deposit_amount?: string | null
           description: string
           due_date?: string | null
@@ -293,6 +369,7 @@ export type Database = {
           payment_status?: string | null
           payment_terms?: string | null
           prepared_by?: string
+          pricing_source?: string
           reminder_count?: number
           review_requested_at?: string | null
           scope?: string | null
@@ -315,6 +392,7 @@ export type Database = {
           customer_email?: string
           customer_name?: string
           customer_phone?: string
+          customer_pricing_mode?: string
           deposit_amount?: string | null
           description?: string
           due_date?: string | null
@@ -328,6 +406,7 @@ export type Database = {
           payment_status?: string | null
           payment_terms?: string | null
           prepared_by?: string
+          pricing_source?: string
           reminder_count?: number
           review_requested_at?: string | null
           scope?: string | null
@@ -479,10 +558,7 @@ export type Database = {
     }
     Functions: {
       increment_rate_limit: {
-        Args: {
-          p_key: string
-          p_action: string
-        }
+        Args: { p_action: string; p_key: string }
         Returns: {
           new_count: number
           window_expires_at: string
