@@ -2,7 +2,51 @@
 
 Updated: 2026-07-30 PDT
 
-## Latest session (2026-07-31, latest): Slice 1 COMPLETE, structured schema applied to production
+## Latest session (2026-07-31, latest): checkpoint commit + lazy conversion service
+
+### Checkpoint commit
+
+**`6f40ddb` "Add structured estimate pricing foundation"**, on `main`, **not pushed**. 25 files, 5945 insertions: the documentation corrections, baseline and architecture and audit and schema documents, the photo-deletion repair, the `completed_at` fix, Pro Payments server-side enforcement, `lib/estimate-items.ts` with its fixtures and tests, the audit script, the schema migration, and the regenerated types.
+
+**Deliberately excluded and still dirty**, all pre-existing and unrelated: `.claude/settings.local.json` (local permissions), `.gitignore` (an unrelated `*.zip` line), `.ai-control-centre/`, and four `.bak-*` backup files. Every one of those was in the working tree before this work began.
+
+### Conversion slice status: COMPLETE, not wired
+
+**Files added:** `lib/estimate-item-migration.ts`, `supabase/migrations/20260731010000_create_convert_estimate_to_structured_fn.sql`, `tests/smoke/estimate-item-migration.spec.ts`, `TRADEPULSE_ESTIMATE_ITEM_CONVERSION.md`.
+
+**Files modified:** `lib/database.types.ts` (regenerated for the new function), `TRADEPULSE_ESTIMATES_BASELINE.md`, `HANDOFF.md`.
+
+### Transaction design
+
+PostgREST cannot span a transaction across HTTP calls, so the insert and the `pricing_source` flip live in one PL/pgSQL function, `tpe_convert_estimate_to_structured`, which Postgres runs as a single transaction. This follows the project's one existing RPC, `increment_rate_limit`, including the `p_` prefix. The function locks the estimate with `SELECT ... FOR UPDATE`, re-checks ownership and eligibility under the lock, refuses if any structured row exists, inserts only 14 known keys with `estimate_id` taken from the argument rather than the payload, verifies the inserted row count, re-sums `line_total` **from the table** rather than trusting the caller, and only then flips the source. `SECURITY INVOKER` deliberately, with `EXECUTE` revoked from `public`, `anon`, and `authenticated` and granted only to `service_role`.
+
+### Tests and verification
+
+- **Pure unit, executed: 130 assertions, 0 failures.** Multi-option detection, row mapping, the flat-fee rule, the no-inference guarantees, defaults, key whitelist, and mapped-subtotal preservation across all 31 valid fixtures.
+- **Transaction, executed against the real function: 9 cases, all correct**, inside a transaction aborted by design with fixtures created and rolled back in the same transaction. Happy path inserted 2 rows and flipped the source; a second call refused `ALREADY_STRUCTURED` with no duplicates; sent estimate refused and untouched; cross-business refused; count mismatch rolled back to 0 rows; **subtotal mismatch after insert rolled the inserted rows back with the source unflipped**, which is the definitive atomicity proof; pre-existing rows refused; empty payload refused; summary unchanged.
+- Existing conversion suite: 249 assertions, 0 failures. `npx tsc --noEmit` clean. `npx next build` compiled, 52 static pages. `npx eslint` **25 problems, 7 errors, 18 warnings, identical to the pre-existing baseline**, 0 in new files.
+- Repository search: the only importer of the service anywhere is its own test. Nothing in `app/` or `proxy.ts` references it. No client component imports it.
+
+### Production conversion count: ZERO
+
+**Confirmed after all testing:** `tpe_estimate_items` holds **0 rows**, all **29** estimates remain `pricing_source = 'markdown'`, **0** are `structured`, the content fingerprint `152dab94ef40910e348e7867c08e4439` is unchanged, and `max(updated_at)` is still `2026-07-30 15:35:03.258894+00`. Zero businesses and zero estimates were created in the test window; every fixture rolled back.
+
+### Remaining risks
+
+- **The TypeScript service was never executed end to end.** Its pure pieces ran in isolation and its database half ran directly, but `convertEstimateToStructuredItems()` itself was not invoked, since that needs a real authenticated user. Its error mapping and result assembly under a live call are unverified.
+- **Ownership was proved at the database layer only.** The cross-business refusal ran inside the function; the TypeScript-layer checks were read, not executed.
+- **Anonymous refusal is proved structurally** (revoked `EXECUTE` plus deny-all RLS), not by an executed anonymous call.
+- **Concurrency was reasoned about, not raced.** The `FOR UPDATE` lock is the right mechanism but two simultaneous conversions were not tested.
+- The Playwright specs remain unexecuted through the runner, because `globalSetup` writes to production Supabase.
+- The RLS policy decision from slice 1 is still open.
+
+### Exact next action
+
+**The first visible grouped-pricing slice, for newly generated estimates only.** Create structured rows during new estimate generation, render detailed pricing exactly as today, put grouped mode behind a controlled internal flag, and leave old and sent markdown estimates unchanged. Do not convert any of the 21 eligible production estimates without a separate explicit decision.
+
+---
+
+## Prior session (2026-07-31): Slice 1 COMPLETE, structured schema applied to production
 
 **Slice 1 status: complete and verified. The migration WAS applied to production.** Additive only. No grouped pricing, no backfill, no application wiring, no behaviour change. Full detail in `TRADEPULSE_ESTIMATE_ITEMS_SCHEMA.md`.
 
@@ -425,6 +469,18 @@ aiControlCentre:
     4th request is blocked and Pro remains unlimited. Build clean, smoke
     suite fully green at 18 passed. Committed locally, not yet pushed.
   nextAction: >-
+    Checkpoint commit 6f40ddb created on main (not pushed). Lazy conversion
+    service COMPLETE and deliberately unwired: lib/estimate-item-migration.ts
+    plus the tpe_convert_estimate_to_structured PostgreSQL function, atomicity
+    proved by a rolled-back transaction test where a post-insert subtotal
+    mismatch rolled the rows back and left pricing_source unflipped. Production
+    conversion count is ZERO and tpe_estimate_items is still empty. Next: the
+    first visible grouped-pricing slice for NEWLY GENERATED estimates only,
+    creating structured rows at generation, rendering detailed pricing exactly
+    as today, grouped mode behind an internal flag, old and sent markdown
+    estimates unchanged. Still open: the RLS policy decision from slice 1, and
+    whether to convert any of the 21 eligible production estimates.
+  priorContext: >-
     Slice 1 COMPLETE: tpe_estimate_items created in production (additive,
     0 rows, no wiring), tpe_estimates gained pricing_source default markdown
     and customer_pricing_mode default detailed, all 29 estimates preserved

@@ -564,6 +564,16 @@ export type Database = {
           window_expires_at: string
         }[]
       }
+      tpe_convert_estimate_to_structured: {
+        Args: {
+          p_business_id: string
+          p_estimate_id: string
+          p_expected_count: number
+          p_expected_subtotal: number
+          p_items: Json
+        }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never
