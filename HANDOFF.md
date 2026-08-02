@@ -2,7 +2,51 @@
 
 Updated: 2026-07-30 PDT
 
-## Latest session (2026-07-31, latest): checkpoint commit + lazy conversion service
+## Latest session (2026-07-31, latest): structured generation for new estimates + internal grouped renderer
+
+### Checkpoint commit
+
+**`0ad9605` "Add lazy estimate item conversion service"**, on `main`, **not pushed**. 7 files, 997 insertions: `lib/estimate-item-migration.ts`, the transaction-function migration, its test, the conversion document, the regenerated types, and the two doc updates. The same 7 pre-existing unrelated files stayed excluded (`.claude/settings.local.json`, `.gitignore`, `.ai-control-centre/`, four `.bak` files).
+
+### Grouped-pricing slice: structured generation, detailed rendering unchanged
+
+**Files added:** `lib/estimate-groups.ts`, `tests/smoke/estimate-grouped-pricing.spec.ts`.
+**Files modified:** `app/api/generate-estimate/route.ts`, `lib/estimate-item-migration.ts`, `tests/smoke/estimate-item-migration.spec.ts`, `TRADEPULSE_ESTIMATES_BASELINE.md`, `HANDOFF.md`.
+
+**Structured generation.** After a new estimate is saved and its `__ID__` chunk is streamed, the route calls `convertEstimateToStructuredItems({ dryRun: false, assignGroups: true })`. It runs before `controller.close()` so the runtime cannot freeze the instance mid-conversion. It is wrapped in try/catch and is **strictly non-fatal**: any refusal or throw leaves the estimate markdown-authoritative. Applies to newly generated estimates only.
+
+**Group assignment.** 15 ordered keyword rules in `lib/estimate-groups.ts` covering demolition, permits, concrete, framing, roofing, plumbing, electrical, HVAC, drywall, flooring, cabinets, trim, painting, landscaping, and cleanup. Word-anchored with an optional plural, first match wins. **An unrecognised description stays ungrouped rather than being forced into a wrong bucket**; the renderer collects those under "Additional items". Group assignment is opt-in: the lazy path for existing estimates still writes null.
+
+**Rendering.** **No renderer file was touched**, verified by `git diff --stat` over the share page, PDF, markdown component, editor, and estimate page. Detailed output is therefore identical by construction, not by assertion, because the markdown summary is preserved and every renderer still reads it. The grouped renderer is new code behind `isGroupedPricingEnabled()` (env `ESTIMATE_GROUPED_PRICING_INTERNAL`, default off, only the exact string `true` enables it) and nothing customer-facing calls it.
+
+### Tests and verification
+
+- **319 grouped-pricing assertions, 0 failures**: flag gating, all 15 group rules, ungrouped fallback, substring-misfire guards, mapping equivalence with and without groups, grouped-equals-detailed totals across all 31 valid fixtures, no double counting, first-appearance ordering, both renderers, and markdown fallback for unsupported estimates.
+- **Database, rolled back**: 4 rows inserted with groups, source flipped, `group_label` round-tripped including a deliberate null, grouped sum equalled the detailed subtotal exactly (1200), 3 distinct groups, order preserved.
+- Existing suites still green: conversion invariants 249/0, conversion service 130/0.
+- `npx tsc --noEmit` clean; `npx next build` compiled, 52 pages; `npx eslint` **25 problems, 7 errors, 18 warnings, identical to baseline**, 0 in new files; `git diff --check` clean.
+
+**Two real bugs were caught by these tests and fixed:** the classifier failed on plurals ("Pot lights" fell through to ungrouped, because the word boundary fails against a trailing "s"), and one of my own assertions wrongly expected a negative-amount estimate to refuse, when a credit row is legitimately convertible.
+
+### Production state: unchanged
+
+`tpe_estimate_items` **0 rows**; **29** estimates, **all** `pricing_source = 'markdown'` and `customer_pricing_mode = 'detailed'`; **0** structured; fingerprint `152dab94ef40910e348e7867c08e4439` and `max(updated_at)` both unchanged; no fixture leftovers.
+
+### Remaining risks
+
+- **The generation path has not been exercised end to end.** Doing so requires generating a real estimate, which means a real Anthropic call and a real production row. The pieces are individually verified (pure mapping, the database function, the conversion service's checks) but the wired route was never run. **This is the main gap: the first real generation will be the first execution of this path.** It is designed to fail safe, but that design is unproven in flight.
+- Conversion adds a few database round trips before the stream closes, so the last moment of generation is slightly slower. Not measured.
+- The classifier is keyword-based and will mislabel or leave ungrouped some real descriptions. It affects presentation only, never a price, and grouped output is not customer-visible yet.
+- Playwright specs remain unexecuted through the runner.
+- The slice-1 RLS decision is still open.
+
+### Exact next action
+
+Exercise the generation path once in a controlled way, then decide on grouped exposure. Concretely: generate one estimate in a non-production-visible manner or accept one real draft, confirm structured rows and groups were written and that the estimate renders identically, then design the contractor-facing grouped toggle. Do not convert the 21 eligible existing estimates without a separate decision.
+
+---
+
+## Prior session (2026-07-31): checkpoint commit + lazy conversion service
 
 ### Checkpoint commit
 
@@ -469,6 +513,18 @@ aiControlCentre:
     4th request is blocked and Pro remains unlimited. Build clean, smoke
     suite fully green at 18 passed. Committed locally, not yet pushed.
   nextAction: >-
+    Checkpoint 0ad9605 committed (not pushed). Structured generation now runs
+    for NEWLY GENERATED estimates only, assigning work-package groups, strictly
+    non-fatal, with the markdown summary preserved and NO renderer changed so
+    detailed output is identical by construction. Grouped renderer exists behind
+    ESTIMATE_GROUPED_PRICING_INTERNAL, default off, not customer-reachable. All
+    29 existing estimates untouched and still markdown. Next: exercise the
+    generation path once in a controlled way, since it has never run end to end,
+    confirm structured rows and groups are written and rendering is unchanged,
+    then design the contractor-facing grouped toggle. Do not convert the 21
+    eligible existing estimates without a separate decision. Still open: the
+    slice-1 RLS policy decision.
+  priorContext: >-
     Checkpoint commit 6f40ddb created on main (not pushed). Lazy conversion
     service COMPLETE and deliberately unwired: lib/estimate-item-migration.ts
     plus the tpe_convert_estimate_to_structured PostgreSQL function, atomicity

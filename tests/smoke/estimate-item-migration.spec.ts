@@ -74,7 +74,7 @@ test("the real production multi-option fixtures are detected", () => {
 // ── Row mapping ───────────────────────────────────────────────────────────────
 
 function rowsFor(summary: string) {
-  return parsedToItems(parseSummary(summary)).map(draftToItemRow);
+  return parsedToItems(parseSummary(summary)).map((d) => draftToItemRow(d));
 }
 
 test("mapping preserves description, quantity, unit price, row total, and order", () => {
@@ -149,7 +149,7 @@ test("mapping defaults customer_visible true and taxable true", () => {
 test("mapped row totals sum to the parsed subtotal for every valid fixture", () => {
   for (const fixture of validFixtures) {
     const parsed = parseSummary(fixture.summary);
-    const rows = parsedToItems(parsed).map(draftToItemRow);
+    const rows = parsedToItems(parsed).map((d) => draftToItemRow(d));
     const mappedSubtotal = rows.reduce((sum, r) => sum + r.line_total, 0);
     const parsedSubtotal = parsedToItems(parsed).reduce((sum, d) => sum + d.total, 0);
 

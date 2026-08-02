@@ -12,6 +12,7 @@
 
 import { supabaseAdmin } from "./supabase-server";
 import { parseSummary, computeTotals } from "./estimate-summary";
+import { assignGroupLabel } from "./estimate-groups";
 import {
   parsedToItems,
   validateConversionTotals,
@@ -47,6 +48,17 @@ export interface ConvertEstimateInput {
   userId: string;
   /** When true, everything is computed and validated but nothing is written. */
   dryRun?: boolean;
+  /**
+   * Assign a work-package group to each row via the keyword classifier in
+   * lib/estimate-groups.ts.
+   *
+   * Default false, so the lazy conversion path for EXISTING estimates keeps
+   * writing group_label null and changes nothing about them. Only brand-new
+   * estimate generation opts in, where labelling a row we are creating right
+   * now is safe: it changes no price and no arithmetic, and an unrecognised
+   * description is left ungrouped rather than forced into a wrong bucket.
+   */
+  assignGroups?: boolean;
 }
 
 export interface ConversionResult {
@@ -118,12 +130,17 @@ export function detectsMultiOptionStructure(summary: string): boolean {
 /**
  * Map one parsed draft onto a tpe_estimate_items row.
  *
- * Deliberately conservative. Nothing is inferred from description text:
- * item_type stays the neutral 'other' rather than guessing labour versus
- * material, is_allowance stays false, group_label stays null, and the labour
- * and markup columns stay null because the current markdown format does not
- * record them per row. Inventing any of those would be this slice making a
- * product decision nobody has taken.
+ * Deliberately conservative. Pricing semantics are never inferred from
+ * description text: item_type stays the neutral 'other' rather than guessing
+ * labour versus material, is_allowance stays false, and the labour and markup
+ * columns stay null because the current markdown format does not record them
+ * per row. Inventing any of those would be making a product decision nobody
+ * has taken.
+ *
+ * group_label is the one exception, and only when `assignGroups` is set, which
+ * happens solely for a brand-new estimate. A group is presentational: it moves
+ * no money and changes no arithmetic, and an unrecognised description stays
+ * ungrouped rather than being forced into a wrong bucket.
  *
  * unit_price rule: a quantity row carries its parsed unit rate. A flat fee has
  * no unit rate in the source, so quantity stays 1 and unit_price equals the row
@@ -147,7 +164,10 @@ export type EstimateItemRowPayload = {
   taxable: boolean;
 };
 
-export function draftToItemRow(draft: EstimateItemDraft): EstimateItemRowPayload {
+export function draftToItemRow(
+  draft: EstimateItemDraft,
+  options: { assignGroups?: boolean } = {}
+): EstimateItemRowPayload {
   const isQuantity = draft.kind === "quantity";
   return {
     description: draft.source.description,
@@ -160,7 +180,9 @@ export function draftToItemRow(draft: EstimateItemDraft): EstimateItemRowPayload
     labour_hours: null,
     labour_rate: null,
     markup_percent: null,
-    group_label: null,
+    // Null unless this is a brand-new estimate opting in. Never back-filled
+    // onto an existing estimate.
+    group_label: options.assignGroups ? assignGroupLabel(draft.source.description) : null,
     customer_visible: true,
     display_order: draft.sortOrder,
     taxable: true,
@@ -197,6 +219,7 @@ export async function convertEstimateToStructuredItems(
 ): Promise<ConversionResult> {
   const { estimateId, userId } = input;
   const dryRun = input.dryRun ?? true; // safe by default
+  const assignGroups = input.assignGroups ?? false; // existing estimates stay ungrouped
 
   // 1. Resolve the business from the authenticated user. Ownership is derived,
   //    never accepted from the caller.
@@ -315,7 +338,7 @@ export async function convertEstimateToStructuredItems(
   const { data, error } = await supabaseAdmin.rpc("tpe_convert_estimate_to_structured", {
     p_estimate_id: estimateId,
     p_business_id: business.id,
-    p_items: items.map(draftToItemRow),
+    p_items: items.map((d) => draftToItemRow(d, { assignGroups })),
     p_expected_count: items.length,
     p_expected_subtotal: validation.convertedSubtotal,
   });
