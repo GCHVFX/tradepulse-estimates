@@ -8,7 +8,7 @@ Labels: **Confirmed** (verified by execution), **Recommendation**, **Unknown**.
 
 Convert one eligible markdown-authoritative estimate into structured rows in `tpe_estimate_items`, atomically, and flip `tpe_estimates.pricing_source` to `structured` only if every invariant holds.
 
-**Confirmed: nothing calls this service.** It is not wired into generation, editing, page loads, the share page, PDF output, send actions, or any cron. Creating it was this slice. **Confirmed: zero production estimates have been converted.**
+**Updated 2026-07-31 (commit `2bbe646`):** the service is now called from `/api/generate-estimate` for every newly generated estimate, immediately after saving it. The call uses `dryRun: false, assignGroups: true` and is best-effort, non-fatal: any refusal or error leaves the estimate markdown-authoritative. **The lazy path (for existing estimates) remains unwired**: no user action, editor save, page load, or cron invokes the service for pre-existing estimates. **One production estimate has been converted** (the authorized synthetic test estimate from the E2E verification; all others remain `pricing_source = 'markdown'`).
 
 Files: `lib/estimate-item-migration.ts` and `supabase/migrations/20260731010000_create_convert_estimate_to_structured_fn.sql`.
 
@@ -156,14 +156,14 @@ On failure the service returns a typed result with `success: false`, `transactio
 
 ## 11. Production wiring status
 
-**Confirmed by repository search:**
+**Updated 2026-07-31 (commit `2bbe646`):**
 
-- The only importer of `lib/estimate-item-migration.ts` anywhere is its own test.
-- Nothing in `app/` or `proxy.ts` references the service, `convertEstimateToStructuredItems`, or `tpe_convert_estimate_to_structured`.
-- No client component imports it.
-- No route was created. No UI button exists. No cron calls it.
+- `app/api/generate-estimate/route.ts` now imports `convertEstimateToStructuredItems` from `lib/estimate-item-migration.ts` and calls it after every new estimate is saved.
+- The call is best-effort and strictly non-fatal; any refusal or error leaves the estimate markdown-authoritative. Controller close happens after the conversion attempt.
+- No other route, component, cron, or user action calls the service. The lazy conversion path (for pre-existing estimates) remains unwired to any trigger.
+- One production end-to-end generation test was run (the authorized synthetic estimate). The common well-formed path succeeded. Multi-option and unsafe estimates refuse before any write. See `TRADEPULSE_ESTIMATES_BASELINE.md` section 16.
 
-**Confirmed production state after all testing:** `tpe_estimate_items` holds **0 rows**, all **29** estimates remain `pricing_source = 'markdown'`, **0** are `structured`, the content fingerprint `152dab94ef40910e348e7867c08e4439` is unchanged, and `max(updated_at)` is still `2026-07-30 15:35:03.258894+00`.
+**Production state after the first authorized generation test:** `tpe_estimates` holds **30** rows; **29** remain `pricing_source = 'markdown'`; **1** (the synthetic test estimate) is `pricing_source = 'structured'`; `tpe_estimate_items` holds **4** rows, all for the one structured estimate. The content fingerprint `152dab94ef40910e348e7867c08e4439` and `max(updated_at)` `2026-07-30 15:35:03.258894+00` are unchanged for the 29 pre-existing estimates.
 
 ## 12. Tests
 
@@ -184,6 +184,10 @@ On failure the service returns a typed result with `success: false`, `transactio
 
 ## 14. Exact next slice
 
-**The first visible grouped-pricing implementation, for newly generated estimates only.** Create structured rows during new estimate generation, render detailed pricing exactly as today, put grouped mode behind a controlled internal flag, and leave old and sent markdown estimates untouched.
+**Complete (2026-07-31, commit `2bbe646`).** Structured rows are now created at generation time with `assignGroups: true`, detailed rendering is byte-for-byte unchanged, grouped mode is behind `ESTIMATE_GROUPED_PRICING_INTERNAL` (default off), and existing estimates are untouched.
+
+**Exact next slice:** implement the contractor-facing grouped-versus-detailed pricing toggle for newly generated structured estimates only. Preserve detailed mode as the default. Do not alter, migrate, or reinterpret existing markdown estimates.
+
+Still open from earlier slices: the RLS policy decision (`TRADEPULSE_ESTIMATE_ITEMS_SCHEMA.md` section 9), and whether to convert any of the 21 eligible pre-existing production estimates (currently zero, no decision made).
 
 Before that, or alongside it, two open items from earlier slices still need decisions: the RLS policy question in `TRADEPULSE_ESTIMATE_ITEMS_SCHEMA.md` section 9, and whether to convert any of the 21 eligible production estimates, which remains deliberately at zero.

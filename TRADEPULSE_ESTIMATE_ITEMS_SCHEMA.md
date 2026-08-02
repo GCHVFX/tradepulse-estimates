@@ -6,7 +6,7 @@ Slice 1 of the grouped-pricing plan. Labels: **Confirmed** (verified against the
 
 ## 1. Purpose
 
-Create the minimum structured storage for priced estimate rows, so a later slice can convert eligible estimates from markdown to structured pricing. **Confirmed: nothing in the application reads or writes any of this yet, and no behaviour changed.**
+Create the minimum structured storage for priced estimate rows, so a later slice can convert eligible estimates from markdown to structured pricing. **Updated 2026-07-31 (commit `2bbe646`):** `/api/generate-estimate` now writes to `tpe_estimate_items` via `convertEstimateToStructuredItems()` for every newly generated estimate. The table's first production use is live. Existing estimates remain `pricing_source = 'markdown'` and no wiring was added for them.
 
 ## 2. Schema decision
 
@@ -181,12 +181,20 @@ It remains **deprecated and unused**, pending a separate cleanup decision. Dropp
 
 ## 14. Application wiring status
 
-**Confirmed by repository search: nothing is wired.**
+**Updated 2026-07-31 (commit `2bbe646`):** the table is now written by `/api/generate-estimate` via `lib/estimate-item-migration.ts`. The first production write was the authorized synthetic E2E test (1 estimate, 4 rows, `pricing_source` flipped to `structured`).
 
-- Zero references to `tpe_estimate_items` in `app/`, `lib/`, `tests/`, `scripts/`, or `proxy.ts`, outside `lib/database.types.ts`.
-- Zero references to `pricing_source` or `customer_pricing_mode` anywhere outside `lib/database.types.ts`.
-- No estimate creation route sets `pricing_source`. No UI sets `customer_pricing_mode`.
-- No backfill exists. The only occurrence of the word is a comment in `lib/estimate-items.ts` describing what a future backfill should call.
+**Current wiring:**
+
+- `app/api/generate-estimate/route.ts` imports and calls `convertEstimateToStructuredItems` from `lib/estimate-item-migration.ts` after each new estimate is saved.
+- `lib/estimate-item-migration.ts` writes to `tpe_estimate_items` via the `tpe_convert_estimate_to_structured` PostgreSQL function.
+- `lib/estimate-groups.ts` assigns `group_label` values at generation time (`assignGroups: true`).
+- `pricing_source` is set only by the PostgreSQL function (inside a transaction), never directly by application code.
+
+**Not yet wired:**
+
+- No route, component, or cron reads `tpe_estimate_items` for display. The share page, PDF, and contractor view all consume `tpe_estimates.summary` via `formatEstimateForDisplay()`.
+- No UI exposes or sets `customer_pricing_mode`. It is stored at `'detailed'` for all estimates, including newly generated ones. The contractor-facing toggle is the next implementation slice.
+- No user action, editor save, page load, or cron calls the lazy conversion path for pre-existing estimates.
 
 ## 15. Verification performed
 

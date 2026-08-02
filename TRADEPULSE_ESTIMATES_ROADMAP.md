@@ -251,11 +251,13 @@ The precondition raised by the Phase 0 audit is resolved. Full analysis in `TRAD
 
 **Source of truth:** structured rows are authoritative for pricing where `tpe_estimates.pricing_source = 'structured'`, markdown where it is `'markdown'`. One-way flip, no dual writes, no window where both are read.
 
-**Existing estimates:** default to `'markdown'` and render exactly as today. Backfill is lazy, per estimate, on first edit, and aborts if a total would change. **Sent estimates are never auto-migrated.** Grouped view is off by default for existing estimates, on for new ones.
+**Existing estimates:** default to `'markdown'` and render exactly as today. Backfill is lazy, per estimate, on first edit, and aborts if a total would change. **Sent estimates are never auto-migrated.** Grouped view is off by default for existing estimates, on for new ones. **Correction 2026-07-31:** the actual implementation sets `customer_pricing_mode = 'detailed'` for all estimates, including newly generated ones. Grouped view is not on by default for new estimates; it is enabled by the contractor-facing toggle, which is the next implementation slice.
 
 **`tpe_estimate_line_items` is replaced, not reused.** It is missing eight required fields and its `labour_price`/`material_price` split contradicts the shipped `quantity * rate` model. It stays in the schema unwritten until the replacement ships.
 
 Implementation is sliced into five independently shippable steps; see section 10 of the architecture document. `formatEstimateForDisplay()` in `lib/estimate-summary.ts` remains the correct seam, since the share page and PDF both already render through it.
+
+**Implementation status as of 2026-08-01:** Slices 1 (schema), 2 (backfill function and totals invariant), and 3 (write path for new estimates via `/api/generate-estimate`) are complete on `main`, not pushed. Slices 4 (read path and lazy backfill for existing estimates) and 5 (grouping UI and contractor toggle) are incomplete. The next slice is the contractor-facing grouped-versus-detailed pricing toggle for newly generated structured estimates only, with detailed mode preserved as the default.
 
 ### Rules
 

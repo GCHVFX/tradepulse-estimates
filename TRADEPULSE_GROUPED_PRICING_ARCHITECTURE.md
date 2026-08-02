@@ -240,7 +240,7 @@ Plus on `tpe_estimates`:
 
 ```
   pricing_source        text not null default 'markdown'  -- 'markdown' | 'structured'
-  customer_pricing_mode text not null default 'grouped'   -- 'grouped' | 'detailed'
+  customer_pricing_mode text not null default 'detailed'  -- 'grouped' | 'detailed'. Correction 2026-07-31: the applied schema uses 'detailed', not 'grouped'. See TRADEPULSE_ESTIMATE_ITEMS_SCHEMA.md section 11.
 ```
 
 Notes on the shape:
@@ -346,6 +346,8 @@ This resolves the specific defect where `taxRate` and `depositPercent` are recov
 | Future approval snapshots | Snapshot captures structured rows plus rendered markdown together, so an approved estimate is verifiable and immutable |
 
 **Recommendation:** the grouped customer view ships **off by default for existing estimates** and on for newly created ones. A contractor who already sent a detailed estimate should not have the customer's view silently regroup on next open.
+
+**Correction 2026-07-31:** the actual implementation sets `customer_pricing_mode = 'detailed'` for all estimates, including newly generated ones. The grouped view is not on by default for new estimates; it is enabled by the contractor-facing toggle, which is the next implementation slice. The recommendation above is preserved as the original design intent but was superseded by the implementation decision.
 
 ---
 

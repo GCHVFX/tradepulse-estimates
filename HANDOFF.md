@@ -1,8 +1,75 @@
 # Handoff
 
-Updated: 2026-07-30 PDT
+Updated: 2026-08-01
 
-## Latest session (2026-07-31, latest): structured generation for new estimates + internal grouped renderer
+**Branch:** `main`. **Not pushed.** Last three commits: `2bbe646` (structured generation), `0ad9605` (conversion service), `6f40ddb` (foundation). After this documentation commit, the only remaining dirty files are: `.claude/settings.local.json`, `.gitignore` (modified, pre-existing, excluded from commits); `.ai-control-centre/`, four `.bak-*` files (untracked, pre-existing, excluded from commits).
+
+## Latest session (2026-07-31, latest): checkpoint commit + one controlled end-to-end generation, VERIFIED PASS
+
+### Checkpoint commit
+
+**`2bbe646` "Add structured pricing for new estimates"**, on `main`, **not pushed**. 7 files, 631 insertions: `app/api/generate-estimate/route.ts`, `lib/estimate-item-migration.ts`, `lib/estimate-groups.ts`, both spec files, and the two doc updates. The same 7 pre-existing unrelated files stayed excluded (`.claude/settings.local.json`, `.gitignore`, `.ai-control-centre/`, four `.bak` files). Reviewed the full diff, confirmed no secrets/UUIDs/real emails in the staged content, then ran `git diff --check`, `npx tsc --noEmit`, 212 grouped-pricing and conversion assertions, `npx next build`, and `npx eslint` before committing. All green; lint identical to the pre-existing baseline.
+
+### Controlled end-to-end generation: VERIFIED PASS
+
+The generation route with structured-item wiring had never been exercised end to end. This session ran it once, for real, against production.
+
+**How the account was created.** The real signup route creates a Stripe customer and trial subscription, which this task's constraints forbid touching. Instead I created a synthetic auth user directly via the Supabase admin API and inserted a matching `tpe_businesses` row by hand (`subscription_status = 'complimentary'`, no Stripe object of any kind), then signed in through the real `/login` page to get a genuine session. This is the same shape of account provisioning the existing Playwright suite uses, minus the Stripe leg.
+
+**What ran:** the real `/new` page, filled with the exact job description and synthetic customer data specified, submitted through the real `POST /api/generate-estimate` route (a real Anthropic call, a real database insert, and the real `convertEstimateToStructuredItems` call this session's earlier work wired in). Total round trip: **6.8 seconds** (`application-code: 6.7s` per the dev server's own timing log), which bundles generation, the DB insert, and the structured conversion together; the conversion step alone was not separately measurable without adding timing code, which was out of scope.
+
+**Result.**
+
+| Check | Markdown (independently recomputed) | Structured (database) |
+|---|---|---|
+| Line item / row count | 4 | 4 |
+| Subtotal | $482.50 | $482.50 |
+| Tax (5%) | $24 | $24 |
+| Total | $506.50 | $506.50 |
+| Deposit | $0 | $0 |
+
+`pricing_source = 'structured'`, `customer_pricing_mode = 'detailed'`, no duplicate rows. 2 of the 4 rows were correctly assigned to "Plumbing" (the faucet and the shutoff valve); the bare "Labour" row and "Teflon tape and fittings" were correctly left ungrouped, since neither matches a keyword rule and forcing a bucket would have been worse than leaving them out.
+
+**Detailed rendering verified unchanged**, against the actual server-rendered HTML fetched directly (the browser pane in this environment does not composite frames, so I read the raw response rather than relying on a visual render, and cross-checked with the dev server's own successful `200` logs for the same route): the contractor estimate page and the public share page both show the same title, the same four line items in the same order at the same prices, the same subtotal, and **zero** occurrences of any grouped-pricing term or structured-storage field name in either page's output. The PDF download control was clicked and produced no console error; since `lib/generate-pdf.ts` was not touched by this or the prior slice and reads the same unchanged markdown, its output cannot have regressed.
+
+**The internal grouped renderer, run against this real estimate's actual 4 structured rows** (not a fixture): grouped subtotal $482.50, exactly matching the detailed subtotal, with every row landing in exactly one group ("Additional items" $252.50 for the two ungrouped rows, "Plumbing" $230 for the other two). The flag was not turned on anywhere, and a repository search found no customer route referencing the grouped renderer.
+
+**No customer communication was sent.** The estimate was never marked sent, done, or invoiced, and no review request was triggered.
+
+**Production counts, before and after:**
+
+| | Before | After |
+|---|---|---|
+| `tpe_estimates` | 29 | 30 (the one authorized test estimate) |
+| `tpe_estimate_items` | 0 | 4 (only the test estimate's rows) |
+| `pricing_source = 'markdown'` | 29 | 29 (every pre-existing estimate, unchanged) |
+| `pricing_source = 'structured'` | 0 | 1 (only the test estimate) |
+
+### Test estimate disposition: remains in the database
+
+Per this task's own rule, deletion was only authorized "if there is an existing safe admin cleanup path and deletion is clearly reversible and verified." A hard delete of a database row is never reversible in that sense, so the estimate was left in place rather than deleted. Its `business_id` foreign key has no cascade, so the synthetic business (and therefore the synthetic auth user) cannot be removed without first removing the estimate either, and so those remain too.
+
+All three are unambiguously synthetic and inert: the business is named "Structured Pricing Test (synthetic, do not send)", the estimate is a `draft` that was never sent to anyone, uses the synthetic contact details specified in this task, and is not linked from anywhere a real customer would see. The estimate's raw id is intentionally not recorded in any committed file. **Recommendation:** treat cleanup of this synthetic account as a deliberate, separate, explicitly authorized action, the same way this project has handled other test-account cleanup in the past, rather than something to do inline in a verification task.
+
+### Performance observations
+
+Generation-plus-conversion round trip: 6.8s total, 6.7s application code, per the dev server's own request timer. Not separated into a generation-only and conversion-only figure, since doing that would need new timing instrumentation, which was out of scope. No timeout, no runtime warning, and no visibly delayed streaming completion (Anthropic streams a large majority of that time regardless of this feature). Treat this as one indicative data point, not a benchmark, since the surrounding dev environment is not a controlled performance harness.
+
+### Remaining risks
+
+- **Only one generation was run.** It hit the common, well-formed path. A malformed or multi-option generation reaching this exact wired code has still never been observed live, only reasoned about via the fixture corpus and the rolled-back database tests from the prior session.
+- **A synthetic business, user, and estimate now permanently exist in production**, pending a deliberate cleanup decision.
+- The classifier is keyword-based and will mislabel or leave ungrouped some real descriptions; this generation's own result (2 of 4 rows ungrouped) illustrates that directly. Presentation only, never a price, and not customer-visible yet.
+- Playwright specs remain unexecuted through the runner.
+- The slice-1 RLS policy decision is still open.
+
+### Exact next action
+
+**Implement the contractor-facing grouped-versus-detailed pricing toggle for newly generated structured estimates only. Preserve detailed mode as the default. Do not alter, migrate, or reinterpret existing markdown estimates.** This slice is unblocked; the E2E verification passed cleanly. Old and sent markdown estimates must remain untouched and continue to have no toggle. Separately, and not urgently: decide what to do with the synthetic test account left behind by this verification.
+
+---
+
+## Prior session (2026-07-31, earlier): structured generation for new estimates + internal grouped renderer
 
 ### Checkpoint commit
 
@@ -513,6 +580,20 @@ aiControlCentre:
     4th request is blocked and Pro remains unlimited. Build clean, smoke
     suite fully green at 18 passed. Committed locally, not yet pushed.
   nextAction: >-
+    Checkpoint 2bbe646 committed (not pushed). ONE CONTROLLED END-TO-END
+    GENERATION VERIFIED PASS against production: real /new page, real
+    Anthropic call, real conversion, structured rows written, totals matched
+    the independently recomputed markdown exactly (subtotal/tax/total/deposit
+    482.50/24/506.50/0 both ways), detailed rendering on the contractor page
+    and share page confirmed unchanged with zero grouped or structured-storage
+    terms leaked, grouped renderer against the real rows matched the detailed
+    subtotal exactly. All 29 pre-existing estimates remain markdown, untouched.
+    A synthetic test business/user/estimate remains in production (deletion
+    not reversible, FK prevents partial cleanup); needs a deliberate later
+    decision. Next: the contractor-facing grouped-versus-detailed toggle for
+    newly generated structured estimates only, now unblocked. Still open: the
+    slice-1 RLS policy decision, and the synthetic-account cleanup decision.
+  priorContext: >-
     Checkpoint 0ad9605 committed (not pushed). Structured generation now runs
     for NEWLY GENERATED estimates only, assigning work-package groups, strictly
     non-fatal, with the markdown summary preserved and NO renderer changed so
