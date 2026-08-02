@@ -565,9 +565,9 @@ export default async function LandingPage() {
 
         <footer className="border-t border-zinc-800 mt-16 py-6 px-5 text-center">
           <div className="flex items-center justify-center gap-6 text-xs text-zinc-600 flex-wrap">
-            <a href="mailto:support@trytradepulse.com" className="hover:text-zinc-400 transition-colors">support@trytradepulse.com</a>
-            <a href="/terms" className="hover:text-zinc-400 transition-colors">Terms of Service</a>
-            <a href="/privacy" className="hover:text-zinc-400 transition-colors">Privacy Policy</a>
+            <Link href="/contact" className="inline-flex min-h-11 items-center transition-colors hover:text-zinc-900">Support</Link>
+            <Link href="/terms" className="inline-flex min-h-11 items-center transition-colors hover:text-zinc-900">Terms of Service</Link>
+            <Link href="/privacy" className="inline-flex min-h-11 items-center transition-colors hover:text-zinc-900">Privacy Policy</Link>
           </div>
         </footer>
 
