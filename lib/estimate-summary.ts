@@ -372,12 +372,39 @@ export function calculateEstimateTotal(summary: string): number {
 
 export function formatEstimateForDisplay(summary: string): string {
   const p = parseSummary(summary);
+  return formatParsedEstimateForDisplay(p, p.lineItems);
+}
+
+/**
+ * Render the prose from a stored summary with an explicit authoritative set
+ * of priced rows. Structured estimates use this so the database rows own all
+ * customer-visible arithmetic while the markdown remains the prose source.
+ * A caller may replace only the Line Items block, which is how grouped mode
+ * reuses the same totals and section-order implementation as detailed mode.
+ */
+export function formatEstimateForDisplayWithPricing(
+  summary: string,
+  lineItems: LineItem[],
+  lineItemsDisplayBlock?: string
+): string {
+  return formatParsedEstimateForDisplay(
+    parseSummary(summary),
+    lineItems,
+    lineItemsDisplayBlock
+  );
+}
+
+function formatParsedEstimateForDisplay(
+  p: ParsedSummary,
+  lineItems: LineItem[],
+  lineItemsDisplayBlock?: string
+): string {
   const parts: string[] = [];
-  if (p.preamble) parts.push(syncPreambleTotal(p.preamble, p.lineItems, p.taxRate));
+  if (p.preamble) parts.push(syncPreambleTotal(p.preamble, lineItems, p.taxRate));
   parts.push(scopeBlock(p.scopeItems));
-  parts.push(displayLineItemsBlock(p.lineItems));
+  parts.push(lineItemsDisplayBlock ?? displayLineItemsBlock(lineItems));
   for (const s of p.beforePricingSections) parts.push(beforeBlock(s));
-  parts.push(pricingBlock(p.lineItems, p.depositPercent, p.taxLabel, p.taxRate));
+  parts.push(pricingBlock(lineItems, p.depositPercent, p.taxLabel, p.taxRate));
   for (const s of p.afterPricingSections) parts.push(`## ${s.heading}\n${s.content}`);
   return parts.join('\n\n');
 }

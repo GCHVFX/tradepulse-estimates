@@ -1,5 +1,4 @@
 import jsPDF from "jspdf";
-import { formatEstimateForDisplay } from "@/lib/estimate-summary";
 
 interface GenerateEstimatePdfOptions {
   businessName?: string;
@@ -156,8 +155,9 @@ export async function generateEstimatePDF(
   doc.text(titleLines, ml, y);
   y += titleLines.length * 7.5 + 6;
 
-  // Recompute totals via the shared formatter, then apply the PDF section order
-  const lines = orderPdfSections(formatEstimateForDisplay(summary).split("\n"));
+  // The caller passes the exact server-built customer view so grouped pricing
+  // cannot be independently reconstructed in the client-side PDF path.
+  const lines = orderPdfSections(summary.split("\n"));
 
   let tableRows: string[][] = [];
 

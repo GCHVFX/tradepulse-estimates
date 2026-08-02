@@ -284,7 +284,7 @@ Product gaps, verified absent:
 
 1. **No customer approval.** No approve, decline, or request-change flow. No signature. No approval snapshot. Nothing for a customer to do on the share page except read and download.
 2. **No view tracking.** Nothing records that a customer opened the share page, so "Viewed" cannot be shown and follow-up cannot be triggered by it.
-3. **No grouped or customer-friendly pricing.** Every line item is shown to the customer. The only transformation is collapsing five columns to two.
+3. ~~**No grouped or customer-friendly pricing.**~~ **FIXED 2026-08-02 for newly generated structured estimates.** Eligible structured drafts now have a contractor-controlled Detailed or Grouped customer presentation behind the existing server-side feature flag. Historical markdown estimates remain unchanged and have no toggle.
 4. **No estimate versioning or immutable snapshot.** Editing a sent estimate silently changes what the customer sees at the same URL.
 5. **No real invoice object.** See section 10.6.
 6. **No follow-up automation** for unaccepted estimates. Payment reminders exist; estimate follow-up does not.
@@ -361,6 +361,20 @@ The blocking question Phase 1 must answer first: **line items live in markdown, 
 
 **Resolved 2026-07-30.** See `TRADEPULSE_GROUPED_PRICING_ARCHITECTURE.md` for the full comparison and `DECISIONS.md` for the recorded decision. Outcome: priced line items move to a new structured table, prose stays markdown, structured rows are authoritative for pricing per estimate via a one-way `pricing_source` flag, existing and sent estimates are preserved unchanged, and `tpe_estimate_line_items` is replaced rather than reused. That document also records two defects measured in the current markdown format during the comparison: a stray Subtotal row silently doubles a subtotal, and the parse-serialize round trip drops the H1 title on first edit. Neither alters the verified facts in this baseline.
 
-Suggested order: implement grouped pricing behind the existing `formatEstimateForDisplay()` seam (which is already the single choke point for share page and PDF), then revisit Phase 2.
+## 17. Grouped customer pricing toggle, verified 2026-08-02
+
+**Implemented and controlled-verification passed.** Newly generated estimates whose `pricing_source = 'structured'` can now switch between Detailed and Grouped customer pricing on the contractor estimate page. Detailed remains the default and the saved choice persists only in `tpe_estimates.customer_pricing_mode`. The control requires structured rows, an authenticated owner, the exact server flag `ESTIMATE_GROUPED_PRICING_INTERNAL=true`, and an unprotected draft. It is absent from public share pages and from markdown, rowless, sent, copied, done, invoiced/payment-state, or review-requested estimates.
+
+The precedence rule is exact: when the global flag is absent or not exactly `true`, Grouped cannot be selected or rendered; Detailed always remains available. When the flag is enabled, an eligible estimate's persisted mode selects the output. Production configuration was not enabled or edited in this task.
+
+One server-safe pricing view builds the contractor, public share, and PDF summary from structured rows for prices, markdown for prose, and the persisted mode for presentation. Detailed output kept the same descriptions, order, prices, subtotal, tax, total, deposit, and prose for every convertible fixture. Structured prices are read-only in the existing editor so markdown edits cannot become a competing price source. Grouped output combines visible rows with the same label, preserves first appearance, places null labels under `Additional items`, and includes no individual prices, hidden priced rows, duplicate rows, labour details, unit costs, markup, item types, or database fields. Missing rows, invalid mode, a disabled flag, and any structured-versus-markdown subtotal disagreement fail closed to the existing detailed markdown; the contractor sees a short internal error and the public page does not receive database details.
+
+**Controlled production-backed result.** The existing synthetic draft was switched Detailed to Grouped and back through the authenticated local contractor UI. In Grouped, contractor, share, and the visually inspected two-page A4 PDF all showed `Additional items` $252.50 and `Plumbing` $230, subtotal $482.50, GST $24, total $506.50, no deposit, and balance $506.50. After restoration, contractor and share returned to the same four detailed rows in the same order. Final read-only counts were 30 estimates: 29 markdown, 1 structured, and all 30 Detailed. The single structured estimate remained a draft with 4 rows and every protected field null. No historical migration, customer communication, send state, completion, invoice, payment, review, or follow-up change occurred.
+
+**Indicative local dev observations:** contractor detail 3.4s cold and 0.85s to 1.16s warm; share 3.5s cold and 0.51s to 1.07s warm; mode save 2.9s cold and 0.74s warm. The PDF was generated, text-extracted, rendered to PNG, and visually inspected; exact client generation timing was not captured because the browser runtime did not emit a download event although the file appeared on disk.
+
+**Remaining limitations:** production remains gated off; historical markdown estimates still have no toggle or lazy conversion; grouping remains keyword-based; structured line-item editing now needs a future atomic rows-first editor path; PDF pagination was not redesigned; RLS policy and synthetic-account cleanup decisions remain open.
+
+Suggested next implementation slice: customer approval and change requests backed by immutable estimate snapshots.
 
 The defects in section 13 (items 9, 10, 11) are small, independent, and worth fixing before or alongside any phase. Item 9 in particular is user-visible broken functionality.

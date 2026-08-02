@@ -2,9 +2,8 @@
 // structured rows in tpe_estimate_items.
 //
 // SERVER ONLY. This module uses supabaseAdmin and must never be imported by a
-// client component. It is not wired into anything: no route, page, component,
-// generation path, PDF, share page, send action, or cron calls it. Creating the
-// service is this slice; invoking it is not.
+// client component. New estimate generation invokes it as a best-effort step;
+// the lazy conversion entry point remains available but is not customer-facing.
 //
 // The contract it upholds, from TRADEPULSE_GROUPED_PRICING_ARCHITECTURE.md:
 // exactly one authoritative pricing representation per estimate, flipped one

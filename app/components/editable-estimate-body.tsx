@@ -63,11 +63,19 @@ function PencilIcon({ className }: { className?: string }) {
 
 // ── Section heading ───────────────────────────────────────────────────────────
 
-function SectionHeading({ children }: { children: React.ReactNode }) {
+function SectionHeading({
+  children,
+  editable = true,
+}: {
+  children: React.ReactNode;
+  editable?: boolean;
+}) {
   return (
     <h2 className="text-base font-bold text-zinc-900 mt-6 mb-2 uppercase tracking-wide border-l-[3px] border-amber-500 pl-2.5">
       {children}
-      <PencilIcon className="inline-block ml-1.5 w-3 h-3 text-amber-500 align-middle" />
+      {editable && (
+        <PencilIcon className="inline-block ml-1.5 w-3 h-3 text-amber-500 align-middle" />
+      )}
     </h2>
   );
 }
@@ -77,9 +85,11 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 export function EditableEstimateBody({
   summary,
   estimateId,
+  lineItemsReadOnly = false,
 }: {
   summary: string;
   estimateId: string;
+  lineItemsReadOnly?: boolean;
 }) {
   const parsed = useMemo(() => parseSummary(summary), [summary]);
   const { depositPercent } = parsed;
@@ -478,7 +488,7 @@ export function EditableEstimateBody({
       </button>
 
       {/* Line Items */}
-      <SectionHeading>Line Items</SectionHeading>
+      <SectionHeading editable={!lineItemsReadOnly}>Line Items</SectionHeading>
       {lineItems.length > 0 && lineItems.every(i => lineItemCost(i) === 0) && (
         <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
           <p className="text-amber-800 text-sm font-medium">Review and add pricing before sending this estimate.</p>
@@ -494,7 +504,7 @@ export function EditableEstimateBody({
               <th className="px-3 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide text-left">
                 Cost
               </th>
-              <th style={{ width: 40, minWidth: 40 }} />
+              {!lineItemsReadOnly && <th style={{ width: 40, minWidth: 40 }} />}
             </tr>
           </thead>
           <tbody>
@@ -510,11 +520,19 @@ export function EditableEstimateBody({
                     }}
                     rows={1}
                     value={item.label}
-                    onChange={e => updateLine(item.id, 'label', e.target.value)}
+                    readOnly={lineItemsReadOnly}
+                    onChange={e => {
+                      if (!lineItemsReadOnly) updateLine(item.id, 'label', e.target.value);
+                    }}
                     aria-label="Item description"
                     className="block w-full resize-none overflow-hidden bg-transparent rounded-lg border border-transparent px-3 py-2.5 text-sm text-zinc-700 leading-snug focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]"
                   />
-                  {isQuantityItem(item) &&
+                  {isQuantityItem(item) && lineItemsReadOnly && (
+                    <span className="block px-3 pb-2.5 -mt-1 text-xs text-zinc-500">
+                      {quantityDetail(item)}
+                    </span>
+                  )}
+                  {isQuantityItem(item) && !lineItemsReadOnly &&
                     (expandedId === item.id ? (
                       <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2.5">
                         <input
@@ -582,8 +600,12 @@ export function EditableEstimateBody({
                     <input
                       type="text"
                       value={item.cost}
-                      onChange={e => updateLine(item.id, 'cost', e.target.value)}
+                      readOnly={lineItemsReadOnly}
+                      onChange={e => {
+                        if (!lineItemsReadOnly) updateLine(item.id, 'cost', e.target.value);
+                      }}
                       onFocus={e => {
+                        if (lineItemsReadOnly) return;
                         const n = parseCost(item.cost);
                         if (n > 0) {
                           updateLine(item.id, 'cost', String(n));
@@ -591,7 +613,9 @@ export function EditableEstimateBody({
                           e.target.select();
                         }
                       }}
-                      onBlur={() => updateLine(item.id, 'cost', formatLineCost(item.cost))}
+                      onBlur={() => {
+                        if (!lineItemsReadOnly) updateLine(item.id, 'cost', formatLineCost(item.cost));
+                      }}
                       placeholder="$0"
                       aria-label="Item cost"
                       className={`w-28 bg-transparent rounded-lg border border-transparent px-3 py-2.5 text-sm focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px] ${
@@ -600,9 +624,11 @@ export function EditableEstimateBody({
                     />
                   )}
                 </td>
-                <td className="border-t border-zinc-200 pr-1 align-top" style={{ width: 40, minWidth: 40 }}>
-                  <XBtn onClick={() => removeLine(item.id)} />
-                </td>
+                {!lineItemsReadOnly && (
+                  <td className="border-t border-zinc-200 pr-1 align-top" style={{ width: 40, minWidth: 40 }}>
+                    <XBtn onClick={() => removeLine(item.id)} />
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -610,7 +636,7 @@ export function EditableEstimateBody({
       </div>
 
       {/* Add item */}
-      {showAddItem ? (
+      {!lineItemsReadOnly && (showAddItem ? (
         <div className="mb-4 flex flex-col gap-2">
           <input
             type="text"
@@ -662,7 +688,7 @@ export function EditableEstimateBody({
           </svg>
           Add item
         </button>
-      )}
+      ))}
 
       {/* Assumptions & Exclusions (and any other sections before pricing in source) */}
       {beforeSections.map(s => (

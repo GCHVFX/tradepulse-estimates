@@ -1,8 +1,56 @@
 # Handoff
 
-Updated: 2026-08-01
+Updated: 2026-08-02
 
-**Branch:** `main`. **Not pushed.** Last three commits: `2bbe646` (structured generation), `0ad9605` (conversion service), `6f40ddb` (foundation). After this documentation commit, the only remaining dirty files are: `.claude/settings.local.json`, `.gitignore` (modified, pre-existing, excluded from commits); `.ai-control-centre/`, four `.bak-*` files (untracked, pre-existing, excluded from commits).
+**Branch:** `main`. The grouped-pricing toggle work is committed as the current `HEAD` with message `Add grouped pricing toggle for structured estimates`. **Not pushed.** The unrelated dirty files remain excluded: `.claude/settings.local.json`, `.gitignore`, `.ai-control-centre/`, and four `.bak-*` files.
+
+## Latest session (2026-08-02): grouped-versus-detailed customer pricing, VERIFIED PASS
+
+### Implementation
+
+New structured drafts now show a compact `Customer pricing` control on the contractor estimate page when the exact server-side flag `ESTIMATE_GROUPED_PRICING_INTERNAL=true` is present. Detailed remains the database and UI default. The control is absent for markdown estimates, missing structured rows, non-draft or customer-visible estimates, anonymous users, and public share visitors. Protected state means any non-draft status, or any non-null `sent_at`, `copied_at`, `completed_at`, `payment_status`, `invoice_amount`, or `review_requested_at`.
+
+`PATCH /api/estimates/[id]/pricing-mode` authenticates with `getUser()`, derives the contractor's business server-side, scopes the estimate to that business, validates the closed `detailed | grouped` value, confirms structured rows and totals, and uses the service role only after ownership is established. Its atomic update writes only `customer_pricing_mode` and repeats every protected-state predicate at write time. Same-mode saves are safe no-ops.
+
+`lib/estimate-pricing-mode.ts` and `lib/estimate-pricing-server.ts` provide one shared server-built customer summary. The contractor preview, share page, and client-side PDF all receive that same summary. Detailed output reconstructs the current item descriptions, order, and values from structured rows while retaining markdown prose. Grouped output combines visible rows by first group appearance, uses `Additional items` for null groups, and exposes no item prices or internal fields. Any missing rows, invalid mode, disabled grouped flag, or subtotal disagreement fails closed to the existing detailed markdown. Raw database errors are logged only on the server. Structured line-item fields are read-only in the existing detailed editor so edits cannot create a second writable pricing source; prose remains editable.
+
+### Files
+
+Added: `app/api/estimates/[id]/pricing-mode/route.ts`, `app/components/estimate-pricing-editor.tsx`, `lib/estimate-pricing-mode.ts`, `lib/estimate-pricing-server.ts`, `playwright.unit.config.ts`, `tests/smoke/estimate-pricing-mode.spec.ts`.
+
+Modified: `app/components/download-pdf-button.tsx`, `app/components/editable-estimate-body.tsx`, `app/estimates/[id]/page.tsx`, `app/share/[id]/page.tsx`, `lib/estimate-groups.ts`, `lib/estimate-item-migration.ts`, `lib/estimate-summary.ts`, `lib/generate-pdf.ts`, `package.json`, `TRADEPULSE_ESTIMATES_BASELINE.md`, `TRADEPULSE_ESTIMATES_ROADMAP.md`, and this file. `lib/database.types.ts`, schema, migrations, environment files, RLS, generation prompts, billing, approval, invoices, payments, reviews, and follow-ups were not changed.
+
+### Controlled production-backed verification
+
+The existing synthetic structured estimate was safely identified without putting its raw id in any committed file. A local dev server alone received `ESTIMATE_GROUPED_PRICING_INTERNAL=true`; `.env.local` and production configuration were unchanged. The real authenticated contractor page switched Detailed to Grouped, persisted successfully, and showed `Additional items` $252.50 plus `Plumbing` $230. The public share page showed the same two rows and no toggle. The generated two-page A4 PDF was inspected as extracted text and as rendered PNG pages; it showed the same grouped rows, subtotal $482.50, GST $24, total $506.50, no deposit, and balance $506.50, with no individual item prices or internal fields. The estimate was then restored to Detailed, and both contractor and share views returned to the original four rows in the original order.
+
+Final read-only production audit: 30 estimates total, 29 markdown and 1 structured; all 30 have `customer_pricing_mode = detailed`; 4 structured item rows belong to the single synthetic draft; that draft remains `status = draft` with every protected field null. No historical estimate was converted or updated. No SMS, email, copy-link delivery stamp, job completion, invoice, payment, review request, reminder, or other customer communication was triggered.
+
+Indicative local dev timings from Next's request log: contractor detail 3.4s cold and 0.85s to 1.16s warm; share page 3.5s cold and 0.51s to 1.07s warm; pricing-mode PATCH 2.9s cold and 0.74s warm. The PDF was created and visually inspected, but its exact client generation time was not captured because the browser runtime did not surface the download event even though the file appeared on disk. These are observations, not benchmarks.
+
+### Verification
+
+- `npm.cmd run test:unit`: 83 passed, using the safe unit-only Playwright configuration with no global setup.
+- `npx.cmd tsc --noEmit`: passed.
+- `npx.cmd next build`: passed after rerunning with network access so the existing DM Sans font could be fetched. Existing `metadataBase` warnings remain.
+- `npx.cmd eslint .`: the unchanged pre-existing baseline remains, 7 errors and 18 warnings. No grouped-pricing file introduced a lint finding.
+- Browser: contractor Detailed and Grouped, share Detailed and Grouped, mobile layout, persistence in both directions, PDF text and page rendering, and console warnings/errors checked. No browser console warning or error was found on the verified contractor or share pages.
+- Final repository checks: `git diff --check`, full changed-file review, protected-flow searches, staged secret/customer-id scan, exact staged-file review, and final git status.
+
+### Remaining risks and limitations
+
+- Production grouped pricing remains disabled until the exact internal flag is deliberately enabled in deployment configuration.
+- Historical markdown estimates remain markdown-authoritative and have no toggle. The lazy conversion slice remains deliberately unshipped.
+- Group assignment remains keyword-based. An unrecognised item is honestly shown under `Additional items` rather than guessed.
+- Structured pricing rows are read-only in the current editor. A future structured line-item editing slice would need an atomic row-update path that preserves all cross-surface totals.
+- The PDF page break can place the final Pricing Summary rows on page 2. The content is complete and readable, but pagination was not redesigned in this slice.
+- The slice-1 RLS policy decision and deliberate synthetic-account cleanup decision remain open.
+
+### Exact next action
+
+Implement customer approval and change requests backed by immutable estimate snapshots. Define the snapshot and state-transition contract before adding approval controls, so a customer decision always refers to an unchangeable priced estimate.
+
+---
 
 ## Latest session (2026-07-31, latest): checkpoint commit + one controlled end-to-end generation, VERIFIED PASS
 

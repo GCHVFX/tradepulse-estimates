@@ -257,7 +257,7 @@ The precondition raised by the Phase 0 audit is resolved. Full analysis in `TRAD
 
 Implementation is sliced into five independently shippable steps; see section 10 of the architecture document. `formatEstimateForDisplay()` in `lib/estimate-summary.ts` remains the correct seam, since the share page and PDF both already render through it.
 
-**Implementation status as of 2026-08-01:** Slices 1 (schema), 2 (backfill function and totals invariant), and 3 (write path for new estimates via `/api/generate-estimate`) are complete on `main`, not pushed. Slices 4 (read path and lazy backfill for existing estimates) and 5 (grouping UI and contractor toggle) are incomplete. The next slice is the contractor-facing grouped-versus-detailed pricing toggle for newly generated structured estimates only, with detailed mode preserved as the default.
+**Implementation status as of 2026-08-02:** Slices 1 (schema), 2 (conversion function and totals invariant), 3 (write path for new estimates via `/api/generate-estimate`), and 5 (shared read path, grouping UI, persisted contractor toggle, share page, and PDF for newly generated structured estimates) are complete on `main`, not pushed. Detailed remains the default. Slice 4's historical lazy-backfill exposure is deliberately incomplete and was not part of the customer-facing toggle task, so all historical markdown estimates remain unchanged. The next implementation slice is customer approval and change requests backed by immutable estimate snapshots.
 
 ### Rules
 

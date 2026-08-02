@@ -4,8 +4,9 @@
 //
 //   1. assignGroupLabel(), a keyword classifier used ONLY when a brand-new
 //      estimate is generated. It never runs against an existing estimate.
-//   2. The grouped renderer, which is INTERNAL ONLY and gated behind
-//      isGroupedPricingEnabled(). No customer sees its output yet.
+//   2. The grouped renderer, which is server-gated behind
+//      isGroupedPricingEnabled() and is customer-visible only for eligible
+//      structured drafts whose contractor selected grouped pricing.
 //
 // Pure functions. No React, no network, no database, no side effects.
 //
@@ -22,9 +23,9 @@ import { formatDollars } from "./estimate-summary";
 // ── Feature flag ──────────────────────────────────────────────────────────────
 
 /**
- * Grouped customer pricing is not shipped. This gate exists so the renderer can
- * be built and tested without any path to a customer. Server-side only: it
- * reads a plain env var and is never bundled into a client component.
+ * Grouped customer pricing is controlled server-side by an exact-match feature
+ * flag. The env value is never bundled into a client component, and a false or
+ * missing value always leaves detailed rendering available.
  */
 export function isGroupedPricingEnabled(): boolean {
   return process.env.ESTIMATE_GROUPED_PRICING_INTERNAL === "true";
@@ -81,7 +82,7 @@ export function assignGroupLabel(description: string): string | null {
 /** The closed set this classifier can produce, for tests and future UI. */
 export const KNOWN_GROUP_LABELS: readonly string[] = GROUP_RULES.map((r) => r.group);
 
-// ── Grouped rendering (internal only) ────────────────────────────────────────
+// ── Grouped rendering ──────────────────────────────────────────────────────
 
 export interface GroupedPriceLine {
   group: string;
@@ -128,7 +129,8 @@ export function groupItemsForDisplay(
  * section in this app is rendered so it flows through the existing markdown
  * pipeline unchanged.
  *
- * INTERNAL ONLY. Nothing customer-facing calls this.
+ * The shared server pricing loader calls this for eligible grouped estimates;
+ * the contractor page, share page, and PDF all consume that same result.
  */
 export function renderGroupedLineItemsBlock(
   items: Array<Pick<EstimateItemDraft, "total" | "groupLabel">>

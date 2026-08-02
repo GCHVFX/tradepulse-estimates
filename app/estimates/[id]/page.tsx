@@ -3,11 +3,11 @@ import { CompanyEstimateHeader } from "@/app/components/company-estimate-header"
 import { EstimateActions } from "@/app/components/estimate-actions";
 import { DeleteEstimateLink } from "@/app/components/delete-estimate-link";
 import { CustomerDetailsBlock } from "@/app/components/customer-details-block";
-import { EditableEstimateBody } from "@/app/components/editable-estimate-body";
+import { EstimatePricingEditor } from "@/app/components/estimate-pricing-editor";
 import { EstimatePhotos } from "@/app/components/estimate-photos";
 import { BottomNav } from "@/app/components/bottom-nav";
+import { loadCustomerPricingView } from "@/lib/estimate-pricing-server";
 import { supabaseAdmin, createSupabaseServerClient } from "@/lib/supabase-server";
-import { calculateEstimateTotal } from "@/lib/estimate-summary";
 
 export default async function EstimatePage({
   params,
@@ -46,11 +46,15 @@ export default async function EstimatePage({
     redirect("/estimates");
   }
 
-  // Fetch photos from tpe_estimate_photos table
-  const { data: photoRecords } = await supabaseAdmin
-    .from("tpe_estimate_photos")
-    .select("storage_path")
-    .eq("estimate_id", id);
+  // Pricing rows and photo records are independent once the estimate is
+  // owned, so load them together rather than adding another server waterfall.
+  const [pricing, { data: photoRecords }] = await Promise.all([
+    loadCustomerPricingView(estimate),
+    supabaseAdmin
+      .from("tpe_estimate_photos")
+      .select("storage_path")
+      .eq("estimate_id", id),
+  ]);
 
   // Each photo carries both its signed URL (short-lived, for display only)
   // and its storage_path (the stable identifier the delete API matches on).
@@ -78,8 +82,8 @@ export default async function EstimatePage({
   const businessPhone = business?.phone ?? "";
   const isPro = business?.plan === "pro";
   const googleReviewLink = business?.google_review_link ?? null;
-  const estimateTotal = calculateEstimateTotal(estimate.summary ?? "");
   const isQuoteRequest = estimate.status === "needs_review" && estimate.source === "website_quote";
+  const estimateTotal = pricing.selected.total;
 
   return (
     <div className="min-h-dvh bg-zinc-950 text-white flex flex-col">
@@ -182,9 +186,16 @@ export default async function EstimatePage({
                 dateStr={estimate.created_at ?? ""}
               />
 
-              <EditableEstimateBody
-                summary={estimate.summary ?? ""}
+              <EstimatePricingEditor
+                key={estimate.id}
                 estimateId={estimate.id}
+                summary={estimate.summary ?? ""}
+                detailedSummary={pricing.detailedSummary}
+                groupedSummary={pricing.groupedSummary}
+                initialMode={pricing.selected.renderedMode}
+                structuredPricing={estimate.pricing_source === "structured"}
+                canEditMode={pricing.canEditMode}
+                pricingError={!pricing.selected.ok}
               />
 
               <EstimatePhotos
@@ -202,7 +213,7 @@ export default async function EstimatePage({
       <EstimateActions
         estimateId={estimate.id}
         title={estimate.title ?? ""}
-        summary={estimate.summary ?? ""}
+        summary={pricing.selected.summary}
         status={estimate.status}
         source={estimate.source ?? null}
         description={estimate.description ?? null}

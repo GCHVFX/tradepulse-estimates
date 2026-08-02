@@ -2,8 +2,8 @@ import Image from "next/image";
 import { EstimateMarkdown } from "@/app/components/estimate-markdown";
 import { DownloadPdfButton } from "@/app/components/download-pdf-button";
 import { CompanyEstimateHeader } from "@/app/components/company-estimate-header";
+import { loadCustomerPricingView } from "@/lib/estimate-pricing-server";
 import { supabaseAdmin } from "@/lib/supabase-server";
-import { formatEstimateForDisplay } from "@/lib/estimate-summary";
 
 export default async function ShareEstimatePage({
   params,
@@ -15,7 +15,7 @@ export default async function ShareEstimatePage({
   const { data: estimate } = await supabaseAdmin
     .from("tpe_estimates")
     .select(
-      "id, title, summary, customer_name, customer_phone, customer_email, job_address, prepared_by, created_at, business_id, include_photos"
+      "id, title, summary, customer_name, customer_phone, customer_email, job_address, prepared_by, created_at, business_id, include_photos, pricing_source, customer_pricing_mode, status, sent_at, copied_at, completed_at, payment_status, invoice_amount, review_requested_at"
     )
     .eq("id", id)
     .maybeSingle();
@@ -36,23 +36,25 @@ export default async function ShareEstimatePage({
     );
   }
 
-  // Look up business branding via the estimate's owner
-  const { data: business } = estimate.business_id
-    ? await supabaseAdmin
+  const businessPromise = estimate.business_id
+    ? supabaseAdmin
         .from("tpe_businesses")
         .select("name, logo_url")
         .eq("id", estimate.business_id)
         .maybeSingle()
-    : { data: null };
+    : Promise.resolve({ data: null });
+
+  const [pricing, { data: business }, { data: photoRecords }] = await Promise.all([
+    loadCustomerPricingView(estimate),
+    businessPromise,
+    supabaseAdmin
+      .from("tpe_estimate_photos")
+      .select("storage_path")
+      .eq("estimate_id", id),
+  ]);
 
   const businessName = business?.name ?? "";
   const logoUrl = business?.logo_url ?? null;
-
-  // Fetch photos from tpe_estimate_photos table
-  const { data: photoRecords } = await supabaseAdmin
-    .from("tpe_estimate_photos")
-    .select("storage_path")
-    .eq("estimate_id", id);
 
   const photoUrls: string[] = [];
   if (photoRecords && photoRecords.length > 0) {
@@ -115,7 +117,7 @@ export default async function ShareEstimatePage({
             </span>
           </div>
 
-          <EstimateMarkdown content={formatEstimateForDisplay(estimate.summary ?? "")} />
+          <EstimateMarkdown content={pricing.selected.summary} />
 
           {estimate.include_photos && photoUrls.length > 0 && (
             <div className="mt-6">
@@ -138,7 +140,7 @@ export default async function ShareEstimatePage({
         <div className="mt-4">
           <DownloadPdfButton
             title={estimate.title ?? ""}
-            summary={estimate.summary ?? ""}
+            summary={pricing.selected.summary}
             businessName={businessName}
             logoUrl={logoUrl}
             photoUrls={estimate.include_photos ? photoUrls : []}
