@@ -2,7 +2,80 @@
 
 Updated: 2026-08-03
 
-**Branch:** `main` at `e3a8eac` (`Align Stripe webhook route and events`). Every pre-existing dirty file remains preserved and excluded from task commits: `.claude/settings.local.json`, `.gitignore`, `.ai-control-centre/`, and four `.bak-*` files.
+**Branch:** `main` at deployed commit `f6c8cb1` (`Document dedicated TradePulse Stripe cutover`) before this handoff-only documentation commit. Every pre-existing dirty file remains preserved and excluded from task commits: `.claude/settings.local.json`, `.gitignore`, `.ai-control-centre/`, and four `.bak-*` files.
+
+## Latest session (2026-08-03): dedicated Stripe production deployment, PARTIAL CUTOVER
+
+### Outcome
+
+The current `main` branch was pushed and deployed exactly once through the Vercel Git integration. Production deployment `dpl_...QFuy` is READY, serves all five project aliases including `trytradepulse.com` and `www.trytradepulse.com`, and is verified as Git-sourced from `main` commit `f6c8cb1`. The public application, login, authenticated subscription gate, dedicated Starter Checkout, invalid-signature webhook boundary, account isolation, and rollback availability all passed.
+
+The cutover is not a full acceptance pass yet. A real Stripe-signed hosted webhook delivery could not be produced because Stripe Workbench was not authenticated in the available browser and Chrome control was unavailable. The dedicated account also has no active Billing Portal configuration. No Portal session was created because the synthetic customer has no subscription, and the application route would preserve POST into Checkout and create a prohibited second Checkout Session.
+
+No real card was entered, no payment was completed, no email or SMS was sent, no historical customer or subscription was migrated, and no old-account or Parlay object was mutated.
+
+### Repository and deployment
+
+- Starting branch and commit: `main` at `f6c8cb1`; `e3a8eac` was present; all webhook task files were clean.
+- The push advanced only `origin/main` from `9c6ff79` through `f43e48c`, `e3a8eac`, and `f6c8cb1`. The pre-existing settings, `.gitignore`, AI Control Centre files, and backups were excluded.
+- Previous READY production deployment: `dpl_...kBnj` at `tradepulse-estimates-2lz3gvyqb-gchansen-2620s-projects.vercel.app`.
+- Exact Instant Rollback action: `vercel rollback https://tradepulse-estimates-2lz3gvyqb-gchansen-2620s-projects.vercel.app`.
+- New READY production deployment: `dpl_...QFuy`, Git-sourced from `main` commit `f6c8cb1`.
+- Rollback was not used and remains available. No old Stripe credential was deleted or invalidated.
+
+### Vercel configuration metadata
+
+- Production has all four canonical server-side variables: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`, and `STRIPE_PRO_PRICE_ID`. Values were not read.
+- All five `NEW_` Production variables remain present and sensitive. They were not removed or changed.
+- The application does not read a Stripe publishable key, so no canonical publishable-key variable was changed.
+- This task made no Vercel environment-variable mutation. Metadata observed after the operator's manual installation shows no Stripe variables in Preview and only `STRIPE_SECRET_KEY` in Development, which differs from the older audit's broader scopes and must not be described as unchanged historical state.
+
+### Hosted application and Checkout
+
+- `https://trytradepulse.com` returned HTTP 200 and redirected canonically to `https://www.trytradepulse.com/`.
+- Homepage and login rendered without browser page or console errors. Unauthenticated `/subscribe` redirected to `/login?next=%2Fsubscribe`.
+- Public pricing rendered Starter at CA$39/month and Pro at CA$69/month.
+- The synthetic complimentary Starter user signed in through the real login route. `/subscribe` correctly showed complimentary access with no billing action.
+- Exactly one authenticated Starter Checkout was requested. Dedicated Stripe read-back confirmed one open, unpaid subscription-mode session, one line item at CA$39/month CAD, product `TradePulse Starter`, success URL `https://www.trytradepulse.com/new?subscribed=1`, cancel URL `https://www.trytradepulse.com/subscribe`, and the intended synthetic user/customer metadata.
+- The hosted Stripe page showed TradePulse Starter and CA$39/month. No card data was entered and Checkout was not completed.
+- The dedicated account now has exactly one synthetic customer, one open unpaid synthetic Checkout Session, and zero synthetic subscriptions. The connector did not expose an operation to expire the session or delete the empty customer, so both remain for deliberate cleanup. The session will otherwise expire under Stripe's normal lifecycle.
+- The synthetic Supabase business remains `plan = starter`, `subscription_status = complimentary`, with a dedicated customer reference and no subscription reference. Its test password was rotated to an unpersisted random value solely for the hosted sign-in.
+
+### Webhook and Portal
+
+- Dedicated Stripe account identity was verified as TradePulse. It has active CA$39/month Starter and CA$69/month Pro prices.
+- The enabled destination is exactly `https://trytradepulse.com/api/billing/webhook` with exactly: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_succeeded`, and `invoice.payment_failed`.
+- Hosted missing signature returned HTTP 400 `No signature`; hosted invalid signature returned HTTP 400 `Webhook signature verification failed`.
+- The 28 signed-fixture tests passed for valid signature acceptance, the exact six-event contract, unknown events, unknown prices, unknown statuses, duplicate delivery, stale events, and zero-row Checkout protection.
+- Not verified live: a Stripe-signed hosted delivery and hosted delivery of each configured event type. Workbench authentication is required to close this gap without exposing the webhook secret.
+- The dedicated account returned zero active Billing Portal configurations. No Portal session was created. Portal branding, return URL, payment-method update, and invoice-history behaviour remain unverified and Portal launch readiness currently fails.
+
+### Isolation and runtime evidence
+
+- Read-only old-account checks after Checkout found zero synthetic customers, zero synthetic Checkout Sessions, and zero synthetic subscriptions, with no customer, Checkout Session, or subscription of any kind created there during this task.
+- Greg Hansen Studio's Parlay Mechanical Website Plan remains active at CA$199/month with the existing active Payment Link. The old account currently has no Parlay subscription object to alter.
+- The runtime-created Starter session exists only in the dedicated TradePulse account. This proves the deployed Checkout route is using the dedicated secret and dedicated Starter price rather than the old account.
+- The new deployment had no 5xx logs, no Stripe account-mismatch logs, and no billing-route runtime error groups after hosted verification. One unrelated historical/current `/api/generate-estimate` foreign-key error group remains outside this Stripe task.
+- No customer communication was sent and no real payment occurred.
+
+### Verification performed
+
+- `git status --short`, `git diff --check`, branch/log checks, exact push-range review, and secret scan.
+- Focused webhook suite: 28 passed.
+- Safe unit suite: 111 passed.
+- `npx.cmd tsc --noEmit`: passed.
+- `npm.cmd run lint`: unchanged pre-existing baseline of 7 errors and 18 warnings.
+- `npm.cmd run build`: passed; three existing `metadataBase` warnings only.
+- Vercel metadata-only variable checks, previous/new deployment inspection, Git-source verification, alias verification, and runtime log/error checks.
+- Hosted homepage, login, subscription gate, public pricing, browser console/page errors, synthetic sign-in, one Checkout, dedicated Stripe API read-back, webhook rejection probes, and old-account/Parlay isolation.
+- Repository secret scan found only the deliberate `whsec_..._test_only` fixture, with no live Stripe key or webhook-secret literal in deployable source.
+- Temporary verifier scripts and automated browser sessions were removed. The `NEW_` Vercel variables were intentionally retained.
+
+### Remaining risks and exact next action
+
+Authenticate to the dedicated TradePulse Stripe Workbench, send a harmless signed test event to the configured destination, and confirm the hosted response and delivery log. Configure and activate the default TradePulse Billing Portal with payment-method update and invoice history, then use only the synthetic customer to verify a Portal session and the exact return URL without adding a card or cancelling anything. Expire the open synthetic Checkout Session and remove the empty synthetic customer, clearing its database customer reference only after Stripe deletion succeeds. Recheck old-account and Parlay isolation, then remove the unused `NEW_` Production variables if their secure source is retained. Do not create another Checkout Session and do not redeploy unless a code change is actually required.
+
+---
 
 ## Latest session (2026-08-03): dedicated Stripe production cutover, SENSITIVE-VARIABLE GATE STOP
 
