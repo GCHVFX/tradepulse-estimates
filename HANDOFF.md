@@ -2,7 +2,96 @@
 
 Updated: 2026-08-02
 
-**Branch:** `main`. The grouped-pricing toggle work is committed as the current `HEAD` with message `Add grouped pricing toggle for structured estimates`. **Not pushed.** The unrelated dirty files remain excluded: `.claude/settings.local.json`, `.gitignore`, `.ai-control-centre/`, and four `.bak-*` files.
+**Branch:** `main` at `9c6ff79` (`Add grouped pricing toggle for structured estimates`). The shared worktree was safely returned from `codex/marketing-site-proof` after confirming both branches pointed to the same commit; every pre-existing dirty file was preserved. The unrelated dirty files remain excluded: `.claude/settings.local.json`, `.gitignore`, `.ai-control-centre/`, and four `.bak-*` files.
+
+## Latest session (2026-08-02): dedicated Stripe production cutover, COMPATIBILITY GATE STOP
+
+### Outcome
+
+The worktree was safely returned to `main` at `9c6ff79` with the same dirty-file set preserved. The controlled production cutover then stopped at the required repository compatibility gate. No Vercel environment variable, Stripe object, Supabase row, deployment, customer, subscription, Checkout session, Portal session, payment, email, or SMS was created or changed. Nothing was pushed.
+
+### Verified incompatibilities
+
+- The dedicated TradePulse Stripe webhook is configured for `https://trytradepulse.com/api/webhooks/stripe`, but the application exposes only `POST /api/billing/webhook`.
+- The dedicated webhook's exact event set includes `invoice.payment_failed`, but `app/api/billing/webhook/route.ts` does not handle that event.
+- The application handles `customer.subscription.created`, but that event is absent from the dedicated webhook's exact event set.
+- The compatible events are `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, and `invoice.payment_succeeded`.
+- The webhook route correctly reads the raw request body and verifies `stripe-signature` with `STRIPE_WEBHOOK_SECRET`; invalid or missing signatures return HTTP 400, and unknown signed events return HTTP 200 without entering a mutation branch.
+
+### Repository Stripe environment contract
+
+- Application runtime reads: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`, and `STRIPE_PRO_PRICE_ID`.
+- Application runtime does not read: `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` or `STRIPE_PORTAL_CONFIGURATION_ID`.
+- No hard-coded `price_`, `prod_`, `acct_`, or `bpc_` object id was found in tracked application code.
+- Stripe API version is pinned centrally in `lib/stripe.ts` to `2026-03-25.dahlia`; the smoke-test helper uses the same version.
+- Portal sessions rely on Stripe's default portal configuration. No portal configuration id is passed by the application.
+
+### Cutover and rollback state
+
+The five temporary Production variables were not read or validated because the compatibility gate failed first. The canonical Production variables and temporary variables remain unchanged. No deployment was triggered, so the pre-cutover production deployment and environment configuration remain the rollback baseline.
+
+### Verification performed
+
+Read-only branch, status, handoff-diff, and commit comparison; safe switch to `main`; post-switch branch/commit/status/diff confirmation; complete tracked-code searches for Stripe environment references, object ids, webhook URLs, portal configuration ids, and API-version pins; direct review of Stripe initialisation, Checkout, upgrade, Portal, signup, OAuth provisioning, subscription page, and webhook route logic. Automated tests, build, hosted checks, temporary-value validation, Stripe account reads, Vercel mutations, Checkout verification, webhook delivery tests, Portal verification, and old-account isolation checks were not run because the prompt requires an immediate stop on an incomplete or incompatible webhook contract.
+
+### Exact next action
+
+Decide and implement one coherent webhook contract before restarting the cutover: either add a deployed `POST /api/webhooks/stripe` route that safely handles `invoice.payment_failed` and determine whether `customer.subscription.created` is still required, or reconfigure the dedicated Stripe endpoint to the existing route and the complete event set the application requires. Then run focused webhook tests and restart the cutover from the repository audit.
+
+---
+
+## Latest session (2026-08-02): Stripe portal branding audit, DECISION GATE STOP
+
+### Outcome
+
+The live Stripe account used by TradePulse is **shared**, so no account-wide branding, public-business details, portal configuration, Stripe objects, environment variables, or application billing code were changed. The account id is `acct_...KtuY` (redacted). This task stopped at the explicit shared-account decision gate. No commit was created and nothing was pushed.
+
+### Read-only evidence
+
+- Current live account identity: public business name and Dashboard display name `Greg Hansen Studio`; website `https://greghansen.ca`; support email and support URL unset; icon and logo unset; primary colour `#142c2d`; secondary colour `#e05a31`.
+- The account has two active products: `TradePulse Estimates`, with active CA$39/month Starter and CA$69/month Pro prices, and `Parlay Mechanical Website Plan`, with an active CA$199/month price.
+- The account has one active Payment Link, and its line items reference `Parlay Mechanical Website Plan`. This is direct evidence that globally renaming or rebranding the account would alter another business's customer-facing payment surface.
+- All 84 non-deleted Stripe customers have TradePulse `user_id` metadata. All 686 subscriptions reference `TradePulse Estimates`: 645 cancelled, 33 past due, and 8 trialling. The TradePulse database currently has 29 businesses, 25 Stripe customer references, and 25 Stripe subscription references. The historical Stripe population must be reconciled before migration rather than copied blindly.
+- All 33 live past-due subscriptions match the observed recovery state: ended trial, configured CA$39 Starter price, open CA$39 invoice, and no attached card. Stripe documents this as the expected `past_due` result when a trial ends with `missing_payment_method=create_invoice` and the invoice cannot be paid.
+- The only live portal configuration is the active account default (`bpc_...CAXV`, redacted). It has no headline and no default return URL. Payment-method updates and invoice history are enabled. Subscription cancellation is disabled. The application does not pass a configuration id or locale and overrides the return URL to `{origin}/profile`.
+- The live webhook endpoint is `https://www.trytradepulse.com/api/billing/webhook`, enabled for the five required events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, and `invoice.payment_succeeded`.
+- Test-mode branding and portal parity were not verified. No test secret key is configured locally, and the available browser reached Stripe sign-in rather than an authenticated Dashboard session.
+
+### Application findings
+
+- `POST /api/billing/portal` authenticates with Supabase `getUser()`, derives the business by `owner_user_id`, and uses that business's stored Stripe customer and subscription ids. It currently relies on Stripe's ambiguous default portal configuration.
+- The portal route derives its return origin from the request `Origin` header before `NEXT_PUBLIC_APP_URL`, then returns to `/profile`. A dedicated-account implementation should use a canonical TradePulse origin and an explicit portal configuration id.
+- Portal failures currently redirect with POST preservation to Checkout. That avoids a dead end but can send an existing billing-recovery user into a new-subscription flow. The dedicated-account implementation should instead show a safe billing error and support path.
+- `/subscribe` correctly distinguishes the observed `past_due` state and does not imply a successful charge. Its warning card is static, while the real portal action is a low-contrast text button below it, so `Update payment method` is not currently the obvious primary action.
+- Access gating is consistent for active, complimentary, and unexpired-trial users. Past-due, cancelled, incomplete, and expired-trial users are denied app access and routed to `/subscribe`. A successful positive-value `invoice.payment_succeeded` sets the application status back to `active`. No payment, cancellation, email, or customer communication was performed.
+
+### Existing TradePulse assets
+
+- `public/favicon.png` is the correct square TradePulse icon but only 32x32. Stripe requires account branding images to be at least 128x128, so it must not be uploaded as-is.
+- `public/tradepulse-logo.png` is the correct existing TradePulse wordmark but is 300x94, below Stripe's minimum height. A higher-resolution export of the same approved artwork is required. Do not invent or redraw the brand.
+- The application's established brand colours are navy `#0D1B2E` and amber `#f59e0b`. These differ from the shared account's current colours and should be applied only to a dedicated TradePulse account.
+
+### Safest dedicated-account migration plan
+
+1. Obtain explicit approval, then create and activate a dedicated TradePulse Stripe account. Do not alter the current shared account.
+2. Configure the dedicated account's public name, website, support URL, support email, approved high-resolution icon/logo, and existing navy/amber colours in both live and sandbox settings.
+3. Recreate the TradePulse Estimates product and CA$39/month Starter and CA$69/month Pro prices. Price ids are account-scoped and must change in application configuration.
+4. Create a dedicated TradePulse portal configuration with a TradePulse headline, canonical return URL, payment-method updates, invoice history, and cancellation at period end if the existing product rule is retained. Pin its id in application sessions through a server-only environment variable.
+5. Create a new webhook endpoint for the same five required events, store the new signing secret, and verify event delivery before cutover.
+6. Ask Stripe to copy only the reconciled TradePulse customer and supported payment-method data. Stripe can copy customers and supported payment methods, but not subscriptions, invoices, products, prices, charges, coupons, events, or logs. Payment-method ids change; copied customer ids can remain the same.
+7. Recreate eligible live subscriptions in the dedicated account with an explicit cutover plan for billing-cycle anchors, trials, outstanding invoices, and duplicate-charge prevention. Update each TradePulse business row only after its new customer/subscription pairing is verified. Cancel old subscriptions only after the replacement is confirmed.
+8. Update `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`, `STRIPE_PRO_PRICE_ID`, and a new `STRIPE_PORTAL_CONFIGURATION_ID`; then implement the explicit portal configuration, canonical return URL, safe portal-error path, primary `/subscribe` recovery button, and focused mocked tests requested by this task.
+9. Deploy to a safe target, verify sandbox first, then perform a controlled live cutover and reconcile Stripe against the 25 database-referenced customers/subscriptions. Keep the shared account for Parlay and historical records.
+
+### Verification performed
+
+Read-only Stripe API audit of account details, branding, all products/prices, Payment Link line items, aggregate customers, all subscriptions, portal configurations, recovery-state invoices/payment methods, and webhook endpoints; read-only Supabase aggregate comparison; repository code review of Stripe creation, Checkout, Portal, `/subscribe`, webhook, auth, and proxy logic; official Stripe documentation review; existing brand asset inspection; initial and final repository status checks. No automated suite, typecheck, lint, or build was run because the decision gate prohibited implementation and the only intended repository change is this handoff record.
+
+### Exact next action
+
+Decide whether to create a dedicated TradePulse Stripe account and authorize a controlled migration. If approved, first obtain high-resolution exports of the existing TradePulse icon and wordmark, create and configure the dedicated account in sandbox and live modes, and produce a reconciled migration manifest for the 25 database-referenced customer/subscription pairs before changing code or production environment variables.
+
+---
 
 ## Latest session (2026-08-02): grouped-versus-detailed customer pricing, VERIFIED PASS
 
