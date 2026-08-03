@@ -1,8 +1,69 @@
 # Handoff
 
-Updated: 2026-08-02
+Updated: 2026-08-03
 
-**Branch:** `main` at `9c6ff79` (`Add grouped pricing toggle for structured estimates`). The shared worktree was safely returned from `codex/marketing-site-proof` after confirming both branches pointed to the same commit; every pre-existing dirty file was preserved. The unrelated dirty files remain excluded: `.claude/settings.local.json`, `.gitignore`, `.ai-control-centre/`, and four `.bak-*` files.
+**Branch:** `main`, based on `f43e48c` (`Document dedicated TradePulse Stripe cutover`) before the webhook repair commit. The shared worktree was already safely restored from `codex/marketing-site-proof` when this recovery began; `main` and `codex/marketing-site-proof` both resolved to `f43e48c`. Every pre-existing dirty file was preserved. The unrelated dirty files remain excluded: `.claude/settings.local.json`, `.gitignore`, `.ai-control-centre/`, and four `.bak-*` files.
+
+## Latest session (2026-08-03): Stripe webhook compatibility repair
+
+### Outcome
+
+Recovered the five interrupted webhook files and completed the narrow compatibility repair on `main`. The sole canonical route is `POST /api/billing/webhook`, with production destination `https://trytradepulse.com/api/billing/webhook`. No compatibility alias was added. No Stripe Dashboard, Stripe object, Vercel environment, deployment, Supabase production row, Checkout session, email, SMS, or Parlay configuration was changed.
+
+### Exact supported event list
+
+1. `checkout.session.completed`
+2. `customer.subscription.created`
+3. `customer.subscription.updated`
+4. `customer.subscription.deleted`
+5. `invoice.payment_succeeded`
+6. `invoice.payment_failed`
+
+### Webhook behaviour and safeguards
+
+- Raw request text is verified with `stripe-signature` and the required server-only `STRIPE_WEBHOOK_SECRET` before dispatch.
+- Checkout validates owner metadata, the Stripe customer/subscription relationship, and exactly one configured Starter or Pro price. The derived plan must match metadata.
+- The conditional Checkout update returns the matched business row. A zero-row result is acknowledged without mutation and cannot inspect, cancel, or overwrite the previous trial.
+- A previous trial is cancelled only when its Stripe customer also matches. Transient cancellation failures return HTTP 500, and duplicate Checkout delivery retries the cancellation after the idempotent link.
+- Subscription creation and update share one path and refuse unknown, missing, or multiple prices without overwriting plan or status.
+- Stripe status mapping is explicit: `active` to `active`; `trialing` to `trial`; `past_due`, `unpaid`, `incomplete`, and `paused` to `past_due`; `incomplete_expired` and `canceled` to `cancelled`. Unknown values cause no mutation.
+- Subscription deletion and invoice state changes require the matching current customer and subscription. Positive paid invoices restore `active` only when the retrieved Stripe subscription is also active. Terminal or unknown subscriptions cannot be reactivated or overwritten by late invoice events. Duplicate deliveries remain idempotent state assignments.
+- Unknown signed events and validation refusals return HTTP 200 without database mutation. Transient processing errors return HTTP 500 for retry. Customer responses never include raw Stripe or database errors.
+
+### Files changed
+
+- `app/api/billing/webhook/route.ts`
+- `lib/stripe-webhook.ts`
+- `tests/smoke/stripe-webhook.spec.ts`
+- `playwright.unit.config.ts`
+- `TRADEPULSE_STRIPE_WEBHOOK.md`
+- `HANDOFF.md`
+
+### Verification performed
+
+- Focused signed-fixture webhook suite: 28 passed.
+- Full safe unit suite through `playwright.unit.config.ts`: 111 passed.
+- `npx.cmd tsc --noEmit`: passed.
+- Intended webhook/config ESLint check: passed.
+- Full `npx.cmd eslint .`: unchanged pre-existing baseline of 7 errors and 18 warnings; no intended-file findings.
+- `npx.cmd next build`: passed after allowing the existing DM Sans fetch; the only output warnings were the three existing `metadataBase` warnings. The build exposed one Stripe webhook route at `/api/billing/webhook` and no compatibility alias.
+- Repository route, supported-event, secret, Stripe object-id, and mutation searches: one Stripe webhook implementation, one code event-list constant, no committed real secret or full Stripe object id, and no Vercel or Stripe Dashboard mutation code added.
+- `git diff --check`: passed.
+
+### Final review
+
+- Standards review found no documented-standard violations. Its two judgement-call findings were resolved by centralising subscription price extraction and typing the subscription update payload.
+- Specification review found and verified three edge cases: previous-trial customer validation, retryable previous-trial cancellation, and prevention of late paid-invoice reactivation for terminal or unknown subscriptions. All three now have focused regressions.
+
+### Dashboard and cutover state
+
+The dedicated TradePulse Stripe destination still needs its URL and event selection updated after this code is deployed. The coordinated Vercel and Stripe production cutover has not been performed.
+
+### Exact next action
+
+Update the dedicated TradePulse Stripe webhook destination to `https://trytradepulse.com/api/billing/webhook` with the six verified events, then rerun the coordinated production Stripe cutover from the repository audit.
+
+---
 
 ## Latest session (2026-08-02): dedicated Stripe production cutover, COMPATIBILITY GATE STOP
 
