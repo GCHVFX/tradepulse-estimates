@@ -2,7 +2,56 @@
 
 Updated: 2026-08-03
 
-**Branch:** `main`, based on `f43e48c` (`Document dedicated TradePulse Stripe cutover`) before the webhook repair commit. The shared worktree was already safely restored from `codex/marketing-site-proof` when this recovery began; `main` and `codex/marketing-site-proof` both resolved to `f43e48c`. Every pre-existing dirty file was preserved. The unrelated dirty files remain excluded: `.claude/settings.local.json`, `.gitignore`, `.ai-control-centre/`, and four `.bak-*` files.
+**Branch:** `main` at `e3a8eac` (`Align Stripe webhook route and events`). Every pre-existing dirty file remains preserved and excluded from task commits: `.claude/settings.local.json`, `.gitignore`, `.ai-control-centre/`, and four `.bak-*` files.
+
+## Latest session (2026-08-03): dedicated Stripe production cutover, SENSITIVE-VARIABLE GATE STOP
+
+### Outcome
+
+The coordinated production cutover stopped before any Vercel environment mutation or deployment. Vercel lists all five required `NEW_` Production variables, but every one is stored as type `sensitive`. Vercel sensitive values are non-readable after creation and unavailable to `vercel env run`; a redacted one-shot check confirmed none of the five was injected. Their values therefore could not be validated against Stripe or copied atomically into the canonical names.
+
+No Stripe account, product, price, customer, subscription, Checkout session, webhook, Portal session, Supabase row, Vercel variable, deployment, email, SMS, payment, or Parlay configuration was created, changed, or removed. Nothing was pushed.
+
+### Repository and Vercel audit
+
+- Branch and starting commit: `main` at `e3a8eac`; all webhook task files were clean.
+- Production code reads exactly `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`, and `STRIPE_PRO_PRICE_ID`.
+- Production code does not read `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` or `STRIPE_PORTAL_CONFIGURATION_ID`.
+- No committed live Stripe secret, full live Stripe object id, hard-coded product or price id, portal configuration id, account id, or active old webhook alias was found.
+- Canonical route and contract remain `POST https://trytradepulse.com/api/billing/webhook` with the exact six events in `TRADEPULSE_STRIPE_WEBHOOK.md`.
+- Vercel linkage is `gchansen-2620s-projects/tradepulse-estimates`. The current Production deployment is READY at `dpl_...BfAL` and remains the active rollback deployment.
+- All four canonical Stripe Production variables exist. The canonical secret key is also Vercel-sensitive and was updated after the local `.env.local` file, so its old value cannot be proven recoverable from local state.
+
+### Decision-gate blocker and rollback state
+
+The brief requires read-only validation that all five temporary values belong to one dedicated TradePulse live account, exact Starter and Pro price validation, webhook-secret ownership validation, and a rollback plan that restores every canonical variable together. None can be guaranteed while the temporary values and current canonical secret are non-readable. Proceeding would risk mixing Stripe accounts and would make canonical-variable rollback incomplete. The existing Production variables and deployment were left untouched, so the pre-cutover application remains the rollback baseline.
+
+### Verification performed
+
+- `git branch --show-current`: `main`.
+- `git status --short`: only the pre-existing unrelated dirty-file set before this handoff update.
+- `git log -10 --oneline`: `e3a8eac` present at HEAD.
+- Webhook task file status: clean.
+- Complete Stripe environment, object-id, API-version, route, Checkout, Portal, upgrade, signup, OAuth provisioning, subscribe-page, and access-gating audit.
+- Read-only `vercel whoami`, project inspection, Production environment metadata listing, deployment listing, and deployment inspection.
+- Focused signed-fixture webhook suite: 28 passed.
+- Full safe unit suite: 111 passed.
+- `npx.cmd tsc --noEmit`: passed.
+- `npx.cmd eslint .`: unchanged pre-existing baseline of 7 errors and 18 warnings.
+- `npx.cmd next build`: passed after allowing the existing DM Sans fetch; three existing `metadataBase` warnings only.
+- `git diff --check`: passed before this documentation update.
+- Tracked-file live-secret and full Stripe object-id scans: no matches.
+- Old webhook alias search: historical references only in this handoff, no application route.
+
+### Not verified
+
+Dedicated Stripe account identity, public business details, Starter and Pro prices, publishable key, webhook secret ownership, live destination state, Portal configuration, hosted post-cutover behaviour, synthetic Checkout creation, deployed signed webhook delivery, Portal session creation, and old-account isolation were not verified because the mandatory temporary-value and rollback gates failed first.
+
+### Exact next action
+
+From the original secure sources, recreate the five `NEW_` values directly in Vercel as Production-only encrypted variables that can be read for this one cutover, without putting any value in chat or Git. Retain the existing sensitive variables until the replacements are confirmed. Also retain a secure recoverable copy of the complete current canonical Stripe set. Then rerun this coordinated cutover from the repository audit; remove the readable temporary values immediately after the verified deployment.
+
+---
 
 ## Latest session (2026-08-03): Stripe webhook compatibility repair
 
