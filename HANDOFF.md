@@ -1,8 +1,41 @@
 # Handoff
 
-Updated: 2026-08-03
+Updated: 2026-08-05
 
-**Branch:** `main` at deployed commit `f6c8cb1` (`Document dedicated TradePulse Stripe cutover`) before this handoff-only documentation commit. Every pre-existing dirty file remains preserved and excluded from task commits: `.claude/settings.local.json`, `.gitignore`, `.ai-control-centre/`, and four `.bak-*` files.
+**Branch:** `main` at `4915dff` (`Document dedicated TradePulse Stripe deployment`) before the pricing commit. Every pre-existing dirty file remains preserved and excluded from task commits: `.claude/settings.local.json`, `.gitignore`, `.ai-control-centre/`, and four `.bak-*` files.
+
+## Latest session (2026-08-05): Starter and Pro pricing update
+
+### Outcome and scope
+
+- TradePulse Starter is now **CA$29/month** and Pro is now **CA$59/month** in the application, public site, authenticated billing copy, metadata, structured data, tests, and current product documentation.
+- Plan entitlements did not change. Checkout, upgrade, signup, and webhook recognition still use the configured `STRIPE_PRICE_ID` and `STRIPE_PRO_PRICE_ID`; no Stripe price ID is hardcoded, and unknown or ambiguous subscription price configurations still fail closed.
+- The Stripe prices and their Production Vercel price IDs were changed outside this code task. This task did not create, edit, archive, or replace a Stripe product or price and did not change a Vercel environment variable.
+- The prior synthetic CA$39 Checkout Session is stale. It must be confirmed expired and its empty synthetic customer must be deleted before either new CA$29 or CA$59 Checkout is created.
+- No unrelated dirty file was discarded, stashed, reset, overwritten, or included in the pricing work.
+
+### Repository and files changed
+
+- Worktree: `C:\Work\web-apps\tradepulse-estimates`; branch: `main`; starting commit: `4915dff` (`Document dedicated TradePulse Stripe deployment`).
+- Application and shared pricing: `app/page.tsx`, `app/opengraph-image.tsx`, `app/trades/page.tsx`, `app/plumbers/page.tsx`, `app/electricians/page.tsx`, `app/components/plan-picker.tsx`, `app/subscribe/page.tsx`, `app/signup/page.tsx`, `app/components/profile-form.tsx`, and `lib/plan-pricing.ts`.
+- Tests: `tests/smoke/plan-pricing.spec.ts` and `playwright.unit.config.ts`.
+- Documentation: `PROJECT.md`, `CODEX.md`, `CLAUDE.md`, `DECISIONS.md`, `TRADEPULSE_ESTIMATES_ROADMAP.md`, and `HANDOFF.md`.
+
+### Verification performed before commit
+
+- Focused pricing regression: the shared Starter and Pro prices render as `$29/month` and `$59/month`, and their CTA paths remain `/api/billing/checkout?plan=starter` and `/api/billing/checkout?plan=pro`.
+- Complete safe unit suite: 112 passed with the final CTA-path assertions.
+- `npx.cmd tsc --noEmit`: passed.
+- Targeted ESLint on changed TypeScript files: unchanged existing baseline within that set, 1 error and 6 warnings. No pricing module or pricing test finding.
+- `npx.cmd eslint .`: unchanged repository baseline, 7 errors and 18 warnings.
+- `npx.cmd next build`: the final source passed. One sandboxed attempt could not fetch DM Sans from Google Fonts; the required network-enabled rerun passed with three existing `metadataBase` warnings.
+- Local production-mode browser verification passed at 390 by 844 and 1440 by 900 for homepage Starter/Pro pricing, the Starter-default subscription picker, Pro selection changing the CTA to `$59/month`, Pro signup copy, and no horizontal overflow. There were no page exceptions. Local-only console noise was limited to blocked external telemetry, unauthenticated `/api/profile` 401 responses, and the expected missing local Vercel Insights script; these were not treated as pricing failures.
+
+### Remaining Stripe cutover acceptance work
+
+After the pricing commit is pushed and exactly one READY Production deployment is confirmed: verify the old synthetic CA$39 Checkout is expired, delete its empty customer, and clear only that synthetic database customer reference after deletion succeeds. Then create exactly one unpaid Starter Checkout at CA$29/month and one unpaid Pro Checkout at CA$59/month, inspect both without entering a card or completing payment, and recheck dedicated-account, old-account, and Parlay isolation. The earlier cutover still also requires a real Stripe-signed hosted webhook delivery and a configured, verified TradePulse Billing Portal. Do not send email or SMS, migrate historical customers, mutate Parlay, or remove retained rollback credentials as part of pricing verification.
+
+---
 
 ## Latest session (2026-08-03): dedicated Stripe production deployment, PARTIAL CUTOVER
 

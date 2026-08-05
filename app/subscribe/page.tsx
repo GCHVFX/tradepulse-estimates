@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createSupabaseServerClient, supabaseAdmin } from "@/lib/supabase-server";
 import { PlanPicker } from "@/app/components/plan-picker";
+import { formatMonthlyPlanPrice } from "@/lib/plan-pricing";
 
 export default async function SubscribePage({ searchParams }: { searchParams: Promise<{ preview?: string }> }) {
   const { preview } = await searchParams;
@@ -105,7 +106,7 @@ export default async function SubscribePage({ searchParams }: { searchParams: Pr
                 defaultPlan={showProOnly ? "pro" : business?.plan === "pro" && proBillingReady ? "pro" : "starter"}
                 availablePlans={availablePlans}
                 submitAction={showProOnly ? "/api/billing/upgrade" : undefined}
-                submitLabel={showProOnly ? "Upgrade to Pro, $69/month" : undefined}
+                submitLabel={showProOnly ? `Upgrade to Pro, ${formatMonthlyPlanPrice("pro")}` : undefined}
                 disabled={isPreview}
               />
             </>

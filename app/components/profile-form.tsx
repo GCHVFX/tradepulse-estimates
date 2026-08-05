@@ -6,6 +6,7 @@ import Image from "next/image";
 import QRCode from "qrcode";
 import { formatPhoneInput } from "@/lib/format-phone";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { formatMonthlyPlanPrice } from "@/lib/plan-pricing";
 
 interface Profile {
   name: string;
@@ -754,7 +755,7 @@ export function ProfileForm({
               )}
             </div>
             <p className="text-xs text-zinc-400">TradePulse Estimates</p>
-            <p className="text-xs text-zinc-400">$39/month after your trial ends</p>
+            <p className="text-xs text-zinc-400">{formatMonthlyPlanPrice("starter")} after your trial ends</p>
             {trialEndFormatted && (
               <p className="text-xs text-zinc-400 mt-0.5">Your trial ends on {trialEndFormatted}.</p>
             )}
@@ -770,7 +771,7 @@ export function ProfileForm({
                 onClick={handleUpgrade}
                 className="mt-2 w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-bold text-sm rounded-xl py-3 transition-colors min-h-[44px] flex items-center justify-center gap-2"
               >
-                {upgrading ? "Upgrading..." : "Upgrade to Pro, $69/month"}
+                {upgrading ? "Upgrading..." : `Upgrade to Pro, ${formatMonthlyPlanPrice("pro")}`}
               </button>
             )}
             {upgraded && (
@@ -800,7 +801,7 @@ export function ProfileForm({
                     Upgrading...
                   </>
                 ) : (
-                  "Upgrade to Pro, $69/month"
+                  `Upgrade to Pro, ${formatMonthlyPlanPrice("pro")}`
                 )}
               </button>
             )}

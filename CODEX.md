@@ -11,7 +11,7 @@ Use this file before making implementation changes. Also read `docs/SCALING-NOTE
 - Next.js App Router, TypeScript, Tailwind CSS, shadcn/ui
 - Supabase database and auth
 - Anthropic API, `claude-haiku-4-5-20251001` for estimate generation
-- Stripe subscriptions, CA$39/month Starter, CA$69/month Pro, 14-day free trial
+- Stripe subscriptions, CA$29/month Starter, CA$59/month Pro, 14-day free trial
 - Twilio SMS
 - Resend email
 - Vercel hosting
@@ -295,8 +295,8 @@ Import only from `@/lib/stripe`. Never instantiate `new Stripe()` directly in ro
 import { stripe } from "@/lib/stripe";
 ```
 
-- CA$39/month Starter plan
-- CA$69/month Pro plan
+- CA$29/month Starter plan
+- CA$59/month Pro plan
 - 14-day free trial, no card required upfront
 - `trial_ends_at` and `subscription_status`, default `trial`, tracked in DB
 - `plan` defaults to `starter` at signup and is set explicitly in `auth/signup/route.ts`

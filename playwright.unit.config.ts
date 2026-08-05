@@ -12,6 +12,7 @@ export default defineConfig({
     "estimate-grouped-pricing.spec.ts",
     "estimate-item-migration.spec.ts",
     "estimate-items-conversion.spec.ts",
+    "plan-pricing.spec.ts",
     "stripe-webhook.spec.ts",
   ],
   fullyParallel: false,

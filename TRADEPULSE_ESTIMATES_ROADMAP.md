@@ -20,7 +20,8 @@ Where this roadmap and `TRADEPULSE_ESTIMATES_BASELINE.md` disagree, the baseline
 
 **Status:** Draft for product planning  
 **Date:** 2026-07-30  
-**Primary pricing decision:** Keep Starter at **$39 CAD/month**  
+**Primary pricing decision:** Starter is **$29 CAD/month**
+
 **Primary product goal:** Make TradePulse the fastest way for a contractor to create, send, approve, and convert a professional estimate without rebuilding the job in another system.
 
 ---
@@ -29,9 +30,9 @@ Where this roadmap and `TRADEPULSE_ESTIMATES_BASELINE.md` disagree, the baseline
 
 TradePulse should keep the existing pricing structure:
 
-- **Starter: $39 CAD/month**
+- **Starter: $29 CAD/month**
   - TradePulse Estimates
-- **Pro: $69 CAD/month**
+- **Pro: $59 CAD/month**
   - Estimates
   - Reviews (built)
   - Payments (built)
@@ -831,7 +832,7 @@ Do not build a complex dashboard. Record the events needed to judge product valu
 
 ### Pricing validation
 
-The $39 price is supported when users consistently:
+The $29 price is supported when users consistently:
 
 - Send a real estimate during their first session
 - Save at least 20 minutes per estimate
@@ -845,8 +846,8 @@ The $39 price is supported when users consistently:
 
 ### Standard pricing
 
-- Starter: $39 CAD/month
-- Pro: $69 CAD/month
+- Starter: $29 CAD/month
+- Pro: $59 CAD/month
 
 ### Optional founding offer
 
@@ -855,7 +856,7 @@ Example:
 - $24 CAD/month locked for the first 25 to 50 paying users
 - Available only during the early validation period
 - Clearly labelled as founding pricing
-- Standard price shown as $39 CAD/month
+- Standard price shown as $29 CAD/month
 
 ### Do not
 

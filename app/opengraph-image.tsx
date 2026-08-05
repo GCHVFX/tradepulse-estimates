@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { STARTER_MONTHLY_PRICE_CAD } from "@/lib/plan-pricing";
 
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
@@ -29,7 +30,7 @@ export default function Image() {
             Professional quotes in seconds.
           </div>
           <div style={{ color: "#f59e0b", fontSize: 24 }}>
-            Built for Canadian contractors. $39/month.
+            {`Built for Canadian contractors. $${STARTER_MONTHLY_PRICE_CAD}/month.`}
           </div>
         </div>
 

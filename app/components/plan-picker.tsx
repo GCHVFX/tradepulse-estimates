@@ -1,20 +1,26 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import {
+  PLAN_MONTHLY_PRICES_CAD,
+  checkoutPathForPlan,
+  formatMonthlyPlanPrice,
+  type BillingPlan,
+} from "@/lib/plan-pricing";
 
-type PlanId = "starter" | "pro";
+type PlanId = BillingPlan;
 
 const plans = [
   {
     id: "starter" as const,
     name: "Starter",
-    price: 39,
+    price: PLAN_MONTHLY_PRICES_CAD.starter,
     features: ["Unlimited estimates", "SMS and email sending", "Custom rates and price book", "Your logo on estimates", "PDF download"],
   },
   {
     id: "pro" as const,
     name: "Pro",
-    price: 69,
+    price: PLAN_MONTHLY_PRICES_CAD.pro,
     features: ["Everything in Starter", "AI photo analysis", "Google review requests", "Payment tracking and reminders", "Follow-up (coming soon)"],
   },
 ];
@@ -38,8 +44,8 @@ export function PlanPicker({
     () => plans.filter((plan) => availablePlans.includes(plan.id)),
     [availablePlans]
   );
-  const action = submitAction ?? `/api/billing/checkout?plan=${selected}`;
-  const label = submitLabel ?? `Subscribe, $${selected === "pro" ? "69" : "39"}/month`;
+  const action = submitAction ?? checkoutPathForPlan(selected);
+  const label = submitLabel ?? `Subscribe, ${formatMonthlyPlanPrice(selected)}`;
 
   return (
     <>

@@ -26,7 +26,11 @@ The decision is to leave it, and to treat the first feature that genuinely needs
 
 Explicitly not decided here: which way it goes. **Resolved on 2026-07-30 by the entry above, "Grouped pricing moves line items to structured storage; markdown keeps the prose".** This entry stands as the record of why the question was deferred, not as a live open question.
 
-## Starter pricing stays at $39 CAD/month and is not lowered to compete on price
+## Starter is $29 CAD/month and Pro is $59 CAD/month
+
+Recorded 2026-08-05. TradePulse Starter is CA$29/month and Pro is CA$59/month. This supersedes the 2026-07-30 pricing decision below. The plans retain their existing entitlements; the change is pricing only.
+
+## Superseded: Starter pricing stays at $39 CAD/month and is not lowered to compete on price
 
 Recorded 2026-07-30 when `TRADEPULSE_ESTIMATES_ROADMAP.md` was filed into the repository. Low-cost estimating apps (SimplyWise and similar) sit well under $39, and matching them permanently would set the product's perceived value at the level of a utility rather than a workflow tool. TradePulse competes on estimate speed, contractor-quality scope writing, customer presentation, and the workflow after sending, none of which get cheaper to run by discounting. A temporary founding-user offer for early acquisition is acceptable, but only when it is clearly labelled as founding pricing with $39 shown as the standard price. Pro stays at $69 CAD/month. Rejected specifically: a permanent Starter price in the $10 to $20 range, extra estimate tiers, per-user pricing before team features exist, and charging separately for core estimate features.
 

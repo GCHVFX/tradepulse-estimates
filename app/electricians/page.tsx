@@ -4,6 +4,7 @@ import Image from "next/image";
 import { EstimateDemo } from "@/app/components/EstimateDemo";
 import { EstimateDemoElectrical } from "@/app/components/EstimateDemoElectrical";
 import { JsonLd } from "@/app/components/json-ld";
+import { STARTER_MONTHLY_PRICE_CAD } from "@/lib/plan-pricing";
 
 export const metadata: Metadata = {
   title: "Estimating Software for Electricians | TradePulse",
@@ -39,7 +40,7 @@ export default function ElectriciansPage() {
         "operatingSystem": "Web, iOS, Android",
         "offers": {
           "@type": "Offer",
-          "price": "39.00",
+          "price": STARTER_MONTHLY_PRICE_CAD.toFixed(2),
           "priceCurrency": "CAD",
           "priceValidUntil": "2027-01-01"
         }

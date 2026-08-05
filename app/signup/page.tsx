@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Logo } from "@/app/components/logo";
 import { GoogleAuth } from "@/app/components/google-auth";
+import { formatMonthlyPlanPrice } from "@/lib/plan-pricing";
 
 const inputClass =
   "w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3.5 text-white placeholder-zinc-600 text-base focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]";
@@ -90,7 +91,7 @@ export default function SignupPage() {
         <div>
           <h1 className="text-2xl font-bold text-white">Create account</h1>
           <p className="text-zinc-500 text-sm mt-1">
-            {plan === "pro" ? "Pro is $69/month, billed right away." : "14-day free trial. No card required."}
+            {plan === "pro" ? `Pro is ${formatMonthlyPlanPrice("pro")}, billed right away.` : "14-day free trial. No card required."}
           </p>
         </div>
 

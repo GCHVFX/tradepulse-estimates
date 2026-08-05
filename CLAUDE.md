@@ -10,7 +10,7 @@ TradePulse Estimates turns a short job description into a professional estimate 
 - Supabase (database + auth)
 - Twilio (SMS), Resend (email)
 - Anthropic API, `claude-haiku-4-5-20251001` for estimate generation
-- Stripe (subscriptions, CA$39/month Starter, CA$69/month Pro, 14-day free trial)
+- Stripe (subscriptions, CA$29/month Starter, CA$59/month Pro, 14-day free trial)
 - Vercel (hosting), Sentry (errors), PostHog (analytics)
 - Google Places API (review link lookup in profile)
 
@@ -279,7 +279,7 @@ Import only from `@/lib/stripe`. Never instantiate `new Stripe()` directly in ro
 import { stripe } from "@/lib/stripe";
 ```
 
-- CA$39/month Starter plan, CA$69/month Pro plan, 14-day free trial, no card required upfront
+- CA$29/month Starter plan, CA$59/month Pro plan, 14-day free trial, no card required upfront
 - `trial_ends_at` + `subscription_status` (default: `'trial'`) tracked in DB
 - `plan` defaults to `'starter'` at signup, set explicitly in `auth/signup/route.ts`
 - Webhooks sync subscription status — `amount_paid > 0` guard in `invoice.payment_succeeded`

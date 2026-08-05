@@ -3,10 +3,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient, supabaseAdmin } from "@/lib/supabase-server";
 import { EstimateDemo } from "@/app/components/EstimateDemo";
+import { PRO_MONTHLY_PRICE_CAD, STARTER_MONTHLY_PRICE_CAD } from "@/lib/plan-pricing";
 
 export const metadata: Metadata = {
   title: "Estimate Software for Contractors & Trades | TradePulse",
-  description: "Generate professional estimates in seconds. Send quotes from the job site via text or email. Built for Canadian plumbers, electricians, and trades. $39/month.",
+  description: `Generate professional estimates in seconds. Send quotes from the job site via text or email. Built for Canadian plumbers, electricians, and trades. $${STARTER_MONTHLY_PRICE_CAD}/month.`,
   alternates: { canonical: "https://trytradepulse.com" },
   openGraph: {
     title: "Professional Estimates in Seconds | TradePulse",
@@ -291,7 +292,7 @@ export default async function LandingPage() {
         {/* Trust strip */}
         <div className="border-y border-slate-100 bg-slate-50 py-5">
           <div className="mx-auto max-w-4xl px-6 flex flex-wrap items-center justify-center gap-8">
-            {["$39/month flat", "14-day free trial", "No card required", "Cancel anytime"].map(item => (
+            {[`$${STARTER_MONTHLY_PRICE_CAD}/month flat`, "14-day free trial", "No card required", "Cancel anytime"].map(item => (
               <div key={item} className="flex items-center gap-2 text-sm text-slate-500">
                 <svg className="w-4 h-4 text-emerald-500 shrink-0" viewBox="0 0 16 16" fill="none">
                   <path d="M3 8l3.5 3.5 6.5-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -379,7 +380,7 @@ export default async function LandingPage() {
               <div className="rounded-2xl border-2 p-8 relative" style={{ borderColor: "#E2E8F0" }}>
                 <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: "#94A3B8" }}>Starter</p>
                 <div className="flex items-end gap-2 mb-2">
-                  <span className="text-4xl font-bold text-slate-900">$39</span>
+                  <span className="text-4xl font-bold text-slate-900">${STARTER_MONTHLY_PRICE_CAD}</span>
                   <span className="text-slate-500 mb-1">/month CAD</span>
                 </div>
                 <p className="text-sm text-slate-400 mb-6">Estimates only. No card required for a 14-day trial.</p>
@@ -419,7 +420,7 @@ export default async function LandingPage() {
                 </div>
                 <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: "#0D1B2E" }}>Pro</p>
                 <div className="flex items-end gap-2 mb-2">
-                  <span className="text-4xl font-bold text-slate-900">$69</span>
+                  <span className="text-4xl font-bold text-slate-900">${PRO_MONTHLY_PRICE_CAD}</span>
                   <span className="text-slate-500 mb-1">/month CAD</span>
                 </div>
                 <p className="text-sm text-slate-400 mb-6">Everything in Starter, plus:</p>
