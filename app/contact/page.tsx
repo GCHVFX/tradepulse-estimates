@@ -196,9 +196,9 @@ export default function ContactPage() {
         <div className="mx-auto flex max-w-5xl flex-col items-center justify-between gap-4 px-5 py-8 text-sm text-slate-500 sm:flex-row sm:px-8">
           <p>TradePulse · British Columbia, Canada</p>
           <nav className="flex flex-wrap items-center justify-center gap-5">
-            <Link href="/" className="inline-flex min-h-11 items-center transition-colors hover:text-slate-900">Home</Link>
-            <Link href="/terms" className="inline-flex min-h-11 items-center transition-colors hover:text-slate-900">Terms</Link>
-            <Link href="/privacy" className="inline-flex min-h-11 items-center transition-colors hover:text-slate-900">Privacy</Link>
+            <Link href="/" className="inline-flex min-h-11 min-w-11 items-center justify-center transition-colors hover:text-slate-900">Home</Link>
+            <Link href="/terms" className="inline-flex min-h-11 min-w-11 items-center justify-center transition-colors hover:text-slate-900">Terms</Link>
+            <Link href="/privacy" className="inline-flex min-h-11 min-w-11 items-center justify-center transition-colors hover:text-slate-900">Privacy</Link>
           </nav>
         </div>
       </footer>
