@@ -2,7 +2,49 @@
 
 Updated: 2026-08-05
 
-**Branch:** `main` at `4915dff` (`Document dedicated TradePulse Stripe deployment`) before the pricing commit. Every pre-existing dirty file remains preserved and excluded from task commits: `.claude/settings.local.json`, `.gitignore`, `.ai-control-centre/`, and four `.bak-*` files.
+**Branch:** `main` at `fadebfb` (`Update Starter and Pro pricing`) before the local acceptance-documentation commit. Every pre-existing dirty file remains preserved and excluded from task commits: `.claude/settings.local.json`, `.gitignore`, `.ai-control-centre/`, and four `.bak-*` files.
+
+## Latest session (2026-08-05): dedicated Stripe cutover acceptance and cleanup
+
+### Outcome
+
+- The dedicated TradePulse Stripe cutover is accepted within the no-payment, no-communication limits. The canonical live account is TradePulse (`acct_...qa8x`, redacted), and the sole enabled live webhook destination remains `https://www.trytradepulse.com/api/billing/webhook` with the exact six supported events.
+- Stripe Workbench manually resent exactly one harmless existing `customer.subscription.deleted` event (`evt_...qFk5`, redacted) to that destination. Stripe marked the delivery `Delivered` and `Recovered` at 2026-08-05 20:02:02 PDT, identified it as manually resent, and recorded HTTP 200 with `{ "received": true }`.
+- Vercel recorded exactly one `/api/billing/webhook` request in the 15-minute verification window and no runtime error for that route. Before and after the delivery, dedicated-account counts were unchanged at 50 customers, 3 Checkout Sessions, 100 subscriptions, 100 invoices, 0 PaymentIntents, and 0 charges. The Supabase business count and both billing fingerprints were also unchanged. This is direct evidence that the signed deletion fixture was a hosted no-op.
+- No deployment, push, Checkout creation, payment, card entry, email, SMS, or customer communication occurred.
+
+### Portal acceptance
+
+- The active default live TradePulse Portal configuration (`bpc_...I0g5`, redacted) returns to `https://www.trytradepulse.com/profile`. Its business legal URLs are `https://www.trytradepulse.com/privacy` and `https://www.trytradepulse.com/terms`; both returned HTTP 200.
+- Payment-method updates, invoice history, and subscription cancellation at period end are enabled. Cancellation proration is disabled. Customer updates, subscription plan changes, quantity changes, promotion codes, pause, cancellation-reason collection, retention discounts, and the Portal login page are disabled.
+- One direct hosted Portal session (`bps_...SiTa`, redacted) was opened for the then-existing synthetic customer. It showed TradePulse branding, an exact `Return to TradePulse` link to `/profile`, and only Payment Method and Invoice History sections. The empty synthetic customer had no payment method or invoice history, so those actions could not be exercised without adding prohibited billing data.
+- The application Portal route was not exercised. That route requires a stored Stripe customer and subscription; the synthetic business was complimentary with no subscription, and its fallback would preserve POST into Checkout and create a prohibited additional Checkout Session.
+
+### Isolation verification
+
+- In the old `Greg Hansen Studio` account (`acct_...KtuY`, redacted), an exact search for the dedicated synthetic customer id returned `No results`.
+- `Parlay Mechanical Website Plan` remains active at CA$199/month. Its existing Payment Link remains active at CA$199/month, and the product price still reports 0 active subscriptions. No old-account or Parlay object was changed.
+
+### Synthetic cleanup
+
+- Preflight tied the shared synthetic customer (`cus_...o8U`, redacted) to `Structured Pricing Test (synthetic, do not send)`, the expected synthetic email, and the expected user metadata. It had exactly the two authorised open unpaid subscription-mode Checkout Sessions, at CA$29 Starter and CA$59 Pro, with the expected configured prices and no subscription, invoice, PaymentIntent, SetupIntent, charge, payment method, default source, or other source.
+- Both authorised Checkout Sessions (`cs_live_...Tec5` and `cs_live_...jnqfc`, redacted) were expired. Read-back confirmed both remained unpaid and had no subscription, invoice, PaymentIntent, or SetupIntent.
+- A second dependency check found every dependency count still zero, then the shared synthetic customer was deleted and read back as deleted. Dedicated-account customer count changed only from 50 to 49; Checkout Sessions remain as three historical expired records, while subscriptions, invoices, PaymentIntents, and charges were unchanged.
+- Supabase cleared `stripe_customer_id` on exactly one conditionally matched `tpe_businesses` row. The same synthetic row remains complimentary Starter with no Stripe customer reference, no subscription reference, and no trial end. Business count remains 29. The billing fingerprint excluding that row remained `40def6aea4abca3bf7e5669f12559f55`, proving unrelated billing references did not change.
+
+### Vercel cleanup and deployment state
+
+- Removed only the five temporary Production variables: `NEW_STRIPE_SECRET_KEY`, `NEW_STRIPE_WEBHOOK_SECRET`, `NEW_STRIPE_PRICE_ID`, `NEW_STRIPE_PRO_PRICE_ID`, and `NEW_NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`.
+- A name-only API assertion passed: the four canonical Production variables remain present and all five temporary names are absent. No value was printed or copied.
+- Production deployment `dpl_...oaRY7` remains READY, Git-sourced from `main` commit `fadebfb`, and still owns `www.trytradepulse.com`, `trytradepulse.com`, and the project aliases. No deployment or rollback was triggered.
+
+### Remaining limits and exact next action
+
+- This acceptance deliberately did not use a real card or create a paid subscription. It did not send every configured event type live. Portal payment-method and invoice-history actions remain unexercised because the synthetic customer was empty, and the application Portal route remains unexercised for the reason above.
+- Within those explicit limits, the Stripe account, hosted webhook boundary, Portal configuration, isolation, synthetic cleanup, and temporary-variable cleanup are complete. Do not recreate the synthetic Stripe customer or Checkout Sessions and do not repeat the cutover.
+- Exact next action: proceed with the next planned customer approval/contact integration slice on `main`, keeping all communication disabled until that slice explicitly authorises and verifies it.
+
+---
 
 ## Latest session (2026-08-05): Starter and Pro pricing update
 
