@@ -11,10 +11,11 @@ Updated: 2026-08-05
 - The protected route rechecks business ownership, cancels only a matching stored Stripe subscription, removes owned photo objects, then invokes `tpe_delete_business_account_data`. The live service-role-only RPC deletes payment reminders, estimate changes, structured items, line items, photo metadata, estimates, price-book items, the user-keyed rate limit, and the owned business under a row lock. Auth deletion and local session clearing are last. Missing Stripe objects and a missing business after partial completion are retry-safe.
 - Added focused account-deletion and bottom-navigation tests. Final local checks passed: 123 safe unit tests, TypeScript, targeted ESLint, `next build`, `git diff --check`, unauthenticated delete returned HTTP 401, and signed-in synthetic UI checks passed at 390 by 844 and 1440 by 900 with no new console errors or horizontal overflow. The only build notices are the pre-existing `metadataBase` warnings.
 - A confirmed, clearly labelled synthetic local account with only synthetic business, estimate, dependency, and Storage-photo data is signed in and ready for the final deletion action. It has no Stripe customer, subscription, payment, card, email, or SMS. No real account was touched.
+- The one permitted Git push created deployment `dpl_4okVsBWJbCgVVqHatZGvxZsFF3wF`, but it failed before Production changed because `StorageApiError.statusCode` is a string and the route compared it to numeric `404`. The one-line correction is local, type-checked, linted, and build-verified. It needs an explicitly authorised corrective push because that would create a second Git deployment.
 
 ### Exact next action
 
-Commit the intended source, migration, tests, types, and this handoff; push `main` once; wait for one Git-triggered Production deployment to reach READY. Then repeat the signed-in synthetic verification on Production and complete its authorised final delete action, read back all synthetic data removal, and record the hosted result in a local handoff-only commit without a second push.
+If authorised, commit and push the one-line deployment correction, then wait for the resulting Git deployment to reach READY. Repeat the signed-in synthetic verification on Production and complete its authorised final delete action, read back all synthetic data removal, and record the hosted result in a local handoff-only commit without another push.
 
 ## Latest session (2026-08-05): contact/support integration and Production deployment
 

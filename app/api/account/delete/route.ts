@@ -105,7 +105,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
           for (const [bucket, paths] of byBucket) {
             const { error } = await supabaseAdmin.storage.from(bucket).remove(paths);
-            if (error && error.statusCode !== "404" && error.statusCode !== 404) throw error;
+            if (error && error.statusCode !== "404") throw error;
           }
         },
         async cancelSubscription(business): Promise<void> {
