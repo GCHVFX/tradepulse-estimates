@@ -2,6 +2,14 @@
 
 Durable product/architecture decisions worth remembering the reasoning behind, not just the outcome. Most recent first. Entries below were recorded together during an AI Control Centre backfill on 2026-07-23, covering decisions made across the session they document.
 
+## Bottom nav: New is emphasized by colour only, never by a floating circle
+
+Recorded 2026-08-05. The bottom navigation went through three designs in one session before landing on the approved one. First, a 66px flush amber circle (same height slot as the other three icons, no overlap) — functionally fine but the client wanted New visually distinct without a filled circle dominating the row. Second, a 62px circle overlapping 12px above the bar (a conventional FAB treatment) — rejected on sight from a real device screenshot as still reading as a floating action button that "does not feel like part of the navigation," regardless of exact diameter or overlap tuning. The client explicitly asked to stop adjusting size/overlap and change direction rather than keep iterating the circle.
+
+**Approved final design:** a conventional flat four-column bar (`grid-cols-4`). All four items — Rates, Estimates, New, Profile — share one column structure: `py-2`, a 42px icon slot, `gap-1`, label, so icons and labels land on the same baseline across all four with no item taller, wider, or offset from the row. New is differentiated only by colour: an orange Plus icon, an orange label, and a subtle 42px rounded-square amber-tinted background behind its icon — no circle, no overlap, no filled-solid treatment. This is the shipped and approved version in `app/components/bottom-nav.tsx`.
+
+**Why this generalizes:** any future "emphasized primary action in a shared nav row" on this project should default to colour/background-tint differentiation within the existing row geometry, not size or position — a floating/overlapping treatment has now been explicitly rejected twice for TradePulse's bottom nav specifically.
+
 ## Grouped pricing moves line items to structured storage; markdown keeps the prose
 
 Recorded 2026-07-30. Full analysis in `TRADEPULSE_GROUPED_PRICING_ARCHITECTURE.md`. This resolves the question deferred by the entry below.

@@ -1,6 +1,6 @@
 # TradePulse handoff
 
-Updated: 2026-08-05
+Updated: 2026-08-05 (bottom navigation redesign)
 
 ## Current state
 
@@ -31,8 +31,8 @@ Updated: 2026-08-05
 
 ### Bottom navigation and account deletion
 
-- The bottom navigation has one primary `New` estimate action. The duplicate Estimates-page header action was removed.
-- The visual New control is 66px, its connected target is 80px and screen-centred, labels align with it, and the bar applies safe-area padding. At 390 by 844, all visible navigation targets are at least 44px; at 1440 by 900, the centred action remains correctly positioned.
+- The bottom navigation has one primary `New` estimate action. The duplicate Estimates-page header action was removed and remains removed.
+- **Approved final design (2026-08-05), superseding all earlier descriptions of this section:** `app/components/bottom-nav.tsx` is a conventional flat four-column bar (`grid-cols-4`, one shared `itemClass()` helper). Rates, Estimates, New, and Profile all use the identical column structure — `py-2`, a 42px icon slot, `gap-1`, label — so icons and labels land on the same baseline across all four. New is emphasized only by colour: an orange (`#f59e0b`) Plus icon and orange label, plus a subtle 42px rounded-square background (`rgba(245,158,11,0.15)`) behind its icon. There is no circle, no floating/overlapping element, and New is not taller or wider than the other three items. Two earlier designs were tried and rejected in this same session: a 66px flush circle (no overlap, but the client wanted New visually distinct without a filled circle) and a 62px circle overlapping 12px above the bar (rejected as still reading as a dominant floating action button). Verified at 375×812 and 412×915: all four columns equal width, icon slots and labels pixel-identical across all four, no overlap above the bar, no horizontal overflow, 44px+ tap targets throughout.
 - Profile contains a destructive Delete account section. It requires an exact `DELETE` confirmation and a sign-in no older than 15 minutes.
 - The server-only route authenticates the caller, rechecks business ownership, rejects cross-origin requests, and cancels Stripe only when its stored customer and subscription match. It then removes owned Storage objects, calls the service-role-only transactional RPC for dependent database records, deletes the Auth user last, and clears the local session.
 - The RPC locks the owned business and estimates, then deletes payment reminders, estimate changes, structured items, legacy line items, photo metadata, estimates, price-book items, the user-keyed rate limit, and the business. Missing Stripe objects and a retry after database completion are handled safely; failures before Auth deletion leave the user signed in.
