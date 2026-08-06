@@ -54,26 +54,15 @@ export default async function EstimatesPage() {
 
   return (
     <div className="min-h-dvh bg-zinc-950 text-white flex flex-col">
-      <header className="px-5 pt-10 pb-6 shrink-0">
+      <header className="shrink-0 px-5 pb-4 pt-10">
         <Logo />
-        <div className="flex items-center justify-between mt-5">
-          <h1 className="text-2xl font-bold">Estimates</h1>
-          <Link
-            href="/new"
-            className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950 font-semibold text-sm rounded-xl px-4 py-2.5 transition-colors min-h-[44px]"
-          >
-            <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4" aria-hidden="true">
-              <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-            New Estimate
-          </Link>
-        </div>
+        <h1 className="mt-5 text-2xl font-bold">Estimates</h1>
       </header>
 
       <main className="flex-1 px-5 pb-28">
         <Link
           href="/payments"
-          className="relative inline-flex items-center gap-1.5 mb-4 rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:border-zinc-700 hover:text-white transition-colors min-h-[32px]"
+          className="relative mb-5 inline-flex min-h-11 items-center gap-1.5 rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:border-zinc-700 hover:text-white"
         >
           <DollarSign className="w-3.5 h-3.5" strokeWidth={2} aria-hidden="true" />
           Unpaid Invoices{isPro && unpaidCount > 0 ? ` · ${unpaidCount}` : ""}

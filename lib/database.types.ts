@@ -574,6 +574,10 @@ export type Database = {
         }
         Returns: Json
       }
+      tpe_delete_business_account_data: {
+        Args: { p_business_id: string; p_owner_user_id: string }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never

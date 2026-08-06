@@ -14,6 +14,8 @@ export default defineConfig({
     "estimate-items-conversion.spec.ts",
     "plan-pricing.spec.ts",
     "stripe-webhook.spec.ts",
+    "account-deletion.spec.ts",
+    "bottom-nav.spec.ts",
   ],
   fullyParallel: false,
   workers: 1,

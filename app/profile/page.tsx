@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { supabaseAdmin, createSupabaseServerClient } from "@/lib/supabase-server";
 import { Logo } from "@/app/components/logo";
 import { BottomNav } from "@/app/components/bottom-nav";
+import { DeleteAccountSection } from "@/app/components/delete-account-section";
 import { ProfileForm } from "@/app/components/profile-form";
 
 export default async function ProfilePage({
@@ -70,6 +71,7 @@ export default async function ProfilePage({
           openSection={section ?? undefined}
           businessId={data?.id ?? null}
         />
+        <DeleteAccountSection />
       </main>
 
       <div className="fixed bottom-0 left-0 right-0">

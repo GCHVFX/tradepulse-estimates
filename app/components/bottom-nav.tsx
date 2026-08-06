@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Tag, Plus, FileText, User } from "lucide-react";
 
+export const NEW_ESTIMATE_PATH = "/new";
+
 interface BottomNavProps {
   onNewClick?: () => void;
 }
@@ -16,55 +18,69 @@ export function BottomNav({ onNewClick }: BottomNavProps = {}) {
     if (onNewClick) {
       onNewClick();
     } else {
-      router.push('/new');
+      router.push(NEW_ESTIMATE_PATH);
     }
   };
 
   return (
-    <nav className="bg-zinc-950 border-t border-zinc-800 flex">
-      <Link
-        href="/rates"
-        className={`flex-1 flex flex-col items-center gap-1 pt-2.5 pb-7 min-h-[56px] transition-colors ${
-          pathname === "/rates" ? "text-amber-500" : "text-zinc-300 hover:text-white"
-        }`}
-      >
-        <Tag className="w-6 h-6" aria-hidden="true" />
-        <span className="text-xs font-medium">Rates</span>
-      </Link>
+    <nav
+      aria-label="Primary navigation"
+      className="flex border-t border-zinc-800 bg-zinc-950 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+    >
+      <div className="mx-auto flex w-full max-w-md">
+        <div className="flex w-[calc(50%-2.5rem)]">
+        <Link
+          href="/rates"
+          className={`flex min-h-11 flex-1 flex-col items-center gap-1 pt-1 transition-colors ${
+            pathname === "/rates" ? "text-amber-500" : "text-zinc-300 hover:text-white"
+          }`}
+        >
+          <span className="flex h-[66px] items-center justify-center">
+            <Tag className="h-6 w-6" aria-hidden="true" />
+          </span>
+          <span className="text-xs font-medium">Rates</span>
+        </Link>
 
-      <Link
-        href="/estimates"
-        className={`flex-1 flex flex-col items-center gap-1 pt-2.5 pb-7 min-h-[56px] transition-colors ${
-          pathname === "/estimates" ? "text-amber-500" : "text-zinc-300 hover:text-white"
-        }`}
-      >
-        <FileText className="w-6 h-6" aria-hidden="true" />
-        <span className="text-xs font-medium">Estimates</span>
-      </Link>
+        <Link
+          href="/estimates"
+          className={`flex min-h-11 flex-1 flex-col items-center gap-1 pt-1 transition-colors ${
+            pathname === "/estimates" ? "text-amber-500" : "text-zinc-300 hover:text-white"
+          }`}
+        >
+          <span className="flex h-[66px] items-center justify-center">
+            <FileText className="h-6 w-6" aria-hidden="true" />
+          </span>
+          <span className="text-xs font-medium">Estimates</span>
+        </Link>
+        </div>
 
       <button
         type="button"
         onClick={handleNew}
-        className="flex-1 flex flex-col items-center justify-end gap-1 pb-7"
+        aria-label="New estimate"
+        className="flex min-h-11 w-20 shrink-0 flex-col items-center gap-1 pt-1"
       >
         <span
-          className="flex items-center justify-center w-16 h-16 rounded-full -mt-5"
+          className="flex h-[66px] w-[66px] items-center justify-center rounded-full"
           style={{ backgroundColor: "#f59e0b" }}
         >
           <Plus className="w-8 h-8" style={{ color: "#0D1B2E" }} aria-hidden="true" />
         </span>
-        <span className="text-[11px] font-medium" style={{ color: "#f59e0b" }}>New</span>
+        <span className="text-xs font-medium" style={{ color: "#f59e0b" }}>New</span>
       </button>
 
-      <Link
-        href="/profile"
-        className={`flex-1 flex flex-col items-center gap-1 pt-2.5 pb-7 min-h-[56px] transition-colors ${
-          pathname === "/profile" ? "text-amber-500" : "text-zinc-300 hover:text-white"
-        }`}
-      >
-        <User className="w-6 h-6" aria-hidden="true" />
-        <span className="text-xs font-medium">Profile</span>
-      </Link>
+        <Link
+          href="/profile"
+          className={`flex min-h-11 w-[calc(50%-2.5rem)] flex-col items-center gap-1 pt-1 transition-colors ${
+            pathname === "/profile" ? "text-amber-500" : "text-zinc-300 hover:text-white"
+          }`}
+        >
+          <span className="flex h-[66px] items-center justify-center">
+            <User className="h-6 w-6" aria-hidden="true" />
+          </span>
+          <span className="text-xs font-medium">Profile</span>
+        </Link>
+      </div>
     </nav>
   );
 }

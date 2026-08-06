@@ -2,7 +2,19 @@
 
 Updated: 2026-08-05
 
-**Branch:** `main` at `fadebfb` (`Update Starter and Pro pricing`) before the local acceptance-documentation commit. Every pre-existing dirty file remains preserved and excluded from task commits: `.claude/settings.local.json`, `.gitignore`, `.ai-control-centre/`, and four `.bak-*` files.
+**Branch:** `main` at `1fd3274` (`Record contact page deployment`) before the account UX release commit. Every pre-existing dirty file remains preserved and excluded from task commits: `.claude/settings.local.json`, `.gitignore`, `.ai-control-centre/`, and four `.bak-*` files.
+
+## Current release candidate (2026-08-05): account navigation and self-service deletion
+
+- The centred mobile `New` control is now a 66px connected action with aligned labels, safe-area padding, an 80px screen-centred target, and no duplicate header create control on Estimates. Rates, Estimates, New, and Profile all have at least 44px targets at 390 by 844. Desktop constrains the bottom control group while retaining the same centred New action.
+- Profile now includes a guarded Delete account section. It requires exact `DELETE`, a sign-in no older than 15 minutes, blocks repeat submission, rejects cross-origin requests, and shows errors without an early sign-out.
+- The protected route rechecks business ownership, cancels only a matching stored Stripe subscription, removes owned photo objects, then invokes `tpe_delete_business_account_data`. The live service-role-only RPC deletes payment reminders, estimate changes, structured items, line items, photo metadata, estimates, price-book items, the user-keyed rate limit, and the owned business under a row lock. Auth deletion and local session clearing are last. Missing Stripe objects and a missing business after partial completion are retry-safe.
+- Added focused account-deletion and bottom-navigation tests. Final local checks passed: 123 safe unit tests, TypeScript, targeted ESLint, `next build`, `git diff --check`, unauthenticated delete returned HTTP 401, and signed-in synthetic UI checks passed at 390 by 844 and 1440 by 900 with no new console errors or horizontal overflow. The only build notices are the pre-existing `metadataBase` warnings.
+- A confirmed, clearly labelled synthetic local account with only synthetic business, estimate, dependency, and Storage-photo data is signed in and ready for the final deletion action. It has no Stripe customer, subscription, payment, card, email, or SMS. No real account was touched.
+
+### Exact next action
+
+Commit the intended source, migration, tests, types, and this handoff; push `main` once; wait for one Git-triggered Production deployment to reach READY. Then repeat the signed-in synthetic verification on Production and complete its authorised final delete action, read back all synthetic data removal, and record the hosted result in a local handoff-only commit without a second push.
 
 ## Latest session (2026-08-05): contact/support integration and Production deployment
 
