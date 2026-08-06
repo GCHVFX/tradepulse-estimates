@@ -4,6 +4,29 @@ Updated: 2026-08-05
 
 **Branch:** `main` at `fadebfb` (`Update Starter and Pro pricing`) before the local acceptance-documentation commit. Every pre-existing dirty file remains preserved and excluded from task commits: `.claude/settings.local.json`, `.gitignore`, `.ai-control-centre/`, and four `.bak-*` files.
 
+## Latest session (2026-08-05): contact/support integration and Production deployment
+
+### Outcome
+
+- Integrated the completed public contact/support slice by cherry-picking `e4bdcb2347dd63e465952cf5daeaa05a4f655631` as `7c5a0ec` (`Add public contact support page`). It adds the public `/contact` route, practical account, estimate, billing/refund, and privacy support guidance, homepage Support link, sitemap entry, and `/contact` proxy allowlist entry.
+- The only cherry-pick conflict was `HANDOFF.md`. The incoming summary was stale relative to the verified CA$29/CA$59 pricing and completed Stripe cutover acceptance, so the current version was kept and this entry records the contact result. No Stripe, Supabase, Vercel-variable, Checkout, Portal, webhook, or customer-data behaviour changed.
+- Mobile verification found that the short footer links had 44px height but not 44px width. `f871d3e` (`Ensure contact footer tap targets`) adds `min-w-11` and centred alignment to the three footer links. At 390 by 844, no visible target is below 44 by 44px and there is no horizontal overflow.
+- `main` was pushed once from `fadebfb` to `f871d3e`. Git created exactly one Production deployment, `dpl_Dr3RTZNHWn6fExHHbVaw5xrZWVSj`, which reached READY from `f871d3e` and owns `www.trytradepulse.com`, `trytradepulse.com`, and the project aliases. No manual deployment or rollback occurred.
+
+### Verification performed
+
+- Complete safe unit suite: 112 passed. `npx.cmd tsc --noEmit`: passed. Targeted ESLint on `app/contact/page.tsx`, `app/page.tsx`, `app/sitemap.ts`, and `proxy.ts`: no errors and only the two known `app/page.tsx` image warnings. `npx.cmd next build`: passed with `/contact` static in the 53-route build and three existing `metadataBase` warnings. `git diff --check`: passed.
+- Signed-out local checks: `/contact`, `/`, `/login`, `/terms`, `/privacy`, and `/sitemap.xml` each returned HTTP 200; sitemap contains `https://trytradepulse.com/contact`; homepage Support navigates to `/contact`; unsigned `POST /api/billing/webhook` reached the route and returned HTTP 400 rather than an authentication block.
+- Local browser checks: `/contact` rendered correctly at 390 by 844 and 1440 by 900 with no horizontal overflow. Browser console had no errors in a fresh signed-out local tab. All visible contact-page links had at least 44 by 44px targets after the footer fix. Homepage continued to render the verified `$29` Starter and `$59` Pro amounts.
+- Hosted checks: `https://www.trytradepulse.com/contact`, homepage, login, Terms, Privacy, and sitemap each returned HTTP 200; hosted sitemap contains the `/contact` entry; hosted homepage Support navigates to `/contact`; hosted homepage continues to render `$29` and `$59`; hosted contact-page browser console had no errors. Vercel found no `/contact` runtime errors in the last hour and no 5xx logs on the new deployment.
+
+### Remaining limits and exact next action
+
+- Communications remain disabled. The completed Stripe cutover was not retested and was not changed. Existing unrelated dirty and untracked files, including `.claude/settings.local.json`, `.gitignore`, `CLAUDE.md`, `CODEX.md`, `.ai-control-centre/`, and the four backup files, remain excluded.
+- This deployment is ready for the requested homepage marketing work. Preserve the CA$29 Starter and CA$59 Pro prices, the accepted Stripe state, and the contact page. This HANDOFF update is a local documentation commit after the one permitted push; do not push it alone, because that would create an additional deployment. Include it only with the next explicitly approved deployable change.
+
+---
+
 ## Latest session (2026-08-05): dedicated Stripe cutover acceptance and cleanup
 
 ### Outcome
