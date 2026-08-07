@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Logo } from "@/app/components/logo";
 import { BottomNav } from "@/app/components/bottom-nav";
 import { supabaseAdmin, createSupabaseServerClient } from "@/lib/supabase-server";
+import { normalizePhoneE164 } from "@/lib/sms-suppression";
 
 function formatDueDate(dueDate: string): string {
   const [year, month, day] = dueDate.slice(0, 10).split("-").map(Number);
@@ -91,13 +92,31 @@ export default async function PaymentsPage() {
 
   const { data: estimates } = await supabaseAdmin
     .from("tpe_estimates")
-    .select("id, title, customer_name, invoice_amount, due_date, last_reminder_sent_at, reminder_count")
+    .select("id, title, customer_name, customer_phone, invoice_amount, due_date, last_reminder_sent_at, reminder_count")
     .eq("business_id", business.id)
     .in("payment_status", ["unpaid", "overdue"])
     .not("invoice_amount", "is", null)
     .order("due_date", { ascending: true });
 
   const invoices = estimates ?? [];
+
+  // One batched lookup for the whole list rather than one query per row.
+  const normalizedPhones = [
+    ...new Set(
+      invoices
+        .map((inv) => (inv.customer_phone ? normalizePhoneE164(inv.customer_phone) : null))
+        .filter((p): p is string => Boolean(p))
+    ),
+  ];
+  const suppressedPhones = new Set<string>();
+  if (normalizedPhones.length > 0) {
+    const { data: suppressions } = await supabaseAdmin
+      .from("tpe_sms_suppressions")
+      .select("phone")
+      .in("phone", normalizedPhones)
+      .eq("sms_opted_out", true);
+    for (const row of suppressions ?? []) suppressedPhones.add(row.phone);
+  }
 
   return (
     <div className="min-h-dvh bg-zinc-950 text-white flex flex-col">
@@ -138,6 +157,8 @@ export default async function PaymentsPage() {
           <div className="flex flex-col gap-3 mt-2">
             {invoices.map((invoice) => {
               const overdue = invoice.due_date ? daysOverdue(invoice.due_date) : 0;
+              const normalizedPhone = invoice.customer_phone ? normalizePhoneE164(invoice.customer_phone) : null;
+              const smsOptedOut = normalizedPhone ? suppressedPhones.has(normalizedPhone) : false;
               return (
                 <Link
                   key={invoice.id}
@@ -152,6 +173,12 @@ export default async function PaymentsPage() {
                       <p className="text-zinc-400 text-xs mt-0.5 truncate">
                         {invoice.customer_name?.trim() || "No customer"}
                       </p>
+                      {smsOptedOut && (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-400 mt-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
+                          SMS opted out
+                        </span>
+                      )}
                     </div>
                     {invoice.invoice_amount !== null && (
                       <p className="text-white font-bold text-base shrink-0">

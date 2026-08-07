@@ -21,6 +21,9 @@ interface SendEstimateSheetProps {
   summary?: string;
   businessName?: string;
   logoUrl?: string | null;
+  /** Opens straight to a panel instead of the menu, e.g. "email" when
+   * triggered from the SMS-opted-out fallback action. Defaults to "menu". */
+  initialPanel?: Panel;
 }
 
 export function SendEstimateSheet({
@@ -35,8 +38,9 @@ export function SendEstimateSheet({
   summary,
   businessName,
   logoUrl,
+  initialPanel = "menu",
 }: SendEstimateSheetProps) {
-  const [panel, setPanel] = useState<Panel>("menu");
+  const [panel, setPanel] = useState<Panel>(initialPanel);
   const [phone, setPhone] = useState(formatPhoneInput(customerPhone ?? ""));
   const [email, setEmail] = useState(customerEmail ?? "");
 
@@ -52,7 +56,9 @@ export function SendEstimateSheet({
   const router = useRouter();
 
   useEffect(() => {
-    if (!isOpen) {
+    if (isOpen) {
+      setPanel(initialPanel);
+    } else {
       const t = setTimeout(() => {
         setPanel("menu");
         setSmsStatus("idle");
@@ -62,7 +68,7 @@ export function SendEstimateSheet({
       }, 300);
       return () => clearTimeout(t);
     }
-  }, [isOpen]);
+  }, [isOpen, initialPanel]);
 
   const shareUrl =
     estimateId && typeof window !== "undefined"

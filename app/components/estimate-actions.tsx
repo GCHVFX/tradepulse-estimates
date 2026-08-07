@@ -31,6 +31,11 @@ interface EstimateActionsProps {
   businessHasPaymentLink?: boolean;
   justSent?: boolean;
   hasPhotos?: boolean;
+  /** True when the customer's phone has replied STOP. Suppresses nothing
+   * about the invoice itself; only changes what this component shows and
+   * whether automated SMS reminders keep going out (enforced server-side
+   * in app/api/cron/payment-reminders/route.ts, not here). */
+  smsOptedOut?: boolean;
 }
 
 export function EstimateActions({
@@ -55,12 +60,14 @@ export function EstimateActions({
   businessHasPaymentLink,
   justSent,
   hasPhotos,
+  smsOptedOut,
 }: EstimateActionsProps) {
   const router = useRouter();
   const isQuoteRequest = status === "needs_review" && source === "website_quote";
   const [isConverting, setIsConverting] = useState(false);
   const [convertError, setConvertError] = useState("");
   const [liveTotal, setLiveTotal] = useState(estimateTotal ?? 0);
+  const [sendSheetInitialPanel, setSendSheetInitialPanel] = useState<"menu" | "email">("menu");
 
   useEffect(() => {
     function handleTotalChange(e: Event) {
@@ -389,6 +396,37 @@ export function EstimateActions({
           </>
         )}
 
+        {hasInvoice && localPaymentStatus === "unpaid" && smsOptedOut && (
+          <div className="w-full rounded-xl border border-amber-800/50 bg-amber-950/40 px-4 py-3.5">
+            <div className="flex items-center gap-2">
+              <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5 text-amber-400 shrink-0" aria-hidden="true">
+                <path d="M10 6.5v4M10 13.2v.05" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+                <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="1.5" />
+              </svg>
+              <span className="text-amber-400 font-semibold text-sm">SMS opted out</span>
+            </div>
+            <p className="text-zinc-400 text-xs mt-1.5">
+              Customer opted out of text reminders. Follow up another way. The invoice is still unpaid, this does not change the balance.
+            </p>
+            {customerEmail?.trim() ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setSendSheetInitialPanel("email");
+                  setShowSendSheet(true);
+                }}
+                className="mt-3 w-full bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-white font-semibold text-sm rounded-xl py-3 transition-colors min-h-[44px]"
+              >
+                Email Customer
+              </button>
+            ) : (
+              <p className="text-zinc-500 text-xs mt-2.5">
+                No email on file. Follow up by phone or in person.
+              </p>
+            )}
+          </div>
+        )}
+
         {hasInvoice && localPaymentStatus === "paid" && (
           <div className="w-full flex items-center justify-center gap-2 min-h-[56px] rounded-xl border border-green-800/50 bg-green-950/40">
             <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5 text-green-400 shrink-0" aria-hidden="true">
@@ -467,7 +505,10 @@ export function EstimateActions({
 
       <SendEstimateSheet
         isOpen={showSendSheet}
-        onClose={() => setShowSendSheet(false)}
+        onClose={() => {
+          setShowSendSheet(false);
+          setSendSheetInitialPanel("menu");
+        }}
         onSent={(phone) => {
           setLocalStatus("sent");
           if (phone) setLocalCustomerPhone(phone);
@@ -480,6 +521,7 @@ export function EstimateActions({
         summary={summary}
         businessName={businessName}
         logoUrl={logoUrl}
+        initialPanel={sendSheetInitialPanel}
       />
 
       <MarkJobDoneSheet

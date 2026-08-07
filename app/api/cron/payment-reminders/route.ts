@@ -3,8 +3,14 @@ import twilio from "twilio";
 import { Resend } from "resend";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { hasProPaymentsAccess } from "@/lib/auth";
+import {
+  normalizePhoneE164,
+  createSupabaseSmsSuppressionStore,
+  recordSuppressionIfUnsubscribedError,
+} from "@/lib/sms-suppression";
+import { buildPaymentReminderSms, type PaymentReminderStage } from "@/lib/payment-reminder-message";
 
-type StageName = "pre_due" | "overdue_1" | "overdue_2" | "overdue_ongoing";
+type StageName = PaymentReminderStage;
 
 // Offsets are days relative to the due date. A stage is eligible once
 // today >= due_date + offsetDays. reminder_count tracks how many stages
@@ -29,34 +35,6 @@ interface MessageContext {
   dueDateText: string;
   paymentLink: string | null;
   daysOverdue: number;
-}
-
-function formatPhone(raw: string): string | null {
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  if (trimmed.startsWith("+")) {
-    const digits = trimmed.replace(/\D/g, "");
-    return digits.length >= 10 && digits.length <= 15 ? trimmed : null;
-  }
-  const digits = trimmed.replace(/\D/g, "");
-  if (digits.length === 10 && !digits.startsWith("0")) return `+1${digits}`;
-  if (digits.startsWith("1") && digits.length === 11) return `+${digits}`;
-  if (digits.length >= 10 && digits.length <= 15) return `+${digits}`;
-  return null;
-}
-
-function buildSmsMessage(stage: StageName, ctx: MessageContext): string {
-  const { customerName, invoiceRef, amount, businessName, dueDateText, paymentLink } = ctx;
-  switch (stage) {
-    case "pre_due":
-      return `Hi ${customerName}, just a reminder that invoice #${invoiceRef} for $${amount} from ${businessName} is due on ${dueDateText}.${paymentLink ? ` Pay here: ${paymentLink}.` : ""} Reply STOP to opt out.`;
-    case "overdue_1":
-      return `Hi ${customerName}, your invoice of $${amount} from ${businessName} was due ${dueDateText}. ${paymentLink ? `Please arrange payment at your earliest convenience: ${paymentLink}.` : "Please arrange payment at your earliest convenience."} Reply STOP to opt out.`;
-    case "overdue_2":
-      return `Hi ${customerName}, invoice #${invoiceRef} for $${amount} remains outstanding as of ${dueDateText}. ${paymentLink ? `Please contact us or pay here: ${paymentLink}.` : "Please contact us."} Reply STOP to opt out.`;
-    case "overdue_ongoing":
-      return `Hi ${customerName}, invoice #${invoiceRef} for $${amount} from ${businessName} remains unpaid.${paymentLink ? ` Pay here: ${paymentLink}.` : ""} Reply STOP to opt out.`;
-  }
 }
 
 function buildEmailBody(stage: StageName, ctx: MessageContext): string {
@@ -144,6 +122,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
     : null;
   const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+  const suppressionStore = createSupabaseSmsSuppressionStore(supabaseAdmin);
 
   const now = new Date();
   const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
@@ -193,7 +172,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (!stageName) continue;
 
     const business = businessMap.get(estimate.business_id);
+    // "your contractor" is only for the email subject/body below, which
+    // this task did not ask to change. buildPaymentReminderSms (lib/) is
+    // meant to identify the actual business by name, never that
+    // placeholder, so it gets the real name or an empty string -- see its
+    // `who` handling for that case.
     const businessName = business?.name?.trim() || "your contractor";
+    const smsBusinessName = business?.name?.trim() || "";
     const paymentLink = business?.payment_link?.trim() || null;
 
     const ctx: MessageContext = {
@@ -220,24 +205,52 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }> = [];
 
     if (twilioClient && estimate.customer_phone) {
-      const formattedPhone = formatPhone(estimate.customer_phone);
+      const formattedPhone = normalizePhoneE164(estimate.customer_phone);
       if (formattedPhone) {
-        const smsBody = buildSmsMessage(stageName, ctx);
-        try {
-          await twilioClient.messages.create({
-            body: smsBody,
-            from: process.env.TWILIO_FROM_NUMBER,
-            to: formattedPhone,
+        // Guard before ever calling Twilio: a recipient who replied STOP
+        // must not receive another SMS, regardless of how the reminder
+        // stage logic above evaluated. Skipping here (rather than treating
+        // it as a failure) also leaves this channel out of reminderRows,
+        // so no misleading "message sent" row is logged for it -- the
+        // suppression row itself is the durable record of why nothing went
+        // out, read back by the contractor-facing UI.
+        const suppressed = await suppressionStore.isSuppressed(formattedPhone);
+        if (suppressed) {
+          console.info(`[payment-reminders] SMS skipped for estimate ${estimate.id}: recipient opted out`);
+        } else {
+          const smsBody = buildPaymentReminderSms(stageName, {
+            invoiceRef: ctx.invoiceRef,
+            amount: ctx.amount,
+            businessName: smsBusinessName,
+            dueDateText: ctx.dueDateText,
+            paymentLink: ctx.paymentLink,
           });
-          reminderRows.push({
-            estimate_id: estimate.id,
-            business_id: estimate.business_id,
-            channel: "sms",
-            stage: stageName,
-            message: smsBody,
-          });
-        } catch (err) {
-          console.error(`[payment-reminders] SMS failed for estimate ${estimate.id}:`, err);
+          try {
+            await twilioClient.messages.create({
+              body: smsBody,
+              from: process.env.TWILIO_FROM_NUMBER,
+              to: formattedPhone,
+            });
+            reminderRows.push({
+              estimate_id: estimate.id,
+              business_id: estimate.business_id,
+              channel: "sms",
+              stage: stageName,
+              message: smsBody,
+            });
+          } catch (err) {
+            // Twilio reporting 21610 typically means the inbound STOP
+            // webhook hasn't recorded it locally yet, or arrived out of
+            // order. Record suppression defensively (idempotent -- a repeat
+            // 21610 for an already-suppressed number is a no-op) so the next
+            // run and the contractor UI pick it up without retrying.
+            const optedOut = await recordSuppressionIfUnsubscribedError(suppressionStore, formattedPhone, err);
+            if (optedOut) {
+              console.warn(`[payment-reminders] Twilio reports opted-out recipient for estimate ${estimate.id}`);
+            } else {
+              console.error(`[payment-reminders] SMS failed for estimate ${estimate.id}:`, err);
+            }
+          }
         }
       }
     }

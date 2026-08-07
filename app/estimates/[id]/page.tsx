@@ -8,6 +8,7 @@ import { EstimatePhotos } from "@/app/components/estimate-photos";
 import { BottomNav } from "@/app/components/bottom-nav";
 import { loadCustomerPricingView } from "@/lib/estimate-pricing-server";
 import { supabaseAdmin, createSupabaseServerClient } from "@/lib/supabase-server";
+import { normalizePhoneE164 } from "@/lib/sms-suppression";
 
 export default async function EstimatePage({
   params,
@@ -84,6 +85,24 @@ export default async function EstimatePage({
   const googleReviewLink = business?.google_review_link ?? null;
   const isQuoteRequest = estimate.status === "needs_review" && estimate.source === "website_quote";
   const estimateTotal = pricing.selected.total;
+
+  // Only unpaid invoiced estimates need this check -- opting out doesn't
+  // matter for an estimate that was never invoiced or is already paid, and
+  // both states already gate whether the SMS-opted-out banner can render in
+  // EstimateActions. Skipping the query for those cases avoids a suppression
+  // lookup on every estimate page view, not just the ones where it matters.
+  let smsOptedOut = false;
+  if (estimate.payment_status === "unpaid" && estimate.customer_phone) {
+    const normalizedPhone = normalizePhoneE164(estimate.customer_phone);
+    if (normalizedPhone) {
+      const { data: suppression } = await supabaseAdmin
+        .from("tpe_sms_suppressions")
+        .select("sms_opted_out")
+        .eq("phone", normalizedPhone)
+        .maybeSingle();
+      smsOptedOut = suppression?.sms_opted_out === true;
+    }
+  }
 
   return (
     <div className="min-h-dvh bg-zinc-950 text-white flex flex-col">
@@ -232,6 +251,7 @@ export default async function EstimatePage({
         justSent={sent === "1"}
         businessHasPaymentLink={Boolean(business?.payment_link?.trim())}
         hasPhotos={photoUrls.length > 0}
+        smsOptedOut={smsOptedOut}
       />
 
       <div className="fixed bottom-0 left-0 right-0 z-40">

@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import twilio from "twilio";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
+import {
+  normalizePhoneE164,
+  createSupabaseSmsSuppressionStore,
+  recordSuppressionIfUnsubscribedError,
+  SMS_OPTED_OUT_MESSAGE,
+  SMS_OPTED_OUT_CODE,
+} from "@/lib/sms-suppression";
 
 function formatPhone(raw: string): string {
   if (!raw || typeof raw !== "string") throw new Error("Invalid phone number");
@@ -94,6 +101,15 @@ export async function POST(
     return applyTo(NextResponse.json({ error: message }, { status: 400 }));
   }
 
+  const suppressionStore = createSupabaseSmsSuppressionStore(supabaseAdmin);
+  const suppressionKey = normalizePhoneE164(formattedPhone) ?? formattedPhone;
+
+  if (await suppressionStore.isSuppressed(suppressionKey)) {
+    return applyTo(
+      NextResponse.json({ error: SMS_OPTED_OUT_MESSAGE, code: SMS_OPTED_OUT_CODE }, { status: 409 })
+    );
+  }
+
   const businessName = business.name?.trim() || "us";
   const businessPhone = business.phone?.trim() ?? "";
   const contactLine = businessPhone
@@ -110,6 +126,12 @@ export async function POST(
       to: formattedPhone,
     });
   } catch (err) {
+    const optedOut = await recordSuppressionIfUnsubscribedError(suppressionStore, suppressionKey, err);
+    if (optedOut) {
+      return applyTo(
+        NextResponse.json({ error: SMS_OPTED_OUT_MESSAGE, code: SMS_OPTED_OUT_CODE }, { status: 409 })
+      );
+    }
     const message = err instanceof Error ? err.message : "SMS send failed";
     return applyTo(NextResponse.json({ error: message }, { status: 500 }));
   }

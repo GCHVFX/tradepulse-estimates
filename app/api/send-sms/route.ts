@@ -4,6 +4,13 @@ import { validateContentType } from "@/lib/api-utils";
 import { NextRequest, NextResponse } from "next/server";
 import twilio from "twilio";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
+import {
+  normalizePhoneE164,
+  createSupabaseSmsSuppressionStore,
+  recordSuppressionIfUnsubscribedError,
+  SMS_OPTED_OUT_MESSAGE,
+  SMS_OPTED_OUT_CODE,
+} from "@/lib/sms-suppression";
 
 function formatPhone(raw: string): string {
   if (!raw || typeof raw !== "string") {
@@ -111,25 +118,49 @@ if (!hasAccess) return applyTo(NextResponse.json({ error: "Subscription required
     ? `${greeting} ${bizName} has sent you an estimate: ${shareUrl}`
     : `${greeting} your estimate is ready: ${shareUrl}`;
 
+  let formattedPhone: string;
+  try {
+    formattedPhone = formatPhone(to);
+  } catch (formatErr) {
+    const message = formatErr instanceof Error ? formatErr.message : "Invalid phone number";
+    return applyTo(NextResponse.json({ error: message }, { status: 400 }));
+  }
+
+  const suppressionStore = createSupabaseSmsSuppressionStore(supabaseAdmin);
+  const suppressionKey = normalizePhoneE164(formattedPhone) ?? formattedPhone;
+
+  // Manually triggered sends must respect suppression exactly like automated
+  // ones: no call to Twilio at all for an opted-out number, and this is
+  // reported as a distinct, clear result rather than a generic send
+  // failure. Estimate/customer state is untouched -- only the response
+  // differs from the success path below.
+  if (await suppressionStore.isSuppressed(suppressionKey)) {
+    return applyTo(
+      NextResponse.json({ error: SMS_OPTED_OUT_MESSAGE, code: SMS_OPTED_OUT_CODE }, { status: 409 })
+    );
+  }
+
   try {
     const client = twilio(
       process.env.TWILIO_ACCOUNT_SID!,
       process.env.TWILIO_AUTH_TOKEN!
     );
 
-    let formattedPhone: string;
     try {
-      formattedPhone = formatPhone(to);
-    } catch (formatErr) {
-      const message = formatErr instanceof Error ? formatErr.message : "Invalid phone number";
-      return applyTo(NextResponse.json({ error: message }, { status: 400 }));
+      await client.messages.create({
+        body: messageBody,
+        from: process.env.TWILIO_FROM_NUMBER!,
+        to: formattedPhone,
+      });
+    } catch (sendErr) {
+      const optedOut = await recordSuppressionIfUnsubscribedError(suppressionStore, suppressionKey, sendErr);
+      if (optedOut) {
+        return applyTo(
+          NextResponse.json({ error: SMS_OPTED_OUT_MESSAGE, code: SMS_OPTED_OUT_CODE }, { status: 409 })
+        );
+      }
+      throw sendErr;
     }
-
-    await client.messages.create({
-      body: messageBody,
-      from: process.env.TWILIO_FROM_NUMBER!,
-      to: formattedPhone,
-    });
 
     const phoneUpdate = !estimate.customer_phone ? { customer_phone: to.trim() } : {};
     const { error: updateError } = await supabaseAdmin

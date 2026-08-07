@@ -552,6 +552,39 @@ export type Database = {
         }
         Relationships: []
       }
+      tpe_sms_suppressions: {
+        Row: {
+          created_at: string
+          id: string
+          last_message_sid: string | null
+          opted_in_at: string | null
+          opted_out_at: string | null
+          phone: string
+          sms_opted_out: boolean
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_message_sid?: string | null
+          opted_in_at?: string | null
+          opted_out_at?: string | null
+          phone: string
+          sms_opted_out?: boolean
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_message_sid?: string | null
+          opted_in_at?: string | null
+          opted_out_at?: string | null
+          phone?: string
+          sms_opted_out?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

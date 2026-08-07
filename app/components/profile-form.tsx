@@ -7,6 +7,15 @@ import QRCode from "qrcode";
 import { formatPhoneInput } from "@/lib/format-phone";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { formatMonthlyPlanPrice } from "@/lib/plan-pricing";
+import { buildPaymentReminderSms } from "@/lib/payment-reminder-message";
+
+// Fixed example values for the read-only message preview below. These are
+// never real invoice data -- the actual reference, amount, and due date are
+// filled in automatically by app/api/cron/payment-reminders/route.ts at
+// send time, using the same buildPaymentReminderSms() this preview calls.
+const PREVIEW_INVOICE_REF = "1042";
+const PREVIEW_AMOUNT = "350";
+const PREVIEW_DUE_DATE = "August 4, 2026";
 
 interface Profile {
   name: string;
@@ -650,7 +659,35 @@ export function ProfileForm({
                 autoCapitalize="none"
                 spellCheck={false}
               />
-              <p className="text-zinc-400 text-xs">Included in payment reminders so customers can pay you.</p>
+              <p className="text-zinc-400 text-xs">
+                Payment reminders include this link so customers can pay directly from the text.
+              </p>
+            </div>
+
+            {/* Message preview -- read only, not a template editor. Built from
+                the exact same buildPaymentReminderSms() that
+                app/api/cron/payment-reminders/route.ts sends, so this can
+                never drift from the real message. Business name and payment
+                link reflect what's currently typed above, updating before
+                save; invoice reference, amount, and due date are always the
+                fixed example values, since real ones only exist at send
+                time. */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-zinc-400">Message preview</label>
+              <div className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3">
+                <p className="text-sm text-zinc-200 leading-relaxed break-words">
+                  {buildPaymentReminderSms("overdue_1", {
+                    invoiceRef: PREVIEW_INVOICE_REF,
+                    amount: PREVIEW_AMOUNT,
+                    businessName: name.trim(),
+                    dueDateText: PREVIEW_DUE_DATE,
+                    paymentLink: paymentLink.trim() || null,
+                  })}
+                </p>
+              </div>
+              <p className="text-zinc-500 text-xs">
+                Example only, using invoice #{PREVIEW_INVOICE_REF}. The real invoice number, amount, and due date are filled in automatically when a reminder is sent.
+              </p>
             </div>
           </div>
         )}
