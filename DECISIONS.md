@@ -2,6 +2,15 @@
 
 Durable product/architecture decisions worth remembering the reasoning behind, not just the outcome. Most recent first. Entries below were recorded together during an AI Control Centre backfill on 2026-07-23, covering decisions made across the session they document.
 
+## Contact page: compact native-mailto rows, no form, no ticket system
+
+Recorded 2026-08-06. The support page had two problems in succession: the topic cards were too tall (large empty card area, excessive scrolling), and on a real Android Chrome device tapping a topic did nothing. Rather than adding a contact form or third-party helpdesk widget, both problems were solved within the existing "email-only support" model: each topic became one compact, full-row native `<a href="mailto:...">` (not a Next.js `Link`, no click handlers, every decorative child `pointer-events-none` so nothing but the anchor is ever hit-tested), plus a "Can't open your email app?" fallback with a plain mailto link and a clipboard-copy button. No dependency, form, ticket system, or chat widget was added. The underlying no-JS-required native anchor was already correct in principle; hardening it (pointer-events, touch-manipulation, no nesting) was done defensively per an explicit requirements list even though no interception bug was found in the codebase itself — final confirmation of the real-device symptom was explicitly deferred to the user, since headless browser automation cannot simulate an OS-level mail-app handoff.
+
+## Contact page: mobile hero trimmed and "before you email" tips reformatted, not hidden
+
+Recorded 2026-08-06. The support page's first topic row didn't reach the first mobile viewport (390×844) because the hero section and its "Before you email" aside box (a bulleted list stacked full-width on mobile) pushed it down to y≈1272px. Rather than deleting content to hit the target, the aside's four bullets were condensed into one sentence, shown inline under the mobile hero instead of in a separate bordered box; the full box (with its original heading) is preserved for desktop, where vertical space isn't scarce. This got the first topic row to y≈508px without removing any of the "what to include" guidance for either breakpoint.
+
+
 ## Bottom nav: New is emphasized by colour only, never by a floating circle
 
 Recorded 2026-08-05. The bottom navigation went through three designs in one session before landing on the approved one. First, a 66px flush amber circle (same height slot as the other three icons, no overlap) — functionally fine but the client wanted New visually distinct without a filled circle dominating the row. Second, a 62px circle overlapping 12px above the bar (a conventional FAB treatment) — rejected on sight from a real device screenshot as still reading as a floating action button that "does not feel like part of the navigation," regardless of exact diameter or overlap tuning. The client explicitly asked to stop adjusting size/overlap and change direction rather than keep iterating the circle.

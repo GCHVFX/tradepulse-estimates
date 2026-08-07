@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient, supabaseAdmin } from "@/lib/supabase-server";
 import { EstimateDemo } from "@/app/components/EstimateDemo";
+import { TradeExamples } from "@/app/components/TradeExamples";
 import { PRO_MONTHLY_PRICE_CAD, STARTER_MONTHLY_PRICE_CAD } from "@/lib/plan-pricing";
 
 export const metadata: Metadata = {
@@ -37,7 +38,7 @@ const STEPS = [
   {
     number: "01",
     title: "Describe the job",
-    description: "Type a quick description of the work, what needs doing, how long it will take, what materials you'll need. A sentence or two is enough.",
+    description: "Type or dictate a quick description of the work, what needs doing, how long it may take, and any materials required. A sentence or two is enough.",
   },
   {
     number: "02",
@@ -49,6 +50,59 @@ const STEPS = [
     title: "Send it on the spot",
     description: "Text or email the estimate directly to your customer before you leave the property. No more quoting at night. No more lost jobs.",
   },
+] as const;
+
+const PAIN_POINTS = [
+  "No more quoting after dinner",
+  "No more rebuilding every estimate",
+  "No more losing jobs to a faster quote",
+] as const;
+
+const WORKFLOW_STEPS = [
+  {
+    title: "Review the estimate",
+    description: "Check the scope, line items, and total before anything goes out.",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5" aria-hidden="true">
+        <path d="M3 10s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="10" cy="10" r="2" stroke="currentColor" strokeWidth="1.5" />
+      </svg>
+    ),
+  },
+  {
+    title: "Make light edits",
+    description: "Fix a line, adjust a detail, or update customer info in seconds.",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5" aria-hidden="true">
+        <path d="M12.5 3.5l4 4L6 18H2v-4L12.5 3.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
+  {
+    title: "Send it to the customer",
+    description: "Text it, email it, or send a link, straight from the job site.",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5" aria-hidden="true">
+        <path d="M17.5 2.5l-15 5.5 6 2 2 6 7-13.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
+  {
+    title: "What the customer sees",
+    description: "A clean estimate page with your logo, the scope of work, and the price. No login needed.",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5" aria-hidden="true">
+        <rect x="3" y="3" width="14" height="14" rx="2" stroke="currentColor" strokeWidth="1.5" />
+        <path d="M6 7h8M6 10h8M6 13h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+] as const;
+
+const AFTER_ESTIMATE = [
+  { title: "Reviews", description: "Ask for a Google review once a job is marked done.", pro: true },
+  { title: "Payments", description: "Automatic reminders until an invoiced job is paid.", pro: true },
+  { title: "Follow-Up", description: "Coming soon. Stay in touch with past customers.", pro: true },
 ] as const;
 
 const BENEFITS = [
@@ -289,6 +343,20 @@ export default async function LandingPage() {
           </div>
         </section>
 
+        {/* Contractor pain strip */}
+        <div className="bg-white py-5">
+          <div className="mx-auto max-w-4xl px-6 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-8 text-center">
+            {PAIN_POINTS.map((point, i) => (
+              <div key={point} className="flex items-center gap-3 sm:gap-8">
+                <p className="text-sm sm:text-base font-medium text-slate-700">{point}</p>
+                {i < PAIN_POINTS.length - 1 && (
+                  <span className="hidden sm:block w-1 h-1 rounded-full bg-slate-300" aria-hidden="true" />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* Trust strip */}
         <div className="border-y border-slate-100 bg-slate-50 py-5">
           <div className="mx-auto max-w-4xl px-6 flex flex-wrap items-center justify-center gap-8">
@@ -339,6 +407,44 @@ export default async function LandingPage() {
           </div>
         </section>
 
+        {/* Trade-specific examples */}
+        <section className="py-12 sm:py-16 bg-slate-50">
+          <div className="mx-auto max-w-5xl px-6 sm:px-10">
+            <div className="text-center mb-8">
+              <p className="text-xs font-semibold uppercase tracking-widest mb-3 text-zinc-500">See it for your trade</p>
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">See what TradePulse creates</h2>
+              <p className="mt-4 text-lg text-slate-500 max-w-xl mx-auto">
+                Example jobs using common trade scenarios. Your estimates use your own rates and line items.
+              </p>
+            </div>
+            <TradeExamples />
+          </div>
+        </section>
+
+        {/* Workflow showcase: what happens after generation */}
+        <section className="py-12 sm:py-16 bg-white">
+          <div className="mx-auto max-w-5xl px-6 sm:px-10">
+            <div className="text-center mb-8">
+              <p className="text-xs font-semibold uppercase tracking-widest mb-3 text-zinc-500">After it&apos;s generated</p>
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Review, edit, send, done</h2>
+              <p className="mt-4 text-lg text-slate-500 max-w-xl mx-auto">
+                The estimate is a starting point, not a final answer. You stay in control before it reaches the customer.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
+              {WORKFLOW_STEPS.map(step => (
+                <div key={step.title} className="rounded-xl bg-slate-50 p-4 sm:p-5">
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center mb-3" style={{ background: "#FEF3C7", color: "#92400E" }}>
+                    {step.icon}
+                  </div>
+                  <h3 className="text-sm sm:text-base font-semibold text-slate-900 mb-1.5">{step.title}</h3>
+                  <p className="text-xs sm:text-sm leading-relaxed text-slate-500">{step.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
         {/* Benefits */}
         <section className="py-12 sm:py-16 bg-white">
           <div className="mx-auto max-w-5xl px-6 sm:px-10">
@@ -358,6 +464,42 @@ export default async function LandingPage() {
                   </div>
                   <h3 className="text-sm sm:text-base font-semibold text-slate-900 mb-1.5 sm:mb-2">{b.title}</h3>
                   <p className="text-xs sm:text-sm leading-relaxed text-slate-500">{b.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Positioning */}
+        <section className="py-12 sm:py-16 bg-slate-50">
+          <div className="mx-auto max-w-2xl px-6 sm:px-10 text-center">
+            <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 leading-tight">
+              Fast estimates without another complicated business platform
+            </h2>
+            <p className="mt-5 text-base sm:text-lg text-slate-500 leading-relaxed">
+              Set up in minutes. Built for a phone, not a desk, so it holds up in a driveway or on a job site.
+              It is not a CRM and it is not a full field-service platform. It is one job: turning a job description into an estimate you can send before you leave.
+            </p>
+          </div>
+        </section>
+
+        {/* After the estimate */}
+        <section className="py-12 sm:py-16 bg-white">
+          <div className="mx-auto max-w-4xl px-6 sm:px-10">
+            <div className="text-center mb-8">
+              <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: "#0D1B2E", opacity: 0.4 }}>After the estimate</p>
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Estimates come first. This comes after.</h2>
+            </div>
+            <div className="grid sm:grid-cols-3 gap-4 sm:gap-6">
+              {AFTER_ESTIMATE.map(item => (
+                <div key={item.title} className="text-center sm:text-left">
+                  <div className="flex items-center justify-center sm:justify-start gap-2 mb-1.5">
+                    <h3 className="text-sm font-semibold text-slate-900">{item.title}</h3>
+                    {item.pro && (
+                      <span className="text-[10px] font-bold leading-none text-amber-600 bg-amber-500/10 border border-amber-500/30 rounded px-1.5 py-0.5">PRO</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 leading-relaxed">{item.description}</p>
                 </div>
               ))}
             </div>
@@ -427,7 +569,7 @@ export default async function LandingPage() {
 
                 <div className="flex flex-col gap-3 mb-8">
                   {[
-                    { title: "AI Photo Estimates", description: "Take a photo of the problem and AI writes the description for you." },
+                    { title: "AI Photo Estimates", description: "Take a photo of the job and TradePulse uses it to help draft the estimate." },
                     { title: "Google Review Requests", description: "Ask customers for Google reviews after completed jobs." },
                     { title: "Payment Reminders", description: "Automatic follow-up on unpaid invoices." },
                     { title: "Customer Follow-Ups (Coming Soon)", description: "Stay connected with past customers and generate repeat business." },
@@ -487,7 +629,7 @@ export default async function LandingPage() {
                 },
                 {
                   q: "Do I need to be technical to use this?",
-                  a: "No. If you can type a text message, you can use TradePulse. Setup takes about 5 minutes. Add your company name, logo, and rates, then start generating estimates.",
+                  a: "No. Type or dictate the job details in plain language. TradePulse turns them into a professional estimate. Setup takes about five minutes.",
                 },
                 {
                   q: "Can I cancel anytime?",

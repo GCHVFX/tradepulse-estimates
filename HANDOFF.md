@@ -1,12 +1,12 @@
 # TradePulse handoff
 
-Updated: 2026-08-05 (bottom navigation redesign)
+Updated: 2026-08-06 (homepage proof/positioning and support-page redesign)
 
 ## Current state
 
 - **Branch:** `main`
-- **Deployed Production application commit:** `4bc5b27` (`Fix account deletion storage type check`)
-- **Production deployment:** `dpl_4BPGcwKZQ1erTjCMq9tz5gP9hmE5`, READY, Git-sourced from `4bc5b27`, serving `www.trytradepulse.com` and project aliases. The preceding Git deployment failed before Production changed because `StorageApiError.statusCode` is a string. The authorised corrective push fixed that comparison.
+- **Deployed Production application commit:** see the Deployment section below (this session's `Improve homepage proof and support access` push)
+- **Prior Production deployment:** `dpl_4BPGcwKZQ1erTjCMq9tz5gP9hmE5`, READY, Git-sourced from `4bc5b27` (`Fix account deletion storage type check`). The preceding Git deployment failed before Production changed because `StorageApiError.statusCode` is a string. The authorised corrective push fixed that comparison.
 - **Pricing:** Starter is **CA$29/month** and Pro is **CA$59/month**. Stripe price IDs remain environment-driven. Production pricing and Checkout paths were verified during the completed cutover.
 - **Communications:** remain disabled unless a future task explicitly authorises them.
 
@@ -56,21 +56,54 @@ Updated: 2026-08-05 (bottom navigation redesign)
 - The Stripe acceptance deliberately did not use a real card or send communications. Do not recreate its synthetic Stripe objects or repeat that audit without a new explicit need.
 - The rate-limit count observation above is the only unresolved verification ambiguity from the hosted deletion. All owned synthetic records were directly read back as absent.
 
-## Next milestone: homepage proof and positioning
+## Homepage proof and positioning (completed 2026-08-06)
 
-Keep Estimates as the primary product. Preserve the existing hero and interactive demo. Do not add a second demo.
+All work below is implemented on `main`, deployed as the commit titled `Improve homepage proof and support access` (see `git log` for the exact SHA; this file avoids hardcoding it to prevent a circular reference at commit time).
 
-1. Add a compact contractor-pain strip:
-   - No more quoting after dinner
-   - No more rebuilding every estimate
-   - No more losing jobs to a faster quote
-2. Add trade-specific **Example** content for Plumbing, Electrical, and Painting, using generic trade icons only. Include realistic job input, scope excerpts, and representative line items. Do not invent company names, logos, testimonials, ratings, customers, usage figures, or endorsements.
-3. Show the rest of the actual workflow: generated estimate, light editing, sending, and the customer-facing result.
-4. Position TradePulse as fast, mobile-first estimating with minimal setup, not a full CRM or enterprise field-service platform.
-5. Keep Reviews, Payments, and Follow-Up secondary and describe only verified available behaviour.
-6. Improve the final CTA and relevant homepage metadata without changing pricing.
-7. Complete the related homepage work locally, then stop for visual approval before one combined Production deployment.
+### Final approved homepage structure (`app/page.tsx`, top to bottom)
 
-**Exact next action:** begin the homepage proof and positioning work locally on `main`, starting from this handoff. Do not redeploy until the complete slice has visual approval.
+1. Nav, hero, and the existing interactive `EstimateDemo` — unchanged. No second demo was added.
+2. Contractor pain strip (slim row, right after the hero): "No more quoting after dinner", "No more rebuilding every estimate", "No more losing jobs to a faster quote".
+3. Trust strip, "How it works" three-step section — unchanged.
+4. Trade-specific examples, `app/components/TradeExamples.tsx` (new client component): tab selector for Plumbing / Electrical / Painting, heading "See what TradePulse creates", each panel marked **Example**, generic trade icons only, realistic job description + scope excerpt + 2-3 line-item names, no prices, no invented company names/customers/logos/testimonials/ratings/usage figures/endorsements.
+5. Workflow showcase ("Review, edit, send, done"): 4-step grid covering what the hero demo doesn't show (light edits, send channels, the customer-facing view).
+6. Benefits grid — unchanged.
+7. Positioning section: "Fast estimates without another complicated business platform", short supporting copy (minimal setup, phone-first, not a CRM, not an enterprise field-service platform). No competitor names, no AI/SaaS jargon.
+8. "After the estimate": one-line teasers for Reviews / Payments / Follow-Up (PRO-tagged), kept brief and non-duplicative of the fuller Pro pricing-card bullets.
+9. Pricing (Starter **CA$29/month**, Pro **CA$59/month**, unchanged): AI Photo Estimates copy corrected to "Take a photo of the job and TradePulse uses it to help draft the estimate." (no diagnosis or exact-pricing claim).
+10. FAQ — Step 1 and the "Do I need to be technical to use this?" answer both say contractors can **type or dictate** the job description; no wording implies typing is required.
+11. Final CTA, footer — unchanged. Single primary CTA reusing the existing `/signup` (or `/subscribe` / `/new` for signed-in users) route; no second competing CTA.
 
-**Recommended next task:** Codex GPT-5.6 Terra, Medium effort. Raise to High only if the homepage work exposes a difficult regression or unclear shared-component interaction.
+### Support-page redesign (`app/contact/page.tsx`, plus new `app/components/CopyEmailButton.tsx`)
+
+- Five compact, full-row `<a href="mailto:...">` topic links (Sign-in/account trouble, Estimate help, Billing or refund request, Privacy or data question, Something else), each with a correct subject and a short prefilled body (no private account data). Every decorative child (icon, text, chevron) is `pointer-events-none` so only the anchor itself is ever hit-tested; `touch-manipulation` added; no nested buttons, no `preventDefault`, no Next.js `Link` used for any mailto.
+- Fallback block below the topic rows: "Can't open your email app?" with a native `mailto:` link showing the address, and a "Copy email address" button (`CopyEmailButton.tsx`, client component) with success ("Email copied.") and failure ("Couldn't copy automatically...") states, no dependency added.
+- Hero and intro spacing tightened for mobile (hero `py-16 sm:py-20` → `py-6 sm:py-14`; the "Before you email" aside box hidden on mobile with its guidance condensed into one sentence shown inline instead, restored as a fuller box on `sm:`+; intro block `py-8 sm:py-10` → `py-4 sm:py-10`). First topic row now renders at y≈508px on a 390×844 viewport (was ≈1272px before this pass) — visible without scrolling. Desktop (1440×900) two-column layout unchanged in spirit, still balanced.
+- Profile page (`app/profile/page.tsx`): added a plain muted-text "Support" link routing to `/contact`, placed between the profile form and the destructive Delete-account section — less prominent than any account/billing control, consistent with existing "Sign out" styling. Bottom navigation (`bottom-nav.tsx`) was not touched by any of this work.
+- Public homepage footer "Support" link (already pointing to `/contact`) unchanged.
+
+### Exact verification run for this release
+
+- `npx tsc --noEmit`: passed.
+- Targeted ESLint on all five changed/added files: passed, zero errors (2 pre-existing `<img>` warnings in `app/page.tsx`, unrelated to this work).
+- Complete safe unit suite (`npx playwright test --config=playwright.unit.config.ts`): **123 passed**.
+- `npx next build`: passed, only the three pre-existing `metadataBase` notices.
+- `git diff --check`: clean (only benign LF/CRLF notices).
+- Browser verification at 390×844, 412×915, 1440×900: no horizontal overflow at any size on either page; hero demo runs end to end to "Estimate saved"; trade tabs switch content correctly; all homepage CTAs route to the correct paths; all 5 contact mailto hrefs verified via rendered `href` and hit-tested (nothing intercepts); Copy Email Address success and failure paths both verified; only the pre-existing single `/api/profile` 401 (unauthenticated baseline) seen in console, no new errors.
+- Hosted (production) verification: see the Deployment section immediately below.
+
+### Deployment (2026-08-06)
+
+*(filled in immediately after the push and hosted verification below completes)*
+
+## Known existing lint and metadata warnings (unchanged baseline)
+
+- Full-lint baseline remains **7 errors and 18 warnings**, unrelated to this release.
+- Build warnings are the three pre-existing `metadataBase` notices (no `metadataBase` set in `app/layout.tsx`'s metadata export).
+- Two pre-existing `<img>` (not `next/image`) ESLint warnings in `app/page.tsx` (logo images), unrelated to this release.
+
+## Next milestone: review the homepage on production
+
+Review the homepage on production, then decide whether any sections should be shortened or removed based on the full mobile scroll experience (the homepage gained five new sections this session: pain strip, trade examples, workflow showcase, positioning, and "After the estimate"). Do not begin new product work in this task — it is a review-and-trim decision, not a feature slice.
+
+**Exact next action:** load `www.trytradepulse.com` on a real mobile device, scroll the full homepage, and judge whether the combined length reads as strong proof or as padding. Bring findings back before making any cuts.

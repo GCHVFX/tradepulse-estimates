@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { supabaseAdmin, createSupabaseServerClient } from "@/lib/supabase-server";
 import { Logo } from "@/app/components/logo";
@@ -71,6 +72,15 @@ export default async function ProfilePage({
           openSection={section ?? undefined}
           businessId={data?.id ?? null}
         />
+        <div className="mt-6 pt-6 border-t border-zinc-900 text-center">
+          <Link
+            href="/contact"
+            className="inline-flex min-h-11 items-center justify-center text-sm text-zinc-400 hover:text-zinc-300 transition-colors"
+          >
+            Support
+          </Link>
+        </div>
+
         <DeleteAccountSection />
       </main>
 

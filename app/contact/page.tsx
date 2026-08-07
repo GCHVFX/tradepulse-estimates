@@ -3,13 +3,18 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowLeft,
+  ChevronRight,
   CreditCard,
   FileText,
+  HelpCircle,
   LifeBuoy,
   LockKeyhole,
   Mail,
   ShieldCheck,
 } from "lucide-react";
+import { CopyEmailButton } from "@/app/components/CopyEmailButton";
+
+const SUPPORT_EMAIL = "support@trytradepulse.com";
 
 export const metadata: Metadata = {
   title: "TradePulse Support | Contact Us",
@@ -22,42 +27,54 @@ const supportTopics = [
   {
     icon: LockKeyhole,
     title: "Sign-in or account trouble",
-    description:
-      "Tell us which email address you use for TradePulse and what happens when you try to sign in.",
-    subject: "TradePulse account help",
+    description: "Trouble signing in or accessing your account.",
+    subject: "TradePulse sign-in or account help",
+    body: "Tell us the email address on your account and what happens when you try to sign in.",
   },
   {
     icon: FileText,
     title: "Estimate help",
-    description:
-      "Include the estimate title or reference and what you were trying to do. A screenshot is helpful when something looks wrong.",
+    description: "Questions about a specific estimate.",
     subject: "TradePulse estimate help",
+    body: "Include the estimate title and what you were trying to do.",
   },
   {
     icon: CreditCard,
     title: "Billing or refund request",
-    description:
-      "Use the email address on your account. Refund requests for the first paid charge are reviewed manually through support.",
-    subject: "TradePulse billing help",
+    description: "Billing, subscription, or refund questions.",
+    subject: "TradePulse billing or refund request",
+    body: "Include the email address on your account.",
   },
   {
     icon: ShieldCheck,
     title: "Privacy or data question",
-    description:
-      "Email us with a question about your account data or privacy. We will confirm what information is needed for your request.",
+    description: "Questions about your account data or privacy.",
     subject: "TradePulse privacy or data question",
+    body: "Describe your privacy or data question.",
+  },
+  {
+    icon: HelpCircle,
+    title: "Something else",
+    description: "Anything else we can help with.",
+    subject: "TradePulse support question",
+    body: "",
   },
 ] as const;
 
-function supportHref(subject: string) {
-  return `mailto:support@trytradepulse.com?subject=${encodeURIComponent(subject)}`;
+function supportHref(subject: string, body?: string) {
+  // encodeURIComponent, not URLSearchParams: mailto URIs (RFC 6068) don't
+  // treat "+" as a space the way HTML form encoding does, so %20 is the
+  // safe choice across mail clients.
+  const params = [`subject=${encodeURIComponent(subject)}`];
+  if (body) params.push(`body=${encodeURIComponent(body)}`);
+  return `mailto:${SUPPORT_EMAIL}?${params.join("&")}`;
 }
 
 export default function ContactPage() {
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-4 sm:px-8">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-2.5 sm:px-8 sm:py-3">
           <Link href="/" aria-label="TradePulse home" className="inline-flex min-h-11 items-center">
             <Image
               src="/tradepulse-logo.png"
@@ -87,7 +104,7 @@ export default function ContactPage() {
         </div>
       </header>
 
-      <section className="relative overflow-hidden bg-[#0D1B2E] py-16 text-white sm:py-20">
+      <section className="relative overflow-hidden bg-[#0D1B2E] py-6 text-white sm:py-14">
         <div
           className="absolute inset-0 opacity-30"
           aria-hidden="true"
@@ -97,82 +114,91 @@ export default function ContactPage() {
             backgroundSize: "28px 28px",
           }}
         />
-        <div className="relative mx-auto grid max-w-5xl gap-10 px-5 sm:px-8 md:grid-cols-[1.1fr_0.9fr] md:items-center">
+        <div className="relative mx-auto grid max-w-5xl gap-4 px-5 sm:gap-8 sm:px-8 md:grid-cols-[1.1fr_0.9fr] md:items-center">
           <div className="max-w-2xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-widest text-slate-200">
+            <div className="hidden items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-widest text-slate-200 sm:inline-flex">
               <LifeBuoy className="h-4 w-4 text-amber-400" aria-hidden="true" />
               TradePulse support
             </div>
-            <h1 className="mt-6 text-4xl font-bold tracking-tight sm:text-5xl">
+            <h1 className="text-2xl font-bold tracking-tight sm:mt-6 sm:text-4xl lg:text-5xl">
               Get help and get back to the job.
             </h1>
-            <p className="mt-5 max-w-xl text-lg leading-relaxed text-slate-300">
+            <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-300 sm:mt-5 sm:text-lg">
               Email us about your account, an estimate, billing, or a privacy question. Include a little context so we can understand the problem.
             </p>
             <a
               href={supportHref("TradePulse support request")}
-              className="mt-8 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-amber-500 px-6 text-base font-bold text-[#0D1B2E] transition-colors hover:bg-amber-400"
+              className="mt-3 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-amber-500 px-6 text-sm font-bold text-[#0D1B2E] transition-colors hover:bg-amber-400 sm:mt-8 sm:min-h-12 sm:text-base"
             >
               <Mail className="h-5 w-5" aria-hidden="true" />
               Email support
             </a>
-            <p className="mt-4 text-sm text-slate-400">support@trytradepulse.com</p>
+            <p className="mt-2 text-xs text-slate-400 sm:mt-4 sm:text-sm">support@trytradepulse.com</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-400 sm:hidden">
+              Include your account email, what happened, and a screenshot if useful. Never send your password by email.
+            </p>
           </div>
 
-          <aside className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm sm:p-7">
+          <aside className="hidden rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-sm sm:block sm:p-6">
             <p className="text-xs font-semibold uppercase tracking-widest text-amber-400">Before you email</p>
-            <h2 className="mt-3 text-xl font-bold">Include these details</h2>
-            <ul className="mt-5 space-y-4 text-sm leading-relaxed text-slate-300">
-              {[
-                "The email address on your TradePulse account",
-                "What you were trying to do",
-                "What happened instead, including any error message",
-                "A screenshot when the problem is visual",
-              ].map((item) => (
-                <li key={item} className="flex items-start gap-3">
-                  <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-amber-400" aria-hidden="true" />
-                  {item}
-                </li>
-              ))}
-            </ul>
-            <p className="mt-6 border-t border-white/10 pt-5 text-xs leading-relaxed text-slate-400">
+            <h2 className="mt-2 text-lg font-bold">Include these details</h2>
+            <p className="mt-3 text-sm leading-relaxed text-slate-300">
+              The email address on your account, what you were trying to do, what happened instead (including any error message), and a screenshot when the problem is visual.
+            </p>
+            <p className="mt-4 border-t border-white/10 pt-3 text-xs leading-relaxed text-slate-400">
               Never send your password or full payment-card details by email.
             </p>
           </aside>
         </div>
       </section>
 
-      <section className="py-14 sm:py-18">
+      <section className="py-4 sm:py-10">
         <div className="mx-auto max-w-5xl px-5 sm:px-8">
           <div className="max-w-2xl">
             <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">What do you need help with?</p>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight text-slate-950">Choose the closest topic</h2>
-            <p className="mt-4 text-base leading-relaxed text-slate-600">
+            <h2 className="mt-1 text-xl font-bold tracking-tight text-slate-950 sm:mt-1.5 sm:text-3xl">Choose the closest topic</h2>
+            <p className="mt-1.5 text-sm leading-relaxed text-slate-600 sm:mt-2 sm:text-base">
               Each option starts an email with a useful subject line. You can still describe anything else in your message.
             </p>
           </div>
 
-          <div className="mt-8 grid gap-4 sm:grid-cols-2">
+          <div className="mt-3 grid gap-3 sm:mt-5 sm:grid-cols-2">
             {supportTopics.map((topic) => {
               const Icon = topic.icon;
 
               return (
                 <a
                   key={topic.title}
-                  href={supportHref(topic.subject)}
-                  className="group rounded-2xl border border-slate-200 bg-white p-6 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-lg hover:shadow-slate-200/60"
+                  href={supportHref(topic.subject, topic.body)}
+                  className="group flex min-h-11 touch-manipulation items-center gap-4 rounded-xl border border-slate-200 bg-white px-4 py-3 transition hover:border-slate-300 hover:bg-slate-50 active:bg-slate-100"
                 >
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+                  <span className="pointer-events-none flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
                     <Icon className="h-5 w-5" aria-hidden="true" />
-                  </div>
-                  <h3 className="mt-5 text-lg font-bold text-slate-950">{topic.title}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-slate-600">{topic.description}</p>
-                  <span className="mt-5 inline-flex min-h-11 items-center text-sm font-semibold text-[#0D1B2E] underline decoration-amber-500 decoration-2 underline-offset-4">
-                    Email about this
                   </span>
+                  <span className="pointer-events-none min-w-0 flex-1">
+                    <span className="block text-sm font-semibold text-slate-950">{topic.title}</span>
+                    <span className="block text-xs text-slate-500">{topic.description}</span>
+                  </span>
+                  <span className="pointer-events-none hidden shrink-0 items-center gap-1 text-xs font-semibold text-[#0D1B2E] sm:inline-flex">
+                    Email support
+                  </span>
+                  <ChevronRight className="pointer-events-none h-4 w-4 shrink-0 text-slate-400 transition group-hover:text-slate-600" aria-hidden="true" />
                 </a>
               );
             })}
+          </div>
+
+          <div className="mt-6 rounded-xl border border-slate-200 bg-white px-4 py-4 sm:px-6">
+            <p className="text-sm font-semibold text-slate-950">Can&apos;t open your email app?</p>
+            <a
+              href={`mailto:${SUPPORT_EMAIL}`}
+              className="mt-1 inline-block min-h-11 touch-manipulation text-sm font-medium text-[#0D1B2E] underline decoration-amber-500 decoration-2 underline-offset-4"
+            >
+              {SUPPORT_EMAIL}
+            </a>
+            <div className="mt-3">
+              <CopyEmailButton />
+            </div>
           </div>
 
           <div className="mt-8 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8">
