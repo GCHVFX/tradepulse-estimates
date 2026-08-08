@@ -8,72 +8,13 @@ import {
   createSupabaseSmsSuppressionStore,
   recordSuppressionIfUnsubscribedError,
 } from "@/lib/sms-suppression";
-import { buildPaymentReminderSms, type PaymentReminderStage } from "@/lib/payment-reminder-message";
-
-type StageName = PaymentReminderStage;
-
-// Offsets are days relative to the due date. A stage is eligible once
-// today >= due_date + offsetDays. reminder_count tracks how many stages
-// have been sent, so each stage fires at most once per invoice.
-const STAGES: Array<{ name: StageName; offsetDays: number }> = [
-  { name: "pre_due", offsetDays: -2 },
-  { name: "overdue_1", offsetDays: 1 },
-  { name: "overdue_2", offsetDays: 5 },
-];
-
-// After the named stages, keep reminding weekly until paid. The first
-// ongoing reminder fires at due_date + ONGOING_START_DAYS, then every
-// ONGOING_INTERVAL_DAYS after that.
-const ONGOING_START_DAYS = 14;
-const ONGOING_INTERVAL_DAYS = 7;
-
-interface MessageContext {
-  customerName: string;
-  invoiceRef: string;
-  amount: string;
-  businessName: string;
-  dueDateText: string;
-  paymentLink: string | null;
-  daysOverdue: number;
-}
-
-function buildEmailBody(stage: StageName, ctx: MessageContext): string {
-  const { customerName, dueDateText, businessName } = ctx;
-  switch (stage) {
-    case "pre_due":
-      return `Hi ${customerName}, just a reminder that the invoice below from ${businessName} is due on ${dueDateText}.`;
-    case "overdue_1":
-      return `Hi ${customerName}, the invoice below from ${businessName} was due ${dueDateText}. Please arrange payment at your earliest convenience.`;
-    case "overdue_2":
-      return `Hi ${customerName}, the invoice below remains outstanding as of ${dueDateText}. Please contact us or arrange payment.`;
-    case "overdue_ongoing":
-      return `Hi ${customerName}, the invoice below from ${businessName} remains unpaid. Please contact us or arrange payment.`;
-  }
-}
-
-function buildEmailHtml(stage: StageName, ctx: MessageContext): string {
-  const { invoiceRef, amount, businessName, dueDateText, paymentLink } = ctx;
-  const isUrl = paymentLink ? /^https?:\/\//i.test(paymentLink) : false;
-  const paymentBlock = paymentLink
-    ? isUrl
-      ? `<a href="${paymentLink}" style="display: inline-block; background: #f59e0b; color: #111; font-weight: 700; font-size: 15px; padding: 14px 28px; border-radius: 10px; text-decoration: none; margin-top: 8px;">Pay Now</a>
-         <p style="font-size: 13px; color: #888; margin: 16px 0 0;">Or copy this link: ${paymentLink}</p>`
-      : `<p style="font-size: 15px; margin: 16px 0 0;">Pay here: ${paymentLink}</p>`
-    : "";
-
-  return `
-    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 24px; color: #111;">
-      <p style="font-size: 16px; margin: 0 0 16px;">${buildEmailBody(stage, ctx)}</p>
-      <div style="background: #f4f4f5; border-radius: 10px; padding: 16px 20px; margin: 0 0 16px;">
-        <p style="font-size: 14px; margin: 0 0 6px;"><strong>Invoice #:</strong> ${invoiceRef}</p>
-        <p style="font-size: 14px; margin: 0 0 6px;"><strong>Amount:</strong> $${amount}</p>
-        <p style="font-size: 14px; margin: 0 0 6px;"><strong>Due date:</strong> ${dueDateText}</p>
-        <p style="font-size: 14px; margin: 0;"><strong>From:</strong> ${businessName}</p>
-      </div>
-      ${paymentBlock}
-    </div>
-  `;
-}
+import {
+  buildPaymentReminderSms,
+  buildPaymentReminderEmailBody,
+  buildPaymentReminderEmailHtml,
+  type PaymentReminderEmailContext,
+} from "@/lib/payment-reminder-message";
+import { computeNextReminderStage, formatDueDateText } from "@/lib/payment-reminder-stage";
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const authHeader = request.headers.get("authorization");
@@ -124,10 +65,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
   const suppressionStore = createSupabaseSmsSuppressionStore(supabaseAdmin);
 
-  const now = new Date();
-  const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  const msPerDay = 24 * 60 * 60 * 1000;
-
   let sent = 0;
 
   for (const estimate of estimates) {
@@ -140,36 +77,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     // would otherwise still deliver a reminder under a generic name.
     if (!businessMap.has(estimate.business_id)) continue;
 
-    const [year, month, day] = estimate.due_date.slice(0, 10).split("-").map(Number);
-    if (!year || !month || !day) continue;
-    const dueUtc = Date.UTC(year, month - 1, day);
-    const daysFromDue = Math.floor((todayUtc - dueUtc) / msPerDay);
-
-    const stagesSent = estimate.reminder_count ?? 0;
-
-    let stageName: StageName | null = null;
-    let nextReminderCount = stagesSent;
-
-    if (stagesSent < STAGES.length) {
-      // Named stages: pre_due, overdue_1, overdue_2
-      let stageIndex = -1;
-      for (let i = 0; i < STAGES.length; i++) {
-        if (daysFromDue >= STAGES[i].offsetDays) stageIndex = i;
-      }
-      if (stageIndex >= 0 && stagesSent <= stageIndex) {
-        stageName = STAGES[stageIndex].name;
-        nextReminderCount = stageIndex + 1;
-      }
-    } else {
-      // All named stages sent. Keep reminding weekly until paid.
-      const weeklySent = stagesSent - STAGES.length;
-      if (daysFromDue >= ONGOING_START_DAYS + ONGOING_INTERVAL_DAYS * weeklySent) {
-        stageName = "overdue_ongoing";
-        nextReminderCount = stagesSent + 1;
-      }
-    }
-
-    if (!stageName) continue;
+    const next = computeNextReminderStage(estimate.due_date, estimate.reminder_count ?? 0);
+    if (!next) continue;
+    const { stage: stageName, nextReminderCount } = next;
 
     const business = businessMap.get(estimate.business_id);
     // "your contractor" is only for the email subject/body below, which
@@ -181,19 +91,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const smsBusinessName = business?.name?.trim() || "";
     const paymentLink = business?.payment_link?.trim() || null;
 
-    const ctx: MessageContext = {
+    const ctx: PaymentReminderEmailContext = {
       customerName: estimate.customer_name?.trim() || "there",
       invoiceRef: estimate.id.slice(0, 8),
       amount: estimate.invoice_amount.toFixed(2),
       businessName,
-      dueDateText: new Date(dueUtc).toLocaleDateString("en-CA", {
-        month: "long",
-        day: "numeric",
-        year: "numeric",
-        timeZone: "UTC",
-      }),
+      dueDateText: formatDueDateText(estimate.due_date),
       paymentLink,
-      daysOverdue: Math.max(daysFromDue, 0),
     };
 
     const reminderRows: Array<{
@@ -256,7 +160,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     if (resend && estimate.customer_email?.trim()) {
-      const html = buildEmailHtml(stageName, ctx);
+      const html = buildPaymentReminderEmailHtml(stageName, ctx);
       try {
         const result = await resend.emails.send({
           from: "TradePulse Estimates <estimates@trytradepulse.com>",
@@ -272,7 +176,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             business_id: estimate.business_id,
             channel: "email",
             stage: stageName,
-            message: buildEmailBody(stageName, ctx),
+            message: buildPaymentReminderEmailBody(stageName, ctx),
           });
         }
       } catch (err) {

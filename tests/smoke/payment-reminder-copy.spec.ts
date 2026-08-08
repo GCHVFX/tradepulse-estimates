@@ -103,13 +103,25 @@ test("reminder-stage distinctions are preserved in the lead-in", () => {
   expect(buildPaymentReminderSms("overdue_ongoing", ctx())).toContain("remains unpaid.");
 });
 
-test("the cron route builds its SMS from the centralized formatter, not a local copy", () => {
+test("the cron route builds its SMS and email from the centralized formatters, not local copies", () => {
   const source = readFileSync("app/api/cron/payment-reminders/route.ts", "utf8");
-  expect(source).toContain('import { buildPaymentReminderSms, type PaymentReminderStage } from "@/lib/payment-reminder-message"');
+  expect(source).toContain('from "@/lib/payment-reminder-message"');
   expect(source).toContain("buildPaymentReminderSms(stageName,");
+  expect(source).toContain("buildPaymentReminderEmailHtml(stageName,");
+  expect(source).toContain("buildPaymentReminderEmailBody(stageName,");
   // The email path is unaffected by this task and is allowed to keep the
   // "your contractor" fallback (businessName); the SMS path must build its
   // message from smsBusinessName, which has no such fallback.
   expect(source).toContain("businessName: smsBusinessName,");
   expect(source).not.toContain("function buildSmsMessage");
+  expect(source).not.toContain("function buildEmailBody");
+  expect(source).not.toContain("function buildEmailHtml");
+});
+
+test("the cron route computes reminder stages via the shared stage-selection function, not a local copy", () => {
+  const source = readFileSync("app/api/cron/payment-reminders/route.ts", "utf8");
+  expect(source).toContain('from "@/lib/payment-reminder-stage"');
+  expect(source).toContain("computeNextReminderStage(");
+  expect(source).not.toContain("const STAGES");
+  expect(source).not.toContain("const ONGOING_START_DAYS");
 });

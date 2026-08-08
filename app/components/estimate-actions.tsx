@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { SendEstimateSheet } from "./send-estimate-sheet";
 import { MarkJobDoneSheet } from "./mark-job-done-sheet";
@@ -78,6 +78,35 @@ export function EstimateActions({
   }, []);
 
   const isZeroTotal = !liveTotal || liveTotal <= 0;
+
+  // This fixed bar's content is genuinely variable height: it can be one
+  // 56px button or several stacked blocks (Job Done card, review-request
+  // panel, SMS-opted-out banner, Mark as Paid) well over 400px tall,
+  // depending on the estimate's state. app/estimates/[id]/page.tsx's <main>
+  // needs to reserve exactly that much bottom padding -- not a guessed
+  // constant -- or a tall state either shows a gap (padding too generous)
+  // or hides real content behind the bar (padding too small, measured up to
+  // 410px in the worst realistic combination during this fix, nearly double
+  // the previous static pb-[14rem]/224px). Measuring the real height here
+  // and publishing it as a CSS custom property is what makes that padding
+  // correct for every state without page.tsx needing to know this
+  // component's internals.
+  const actionBarRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = actionBarRef.current;
+    if (!el) return;
+    const publishHeight = () => {
+      document.documentElement.style.setProperty("--tp-estimate-action-bar-height", `${el.offsetHeight}px`);
+    };
+    publishHeight();
+    const observer = new ResizeObserver(publishHeight);
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      document.documentElement.style.removeProperty("--tp-estimate-action-bar-height");
+    };
+  }, []);
+
   const [showSendSheet, setShowSendSheet] = useState(false);
   const [showDoneSheet, setShowDoneSheet] = useState(false);
   const [doneSheetInitialPanel, setDoneSheetInitialPanel] = useState<"review-ready" | "needs-link">("review-ready");
@@ -93,6 +122,10 @@ export function EstimateActions({
   const [confirmingPaid, setConfirmingPaid] = useState(false);
   const [isMarkingPaid, setIsMarkingPaid] = useState(false);
   const [markPaidError, setMarkPaidError] = useState("");
+  const [confirmingReminder, setConfirmingReminder] = useState(false);
+  const [isSendingReminder, setIsSendingReminder] = useState(false);
+  const [reminderResult, setReminderResult] = useState<string | null>(null);
+  const [reminderResultIsError, setReminderResultIsError] = useState(false);
   // One-time confirmation after marking invoiced; shown once per session
   const [showInvoiceNudge, setShowInvoiceNudge] = useState(false);
   const [invoiceNudgeVisible, setInvoiceNudgeVisible] = useState(false);
@@ -135,6 +168,47 @@ export function EstimateActions({
       setConfirmingPaid(false);
     } finally {
       setIsMarkingPaid(false);
+    }
+  }
+
+  async function handleSendReminder() {
+    if (isSendingReminder) return;
+    setIsSendingReminder(true);
+    setReminderResult(null);
+    setReminderResultIsError(false);
+    try {
+      const res = await fetch(`/api/estimates/${estimateId}/send-reminder`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setReminderResult((data as { error?: string }).error ?? "Reminder could not be sent");
+        setReminderResultIsError(true);
+        return;
+      }
+      const { smsOutcome, emailOutcome } = data as { smsOutcome: string; emailOutcome: string };
+      let message: string;
+      if (smsOutcome === "sent" && emailOutcome === "sent") {
+        message = "Reminder sent by text and email";
+      } else if (smsOutcome === "sent") {
+        message = "Reminder sent by text";
+      } else if (emailOutcome === "sent" && smsOutcome === "suppressed") {
+        message = "SMS opted out. Reminder sent by email.";
+      } else if (emailOutcome === "sent") {
+        message = "Reminder sent by email";
+      } else if (smsOutcome === "suppressed" && emailOutcome === "no_email") {
+        message = "SMS opted out. No email address available.";
+      } else if (smsOutcome === "no_phone" && emailOutcome === "no_email") {
+        message = "No customer contact method available.";
+      } else {
+        message = "Reminder could not be sent";
+      }
+      setReminderResult(message);
+      setReminderResultIsError(message === "Reminder could not be sent");
+    } catch {
+      setReminderResult("Reminder could not be sent");
+      setReminderResultIsError(true);
+    } finally {
+      setIsSendingReminder(false);
+      setConfirmingReminder(false);
     }
   }
 
@@ -235,23 +309,24 @@ export function EstimateActions({
 
   return (
     <>
-      {/* BottomNav renders at 93.5px tall (measured, verified via
-          getBoundingClientRect). bottom-[102px] left an 8.5px gap above the
-          nav through which the scrolling page content behind both fixed
-          bars was visible. 90px gives a small deliberate overlap instead of
-          an exact match, so the gap can't reopen from a sub-pixel rounding
-          difference. Both bars are solid zinc-950 here, so the overlap is
-          invisible; if BottomNav's own layout changes height, remeasure and
-          update this number too.
-
-          BottomNav's floating "New" circle (z-40, w-16 h-16 -mt-5) pokes up
-          about 19px above the nav's own top edge by design. With this div's
-          original pb-4, its bottom button's own bottom edge landed 6.5px
-          into that zone (measured), so the circle -- being on top -- could
-          intercept a tap meant for the button. pb-7 lifts the button clear
-          of it while the div's own edge still touches/overlaps the nav as
-          above, so no gap reopens either. */}
-      <div className="fixed bottom-[90px] left-0 right-0 px-5 pb-7 pt-4 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent flex flex-col gap-3 z-30">
+      {/* BottomNav was redesigned to a flat grid-cols-4 bar (2026-08) and now
+          renders at 87px tall (measured via getBoundingClientRect at
+          375-412px widths, no safe-area inset), not the ~93.5px an earlier
+          version of this comment assumed for the older floating-circle nav.
+          That drift silently turned the old bottom-[90px]'s intended ~3.5px
+          overlap into a 3px *gap* -- through which the scrolling white
+          estimate card behind this bar became visible as a thin strip,
+          since the gap fell inside this div's own top-fade gradient where
+          neither element paints a solid background. bottom-[84px] restores
+          a small deliberate overlap (87-84=3px) against the nav's current
+          height. Both bars are solid zinc-950 here, so the overlap itself
+          is invisible. If BottomNav's height changes again, remeasure and
+          update this number -- this is exactly the failure mode that
+          reopened once already. */}
+      <div
+        ref={actionBarRef}
+        className="fixed bottom-[84px] left-0 right-0 px-5 pb-7 pt-4 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent flex flex-col gap-3 z-30"
+      >
         {isQuoteRequest ? (
           <>
             {convertError && (
@@ -365,7 +440,7 @@ export function EstimateActions({
             onClick={() => setShowInvoiceSheet(true)}
             className="w-full bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px]"
           >
-            Send Payment Reminder
+            Invoice This Job
           </button>
         )}
 
@@ -392,6 +467,36 @@ export function EstimateActions({
                 : confirmingPaid
                 ? "Confirm -- mark as paid?"
                 : "Mark as Paid"}
+            </button>
+          </>
+        )}
+
+        {hasInvoice && localPaymentStatus === "unpaid" && isPro && (
+          <>
+            {reminderResult && (
+              <p className={`text-xs text-center ${reminderResultIsError ? "text-red-400" : "text-zinc-400"}`}>
+                {reminderResult}
+              </p>
+            )}
+            <button
+              type="button"
+              disabled={isSendingReminder}
+              onClick={() => {
+                if (confirmingReminder) {
+                  handleSendReminder();
+                } else {
+                  setReminderResult(null);
+                  setConfirmingReminder(true);
+                }
+              }}
+              className="w-full bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px] flex items-center justify-center gap-2"
+            >
+              {isSendingReminder && <Spinner className="w-5 h-5" />}
+              {isSendingReminder
+                ? "Sending..."
+                : confirmingReminder
+                ? "Confirm -- send reminder now?"
+                : "Send Reminder Now"}
             </button>
           </>
         )}

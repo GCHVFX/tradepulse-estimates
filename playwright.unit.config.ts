@@ -20,6 +20,7 @@ export default defineConfig({
     "sms-suppression-guard.spec.ts",
     "payment-reminder-copy.spec.ts",
     "payment-reminder-message-preview.spec.ts",
+    "manual-payment-reminder.spec.ts",
   ],
   fullyParallel: false,
   workers: 1,

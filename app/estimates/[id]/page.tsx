@@ -121,8 +121,24 @@ export default async function EstimatePage({
       {/* The wrapping div is min-h-dvh (a floor, not a cap), so once content
           exceeds one screen this main never actually clips or scrolls on its
           own -- overflow-auto here is a no-op, the whole document scrolls
-          normally instead. Left plain to match that reality. */}
-      <main className="flex-1 px-4 sm:px-5 pb-[14rem]">
+          normally instead. Left plain to match that reality.
+
+          Bottom padding must clear both fixed overlays (EstimateActions'
+          bar plus BottomNav) or the fixed bar either shows a gap behind it
+          (padding too generous) or hides real estimate content with no way
+          to scroll it into view (padding too small) -- the actual bug this
+          padding is fixing. EstimateActions' own height is state-dependent
+          (a single 56px button up to several stacked panels well over
+          400px), so a static guess can't stay correct for every state;
+          it publishes its real measured height as --tp-estimate-action-bar-
+          height (see estimate-actions.tsx), and 108px below covers
+          BottomNav's ~87px plus the small deliberate overlap plus a little
+          breathing room. The 200px fallback only applies before that
+          effect's first paint. */}
+      <main
+        className="flex-1 px-4 sm:px-5"
+        style={{ paddingBottom: "calc(var(--tp-estimate-action-bar-height, 200px) + 108px)" }}
+      >
         {isQuoteRequest ? (
           <>
             <div className="bg-white rounded-2xl p-5 mt-2">
