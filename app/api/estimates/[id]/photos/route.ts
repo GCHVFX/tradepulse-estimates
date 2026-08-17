@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
+import { decodeBase64Image, imageMimeTypeFromBytes } from "@/lib/image-validation";
+import {
+  releasePhotoUploadReservation,
+  reservePhotoUpload,
+} from "@/lib/photo-upload-reservations";
 
 const MAX_PHOTOS = 5;
 const MAX_PHOTO_SIZE = 2 * 1024 * 1024; // 2MB per photo
+const MAX_PHOTO_BASE64_LENGTH = 3 * 1024 * 1024;
 
 export async function POST(
   request: NextRequest,
@@ -49,7 +55,7 @@ export async function POST(
     return applyTo(NextResponse.json({ error: `Maximum ${MAX_PHOTOS} photos` }, { status: 400 }));
   }
 
-  const photoUrls: string[] = [];
+  const decodedPhotos: Buffer[] = [];
 
   for (const entry of body.photos) {
     const base64 =
@@ -60,11 +66,8 @@ export async function POST(
       return applyTo(NextResponse.json({ error: "Each photo must include base64 data" }, { status: 400 }));
     }
 
-    const raw = base64.includes(",") ? base64.split(",")[1] : base64;
-    let buffer: Buffer;
-    try {
-      buffer = Buffer.from(raw, "base64");
-    } catch {
+    const buffer = decodeBase64Image(base64, MAX_PHOTO_BASE64_LENGTH);
+    if (!buffer) {
       return applyTo(NextResponse.json({ error: "Invalid image data" }, { status: 400 }));
     }
     if (buffer.byteLength === 0) {
@@ -73,42 +76,95 @@ export async function POST(
     if (buffer.byteLength > MAX_PHOTO_SIZE) {
       return applyTo(NextResponse.json({ error: "Each photo must be under 2MB" }, { status: 400 }));
     }
-
-    const filename = `${crypto.randomUUID()}.jpg`;
-    const storagePath = `${user.id}/${id}/${filename}`;
-    const { error: uploadError } = await supabaseAdmin.storage
-      .from("tpe-estimate-photos")
-      .upload(storagePath, buffer, { contentType: "image/jpeg", upsert: false });
-
-    if (uploadError) {
-      console.error("[estimate-photos] upload failed:", uploadError.message);
-      return applyTo(NextResponse.json({ error: "Failed to upload photo. Please try again." }, { status: 500 }));
+    if (imageMimeTypeFromBytes(buffer) !== "image/jpeg") {
+      return applyTo(NextResponse.json({ error: "Each estimate photo must be a JPEG image" }, { status: 400 }));
     }
+    decodedPhotos.push(buffer);
+  }
 
-    // Insert record into tpe_estimate_photos table
-    const { error: insertError } = await supabaseAdmin
-      .from("tpe_estimate_photos")
-      .insert({
-        estimate_id: id,
-        storage_path: storagePath,
-        original_filename: filename,
-        mime_type: "image/jpeg",
-        file_size: buffer.byteLength,
-      });
+  const incomingBytes = decodedPhotos.reduce((total, photo) => total + photo.byteLength, 0);
+  let reservation;
+  try {
+    reservation = await reservePhotoUpload(supabaseAdmin, {
+      businessId: business.id,
+      estimateId: estimate.id,
+      expectedFileCount: decodedPhotos.length,
+      expectedByteCount: incomingBytes,
+    });
+  } catch (error) {
+    console.error("[estimate-photos] unable to reserve upload capacity:", error);
+    return applyTo(NextResponse.json({ error: "Unable to reserve photo storage. Please try again." }, { status: 500 }));
+  }
 
-    if (insertError) {
-      console.error("[estimate-photos] DB insert failed:", insertError.message);
-      return applyTo(NextResponse.json({ error: "Failed to save photo record. Please try again." }, { status: 500 }));
+  if (!reservation.reservationId) {
+    const error = reservation.reason === "photo_limit"
+      ? "Your business has reached its photo limit"
+      : "Your business has reached its photo storage limit";
+    return applyTo(NextResponse.json({ error }, { status: 409 }));
+  }
+
+  const photoUrls: string[] = [];
+  const uploadedStoragePaths: string[] = [];
+  const insertedStoragePaths: string[] = [];
+
+  try {
+    for (const buffer of decodedPhotos) {
+
+      const filename = `${crypto.randomUUID()}.jpg`;
+      const storagePath = `${user.id}/${id}/${filename}`;
+      const { error: uploadError } = await supabaseAdmin.storage
+        .from("tpe-estimate-photos")
+        .upload(storagePath, buffer, { contentType: "image/jpeg", upsert: false });
+
+      if (uploadError) {
+        console.error("[estimate-photos] upload failed:", uploadError.message);
+        throw new Error("PHOTO_UPLOAD_FAILED");
+      }
+      uploadedStoragePaths.push(storagePath);
+
+      const { error: insertError } = await supabaseAdmin
+        .from("tpe_estimate_photos")
+        .insert({
+          estimate_id: id,
+          storage_path: storagePath,
+          original_filename: filename,
+          mime_type: "image/jpeg",
+          file_size: buffer.byteLength,
+        });
+
+      if (insertError) {
+        console.error("[estimate-photos] DB insert failed:", insertError.message);
+        throw new Error("PHOTO_RECORD_INSERT_FAILED");
+      }
+      insertedStoragePaths.push(storagePath);
+
+      const { data: signedUrlData } = await supabaseAdmin.storage
+        .from("tpe-estimate-photos")
+        .createSignedUrl(storagePath, 60 * 60 * 24 * 365); // 1 year
+
+      if (signedUrlData?.signedUrl) {
+        photoUrls.push(signedUrlData.signedUrl);
+      }
     }
-
-    // Generate a signed URL for the photo
-    const { data: signedUrlData } = await supabaseAdmin.storage
-      .from("tpe-estimate-photos")
-      .createSignedUrl(storagePath, 60 * 60 * 24 * 365); // 1 year
-
-    if (signedUrlData?.signedUrl) {
-      photoUrls.push(signedUrlData.signedUrl);
+  } catch (error) {
+    if (insertedStoragePaths.length > 0) {
+      const { error: rollbackDbError } = await supabaseAdmin
+        .from("tpe_estimate_photos")
+        .delete()
+        .eq("estimate_id", id)
+        .in("storage_path", insertedStoragePaths);
+      if (rollbackDbError) console.error("[estimate-photos] record rollback failed:", rollbackDbError.message);
     }
+    if (uploadedStoragePaths.length > 0) {
+      const { error: rollbackStorageError } = await supabaseAdmin.storage
+        .from("tpe-estimate-photos")
+        .remove(uploadedStoragePaths);
+      if (rollbackStorageError) console.error("[estimate-photos] storage rollback failed:", rollbackStorageError.message);
+    }
+    console.error("[estimate-photos] upload batch failed:", error);
+    return applyTo(NextResponse.json({ error: "Failed to upload photos. Please try again." }, { status: 500 }));
+  } finally {
+    await releasePhotoUploadReservation(supabaseAdmin, reservation.reservationId);
   }
 
   return applyTo(NextResponse.json({ photoUrls }));

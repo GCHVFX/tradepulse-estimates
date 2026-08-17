@@ -4,6 +4,8 @@ import { validateContentType } from "@/lib/api-utils";
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
+import { claimDelivery, markDeliverySent } from "@/lib/delivery-claims";
+import { normalizeEmail } from "@/lib/request-guards";
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const { supabase, applyTo } = createApiClient(request);
@@ -35,7 +37,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     estimateId?: unknown;
   };
 
-  if (typeof to !== "string" || !to.trim()) {
+  const suppliedEmail = typeof to === "string" ? normalizeEmail(to) : null;
+  if (!suppliedEmail) {
     return applyTo(
       NextResponse.json({ error: "Email address is required" }, { status: 400 })
     );
@@ -73,13 +76,36 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // Verify ownership of estimate
   const { data: estimate } = await supabaseAdmin
     .from("tpe_estimates")
-    .select("id, customer_name")
+    .select("id, customer_name, customer_email")
     .eq("id", estimateId)
     .eq("business_id", business.id)
     .maybeSingle();
 
   if (!estimate) {
     return applyTo(NextResponse.json({ error: "Estimate not found" }, { status: 404 }));
+  }
+
+  const storedEmail = estimate.customer_email ? normalizeEmail(estimate.customer_email) : null;
+  if (storedEmail && storedEmail !== suppliedEmail) {
+    return applyTo(NextResponse.json({ error: "Use the customer email saved on this estimate" }, { status: 400 }));
+  }
+  const recipient = storedEmail ?? suppliedEmail;
+
+  let claimId: string | null;
+  try {
+    claimId = await claimDelivery(supabaseAdmin, {
+      businessId: business.id,
+      estimateId,
+      channel: "email",
+      recipient,
+      action: "estimate-send",
+      stage: "initial",
+    });
+  } catch {
+    return applyTo(NextResponse.json({ error: "Unable to prepare email delivery" }, { status: 503 }));
+  }
+  if (!claimId) {
+    return applyTo(NextResponse.json({ error: "This estimate was already sent by email to this customer" }, { status: 409 }));
   }
 
   const origin =
@@ -99,7 +125,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const result = await resend.emails.send({
       from: "TradePulse Estimates <estimates@trytradepulse.com>",
-      to: to.trim(),
+      to: recipient,
       subject,
       html: `
         <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 24px; color: #111;">
@@ -130,6 +156,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
+    await markDeliverySent(supabaseAdmin, claimId);
+
     // Update estimate status with double ownership check
     const { error: updateError } = await supabaseAdmin
       .from("tpe_estimates")
@@ -137,6 +165,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         status: "sent",
         sent_via: "email",
         sent_at: new Date().toISOString(),
+        ...(!storedEmail ? { customer_email: recipient } : {}),
       })
       .eq("id", estimateId)
       .eq("business_id", business.id);

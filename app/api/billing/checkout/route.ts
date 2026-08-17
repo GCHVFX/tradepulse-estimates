@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
 import { stripe } from "@/lib/stripe";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const { supabase, applyTo } = createApiClient(request);
@@ -15,13 +16,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("stripe_customer_id, stripe_subscription_id, name, email, plan, subscription_status")
+    .select("id, stripe_customer_id, stripe_subscription_id, name, email, plan, subscription_status")
     .eq("owner_user_id", user.id)
     .maybeSingle();
 
   if (!business) {
     console.error("[checkout] business not found for user:", user.id);
     return applyTo(NextResponse.json({ error: "Business not found" }, { status: 404 }));
+  }
+
+  const checkoutLimit = await checkRateLimit(supabaseAdmin, business.id, "stripe-checkout", 5, 900);
+  if (!checkoutLimit.allowed) {
+    return applyTo(NextResponse.json({ error: "Too many checkout attempts. Try again shortly." }, { status: 429 }));
   }
 
   const origin = request.headers.get("origin") ?? process.env.NEXT_PUBLIC_APP_URL ?? "https://www.trytradepulse.com";

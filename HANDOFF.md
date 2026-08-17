@@ -1,10 +1,11 @@
 # TradePulse handoff
 
-Updated: 2026-08-07 (SMS opt-out handling and payment-reminder message preview)
+Updated: 2026-08-17 (cost-amplification guards, committed locally)
 
 ## Current state
 
-- **Branch:** `main`
+- **Branch:** `fix/cost-amplification-guards` from `main` commit `6856303`.
+- **Cost-amplification guards:** committed locally on this branch and not pushed or deployed. The applied remote migration `20260817044348_cost_amplification_guards` matches the repo file of the same name. It deduplicates existing rate-limit rows, makes `(key, action)` unique, adds atomic `take_rate_limit`, and adds service-role-only durable delivery claims. The additive remote migrations `20260817145800_add_photo_upload_reservations`, `20260817150102_cleanup_photo_upload_reservations`, and `20260817150442_fix_photo_reservation_file_count` match the repo files of the same names, atomically reserve business photo count and byte capacity before Storage writes, count pending requested files rather than batches, and delete handled reservation rows.
 - **Deployed Production application commit:** `3e4e0c0` ("Add SMS opt-out handling and reminder preview"), deployment `dpl_DTaE51jTE2U5JvDFLUX9fBWq2epx`, READY. Details under "Production deployment" in the SMS opt-out section below.
 - **Prior Production deployment:** `dpl_F3No6EAu8FLbYH6GSRjLXt5qe8BZ`, READY, Git-sourced from `a58cc00` (`Improve homepage proof and support access`).
 - **Pricing:** Starter is **CA$29/month** and Pro is **CA$59/month**. Stripe price IDs remain environment-driven. Production pricing and Checkout paths were verified during the completed cutover.
@@ -221,6 +222,15 @@ Implemented, locally verified, committed, and deployed as noted below. Durable r
 - Hosted verification: recorded once confirmed post-push.
 
 **Exact next action:** perform the controlled production payment-reminder STOP/START test using one test invoice and the owner's own phone number (same outstanding action already queued for the SMS opt-out feature above — this release doesn't add a new Twilio configuration requirement, it reuses the already-deployed inbound webhook and suppression store).
+
+## Cost-amplification guard verification and next action
+
+- Migration reconciliation: Supabase records `20260817044348_cost_amplification_guards`; local source was renamed from `20260817044143_cost_amplification_guards.sql` after its applied functions, constraints, RLS state, comment, and service-role grants were confirmed to match. Its SQL was not re-run.
+- Photo uploads now take a service-role-only atomic reservation for the requested business, estimate, file count, and byte count. The reservation includes the full requested file count and bytes from pending uploads in the business quota, is deleted after success or handled failure, and stale pending reservations stop consuming quota after 15 minutes if an invocation terminates before cleanup.
+- Delivery claims remain deliberately cost-safe: a provider failure after a successful claim can block automatic retry. Manual support recovery is required until a deliberate, rate-limited recovery flow is implemented.
+- The focused claim-ordering test now checks an awaited claim and its negative-claim guard before each Twilio or Resend call. Re-run the focused test, full safe suite, typecheck, build, and `git diff --check` before any commit.
+
+**Exact next action:** verify provider dashboard caps before deployment or public testing. No real customer message, card, or production checkout was used.
 
 ## Known existing lint and metadata warnings (unchanged baseline)
 

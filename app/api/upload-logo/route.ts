@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
+import { decodeBase64Image, imageMimeTypeFromBytes } from "@/lib/image-validation";
 
 const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
+const MAX_LOGO_BASE64_LENGTH = 3 * 1024 * 1024;
 
 function getMimeTypeExtension(mimeType: string): string | null {
   const mapping: Record<string, string> = {
@@ -56,11 +58,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     // Decode base64
-    const base64 = body.data.split(",")[1] ?? body.data;
-    let buffer: Buffer;
-    try {
-      buffer = Buffer.from(base64, "base64");
-    } catch {
+    const buffer = decodeBase64Image(body.data, MAX_LOGO_BASE64_LENGTH);
+    if (!buffer) {
       return NextResponse.json({ error: "Invalid image data." }, { status: 400 });
     }
 
@@ -78,6 +77,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { error: "Image file is empty." },
         { status: 400 }
       );
+    }
+    if (imageMimeTypeFromBytes(buffer) !== body.type) {
+      return NextResponse.json({ error: "Image data does not match the selected file type." }, { status: 400 });
     }
 
     const admin = createClient(

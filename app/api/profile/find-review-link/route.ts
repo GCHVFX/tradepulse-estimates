@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createApiClient } from "@/lib/supabase-server";
+import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
 import { validateContentType } from "@/lib/api-utils";
+import { checkRateLimit } from "@/lib/rate-limit";
+
+const MAX_BUSINESS_NAME_LENGTH = 120;
+const MAX_CITY_LENGTH = 100;
+const MAX_EXTRA_DETAILS_LENGTH = 200;
 
 interface PlaceMatch {
   placeName: string;
@@ -77,6 +82,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
   if (typeof city !== "string" || !city.trim()) {
     return applyTo(NextResponse.json({ error: "City is required" }, { status: 400 }));
+  }
+  if (
+    businessName.trim().length > MAX_BUSINESS_NAME_LENGTH ||
+    city.trim().length > MAX_CITY_LENGTH ||
+    (typeof extraDetails === "string" && extraDetails.trim().length > MAX_EXTRA_DETAILS_LENGTH)
+  ) {
+    return applyTo(NextResponse.json({ error: "Search details are too long" }, { status: 400 }));
+  }
+
+  const rateLimit = await checkRateLimit(supabaseAdmin, user.id, "find-review-link", 10, 3600);
+  if (!rateLimit.allowed) {
+    return applyTo(NextResponse.json({ error: "Too many review-link searches. Try again later." }, { status: 429 }));
   }
 
   const apiKey = process.env.GOOGLE_PLACES_API_KEY;
