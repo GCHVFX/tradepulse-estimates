@@ -14,6 +14,7 @@ export default defineConfig({
     "estimate-items-conversion.spec.ts",
     "plan-pricing.spec.ts",
     "stripe-webhook.spec.ts",
+    "stripe-billing-recovery.spec.ts",
     "account-deletion.spec.ts",
     "bottom-nav.spec.ts",
     "twilio-inbound-webhook.spec.ts",
