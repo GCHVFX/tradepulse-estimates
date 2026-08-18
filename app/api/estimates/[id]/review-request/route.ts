@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import twilio from "twilio";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { claimDelivery, markDeliverySent } from "@/lib/delivery-claims";
 import {
   normalizePhoneE164,
   createSupabaseSmsSuppressionStore,
@@ -89,8 +91,22 @@ export async function POST(
     return applyTo(NextResponse.json({ error: "Review request already sent" }, { status: 409 }));
   }
 
+  if (force && !estimate.review_requested_at) {
+    return applyTo(NextResponse.json({ error: "Send the first review request before using resend" }, { status: 409 }));
+  }
+
   if (requestMessageBody !== null && !requestMessageBody) {
     return applyTo(NextResponse.json({ error: "Message cannot be empty" }, { status: 400 }));
+  }
+  if (requestMessageBody && requestMessageBody.length > 1000) {
+    return applyTo(NextResponse.json({ error: "Message is too long" }, { status: 400 }));
+  }
+
+  if (force) {
+    const resendLimit = await checkRateLimit(supabaseAdmin, business.id, "review-request-resend", 1, 86400);
+    if (!resendLimit.allowed) {
+      return applyTo(NextResponse.json({ error: "A review request resend is available tomorrow" }, { status: 429 }));
+    }
   }
 
   let formattedPhone: string;
@@ -118,6 +134,23 @@ export async function POST(
   const defaultMessage = `Thanks for choosing ${businessName}.\n\n${contactLine}\n\nIf you have a moment, we'd appreciate a Google review.`;
   const smsBody = `${requestMessageBody ?? defaultMessage}\n\n${business.google_review_link}`;
 
+  let claimId: string | null;
+  try {
+    claimId = await claimDelivery(supabaseAdmin, {
+      businessId: business.id,
+      estimateId: estimate.id,
+      channel: "sms",
+      recipient: suppressionKey,
+      action: force ? "review-request-resend" : "review-request",
+      stage: force ? new Date().toISOString().slice(0, 10) : "initial",
+    });
+  } catch {
+    return applyTo(NextResponse.json({ error: "Unable to prepare SMS delivery" }, { status: 503 }));
+  }
+  if (!claimId) {
+    return applyTo(NextResponse.json({ error: "This review request was already sent" }, { status: 409 }));
+  }
+
   try {
     const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
     await client.messages.create({
@@ -125,6 +158,7 @@ export async function POST(
       from: process.env.TWILIO_FROM_NUMBER,
       to: formattedPhone,
     });
+    await markDeliverySent(supabaseAdmin, claimId);
   } catch (err) {
     const optedOut = await recordSuppressionIfUnsubscribedError(suppressionStore, suppressionKey, err);
     if (optedOut) {

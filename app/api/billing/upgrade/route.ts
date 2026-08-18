@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
+import { recoverStoredStripeBillingReferences } from "@/lib/stripe-billing-recovery";
 
 function wantsHtmlRedirect(request: NextRequest): boolean {
   return request.headers.get("accept")?.includes("text/html") ?? false;
@@ -28,6 +29,7 @@ function respondWithError(
 }
 
 type UpgradeBusiness = {
+  id: string;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   name: string | null;
@@ -40,8 +42,41 @@ async function createProCheckoutUrl(
   business: UpgradeBusiness
 ): Promise<string | null> {
   const origin = request.headers.get("origin") ?? process.env.NEXT_PUBLIC_APP_URL ?? "https://www.trytradepulse.com";
-  let customerId = business.stripe_customer_id;
-  let previousSubscriptionId: string | undefined;
+  const references = await recoverStoredStripeBillingReferences(
+    stripe,
+    {
+      customerId: business.stripe_customer_id,
+      subscriptionId: business.stripe_subscription_id,
+    },
+    {
+      async clearCustomerAndSubscription() {
+        const { error } = await supabaseAdmin
+          .from("tpe_businesses")
+          .update({ stripe_customer_id: null, stripe_subscription_id: null })
+          .eq("id", business.id);
+        if (error) throw error;
+      },
+      async clearSubscription() {
+        const { error } = await supabaseAdmin
+          .from("tpe_businesses")
+          .update({ stripe_subscription_id: null })
+          .eq("id", business.id);
+        if (error) throw error;
+      },
+    }
+  );
+
+  if (references.subscriptionLookupError) {
+    console.error(
+      "[upgrade] failed to inspect trial:",
+      references.subscriptionLookupError instanceof Error
+        ? references.subscriptionLookupError.message
+        : references.subscriptionLookupError
+    );
+  }
+
+  let customerId = references.customerId;
+  const previousSubscriptionId = references.previousTrialSubscriptionId;
 
   if (!customerId) {
     const customer = await stripe.customers.create({
@@ -55,17 +90,6 @@ async function createProCheckoutUrl(
       .from("tpe_businesses")
       .update({ stripe_customer_id: customerId })
       .eq("owner_user_id", user.id);
-  }
-
-  if (business.stripe_subscription_id) {
-    try {
-      const existing = await stripe.subscriptions.retrieve(business.stripe_subscription_id);
-      if (existing.status === "trialing") {
-        previousSubscriptionId = business.stripe_subscription_id;
-      }
-    } catch (err) {
-      console.error("[upgrade] failed to inspect trial:", err instanceof Error ? err.message : err);
-    }
   }
 
   const session = await stripe.checkout.sessions.create({
@@ -98,7 +122,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("plan, subscription_status, stripe_subscription_id, stripe_customer_id, name, email")
+    .select("id, plan, subscription_status, stripe_subscription_id, stripe_customer_id, name, email")
     .eq("owner_user_id", user.id)
     .maybeSingle();
 

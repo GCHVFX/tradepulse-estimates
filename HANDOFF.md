@@ -1,11 +1,12 @@
 # TradePulse handoff
 
-Updated: 2026-08-07 (SMS opt-out handling and payment-reminder message preview)
+Updated: 2026-08-17 (Preview billing recovery reviewed; Production preflight pending)
 
 ## Current state
 
-- **Branch:** `main`
-- **Deployed Production application commit:** `3e4e0c0` ("Add SMS opt-out handling and reminder preview"), deployment `dpl_DTaE51jTE2U5JvDFLUX9fBWq2epx`, READY. Details under "Production deployment" in the SMS opt-out section below.
+- **Branch:** `fix/cost-amplification-guards` from `main` commit `6856303`.
+- **Cost-amplification guards:** committed and pushed on this branch at `6048ff05d9cf1f8269d1b966c9374330142bf346`, with Preview-only testing in progress. They are not merged to `main` or deployed to Production. The applied remote migration `20260817044348_cost_amplification_guards` matches the repo file of the same name. It deduplicates existing rate-limit rows, makes `(key, action)` unique, adds atomic `take_rate_limit`, and adds service-role-only durable delivery claims. The additive remote migrations `20260817145800_add_photo_upload_reservations`, `20260817150102_cleanup_photo_upload_reservations`, and `20260817150442_fix_photo_reservation_file_count` match the repo files of the same names, atomically reserve business photo count and byte capacity before Storage writes, count pending requested files rather than batches, and delete handled reservation rows.
+- **Deployed Production application commit:** `6856303`, deployment `dpl_Dbbzmd4GRX9QN6YAtkbYyi2FQU6c`, READY. It is the current `main` deployment and does not include the cost-amplification guards or Preview billing recovery.
 - **Prior Production deployment:** `dpl_F3No6EAu8FLbYH6GSRjLXt5qe8BZ`, READY, Git-sourced from `a58cc00` (`Improve homepage proof and support access`).
 - **Pricing:** Starter is **CA$29/month** and Pro is **CA$59/month**. Stripe price IDs remain environment-driven. Production pricing and Checkout paths were verified during the completed cutover.
 - **Communications:** remain disabled unless a future task explicitly authorises them.
@@ -221,6 +222,48 @@ Implemented, locally verified, committed, and deployed as noted below. Durable r
 - Hosted verification: recorded once confirmed post-push.
 
 **Exact next action:** perform the controlled production payment-reminder STOP/START test using one test invoice and the owner's own phone number (same outstanding action already queued for the SMS opt-out feature above — this release doesn't add a new Twilio configuration requirement, it reuses the already-deployed inbound webhook and suppression store).
+
+## Cost-amplification guard verification and next action
+
+- Migration reconciliation: Supabase records `20260817044348_cost_amplification_guards`; local source was renamed from `20260817044143_cost_amplification_guards.sql` after its applied functions, constraints, RLS state, comment, and service-role grants were confirmed to match. Its SQL was not re-run.
+- Photo uploads now take a service-role-only atomic reservation for the requested business, estimate, file count, and byte count. The reservation includes the full requested file count and bytes from pending uploads in the business quota, is deleted after success or handled failure, and stale pending reservations stop consuming quota after 15 minutes if an invocation terminates before cleanup.
+- Delivery claims remain deliberately cost-safe: a provider failure after a successful claim can block automatic retry. Manual support recovery is required until a deliberate, rate-limited recovery flow is implemented.
+- The focused claim-ordering test now checks an awaited claim and its negative-claim guard before each Twilio or Resend call. Re-run the focused test, full safe suite, typecheck, build, and `git diff --check` before any commit.
+
+### Preview smoke-test attempt (2026-08-17)
+
+- `fix/cost-amplification-guards` was pushed to `origin` at `6048ff05d9cf1f8269d1b966c9374330142bf346`. Its Git-triggered Vercel Preview deployment `dpl_8yWoVkhGaHYzub67ZEKRytPitHXS` failed before becoming testable.
+- The Preview build compiled and completed TypeScript, then failed while collecting page data because `STRIPE_SECRET_KEY` is not configured for the Preview environment. It is Production-only. Do not copy the Production key. Configure isolated Stripe **test-mode** Preview credentials and matching test price IDs before retrying.
+- Initially, `GOOGLE_PLACES_API_KEY` was absent from Production and Preview. It was later added to Preview only; it remains absent from Production.
+- The payment-reminder cron remains configured in `vercel.json`, but Vercel cron jobs run only on Production, so the failed Preview did not invoke it. No Preview route was requested and no test account, customer data, SMS, email, Stripe Checkout Session, payment, or Google Places request was created.
+- Local verification in this session: `git diff --check`, `npx.cmd tsc --noEmit`, focused guard tests (4 passed), and full safe unit suite (208 passed). Local `npx.cmd next build` could not fetch the public DM Sans font in this execution environment; Vercel's own build passed compilation and TypeScript before the missing Preview Stripe configuration stopped it.
+
+### Ready Preview follow-up (2026-08-17)
+
+- A later Preview redeploy, `dpl_9a92hxCKqTWNtY5g8Ba5A8uw56dr`, is READY at `https://tradepulse-estimates-a27y0qpuo-gchansen-2620s-projects.vercel.app` and its metadata confirms `6048ff05d9cf1f8269d1b966c9374330142bf346`. Its homepage returned 200.
+- Vercel environment names confirm `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_PRICE_ID`, and `GOOGLE_PLACES_API_KEY` are Preview-only, while `GOOGLE_PLACES_API_KEY` remains absent from Production. Preview has no `STRIPE_PRO_PRICE_ID` or `STRIPE_WEBHOOK_SECRET`. The READY deployment above was built before `STRIPE_PRICE_ID` was added, so its running `/api/billing/checkout` route still reports that variable as missing.
+- A Preview POST to `/api/profile/find-review-link` without authentication returned 401 before a Places lookup. A Preview POST to `/api/billing/checkout` without authentication redirected to `/login`; neither call created a Checkout Session or contacted a provider. Cron was not invoked.
+- The remaining controlled smoke checks were completed in the authenticated session below, except Checkout, which must not be retried against this already-built deployment.
+
+### Authenticated Preview smoke test (2026-08-17)
+
+- A controlled Preview account signed in successfully. One small synthetic, no-customer estimate was generated and the authenticated estimate list contained its generated ID exactly once. This invoked one expected Anthropic estimate-generation call.
+- One controlled password-reset request returned the generic `{ ok: true }` response. No SMS was sent. The reset route was exercised once only and may have invoked one expected Resend send.
+- One Starter Checkout POST was attempted with the Preview origin and without following any redirect. It returned HTTP 500 before a Checkout redirect. Deployment logs show `[checkout] STRIPE_PRICE_ID not configured`, so no Checkout Session, card entry, or payment occurred. Do not retry against this deployment.
+- One 1x1 valid PNG logo upload returned 200. One authenticated synthetic Google Places lookup returned 404 (no matching business) rather than a configuration error. The route may issue up to four Google search requests per one guarded lookup. Vercel environment names confirm the Places key is Preview-only and absent from Production.
+- Cron was not invoked. Provider dashboards were not accessed, so no dashboard usage delta was independently verified. No unexpected app-side provider request was identified beyond the one estimate generation, one controlled reset request, and one guarded Places lookup described above.
+
+**Exact next action:** after confirming the Preview `STRIPE_PRICE_ID` is a test-mode price, allow one Git-triggered Preview deployment so the new environment applies, then rerun only the single Starter Checkout test. Do not merge or deploy Production until that succeeds and provider dashboard caps are verified. No real customer message, card, or Production checkout was used.
+
+### Preview Pro-upgrade stale-reference recovery (2026-08-17)
+
+- Latest Preview deployment: `dpl_7PQhtzUh875YRPf4FQWRrrACgJ1Y`, READY at `https://tradepulse-estimates-az0rcg8q7-gchansen-2620s-projects.vercel.app`. It is Preview-only and was never promoted.
+- The earlier Pro-upgrade failure was confirmed as stale saved Stripe customer and subscription references on the controlled synthetic Preview account. Both objects were absent from the connected TradePulse Stripe sandbox. Only that account's `tpe_businesses.stripe_customer_id` and `tpe_businesses.stripe_subscription_id` were cleared, while its Starter plan and trial status were preserved.
+- `app/api/billing/upgrade/route.ts` now validates saved references before reuse. A missing saved customer clears both references and starts fresh Checkout; a missing subscription clears only that reference; valid trial references are retained for the existing metadata path. Non-missing subscription lookup failures retain the existing log-and-continue behaviour. `lib/stripe-billing-recovery.ts` and `tests/smoke/stripe-billing-recovery.spec.ts` cover those cases; `playwright.unit.config.ts` includes the focused test.
+- One authorized Preview Pro-upgrade POST then returned HTTP 200 with a Stripe sandbox Checkout redirect. The URL was not opened and no card or payment was used. Read-back confirms a fresh sandbox customer is stored for the synthetic account and no completed subscription is stored. Vercel runtime logs record the request as HTTP 200 with no route error.
+- Verification: `git diff --check` passed, `npx.cmd tsc --noEmit` passed, focused stale-reference tests passed (3), and the full safe unit suite passed (211). Local `npx.cmd next build` remains blocked only by this environment's failed public DM Sans fetch; the new Vercel Preview build passed compilation, TypeScript, page generation, and READY deployment.
+
+**Exact next action:** verify provider dashboard caps and alerts before any Production deployment. Keep Vercel cron disabled and Google Places absent from Production. The reviewed recovery work is ready for its authorised local commit; do not push or deploy it until explicitly authorised.
 
 ## Known existing lint and metadata warnings (unchanged baseline)
 

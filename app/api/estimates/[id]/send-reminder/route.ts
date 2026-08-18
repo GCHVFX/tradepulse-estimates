@@ -15,6 +15,7 @@ import {
   type PaymentReminderEmailContext,
 } from "@/lib/payment-reminder-message";
 import { selectManualReminderStage, formatDueDateText } from "@/lib/payment-reminder-stage";
+import { claimDelivery, markDeliverySent } from "@/lib/delivery-claims";
 
 type SmsOutcome = "sent" | "suppressed" | "no_phone" | "not_configured" | "failed";
 type EmailOutcome = "sent" | "no_email" | "not_configured" | "failed";
@@ -143,19 +144,32 @@ export async function POST(
           paymentLink: ctx.paymentLink,
         });
         try {
-          await twilioClient.messages.create({
-            body: smsBody,
-            from: process.env.TWILIO_FROM_NUMBER,
-            to: formattedPhone,
-          });
-          smsOutcome = "sent";
-          reminderRows.push({
-            estimate_id: estimate.id,
-            business_id: business.id,
+          const claimId = await claimDelivery(supabaseAdmin, {
+            businessId: business.id,
+            estimateId: estimate.id,
             channel: "sms",
-            stage: stageName,
-            message: smsBody,
+            recipient: formattedPhone,
+            action: "payment-reminder",
+            stage: `${stageName}:${nextReminderCount}`,
           });
+          if (!claimId) {
+            smsOutcome = "failed";
+          } else {
+            await twilioClient.messages.create({
+              body: smsBody,
+              from: process.env.TWILIO_FROM_NUMBER,
+              to: formattedPhone,
+            });
+            await markDeliverySent(supabaseAdmin, claimId);
+            smsOutcome = "sent";
+            reminderRows.push({
+              estimate_id: estimate.id,
+              business_id: business.id,
+              channel: "sms",
+              stage: stageName,
+              message: smsBody,
+            });
+          }
         } catch (err) {
           const optedOut = await recordSuppressionIfUnsubscribedError(suppressionStore, formattedPhone, err);
           smsOutcome = optedOut ? "suppressed" : "failed";
@@ -173,24 +187,38 @@ export async function POST(
   } else {
     const html = buildPaymentReminderEmailHtml(stageName, ctx);
     try {
-      const result = await resend.emails.send({
-        from: "TradePulse Estimates <estimates@trytradepulse.com>",
-        to: estimate.customer_email.trim(),
-        subject: `Invoice reminder -- ${businessName}`,
-        html,
+      const recipient = estimate.customer_email.trim().toLowerCase();
+      const claimId = await claimDelivery(supabaseAdmin, {
+        businessId: business.id,
+        estimateId: estimate.id,
+        channel: "email",
+        recipient,
+        action: "payment-reminder",
+        stage: `${stageName}:${nextReminderCount}`,
       });
-      if (result.error) {
+      if (!claimId) {
         emailOutcome = "failed";
-        console.error(`[send-reminder] email failed for estimate ${estimate.id}:`, result.error);
       } else {
-        emailOutcome = "sent";
-        reminderRows.push({
-          estimate_id: estimate.id,
-          business_id: business.id,
-          channel: "email",
-          stage: stageName,
-          message: buildPaymentReminderEmailBody(stageName, ctx),
+        const result = await resend.emails.send({
+          from: "TradePulse Estimates <estimates@trytradepulse.com>",
+          to: recipient,
+          subject: `Invoice reminder -- ${businessName}`,
+          html,
         });
+        if (result.error) {
+          emailOutcome = "failed";
+          console.error(`[send-reminder] email failed for estimate ${estimate.id}:`, result.error);
+        } else {
+          await markDeliverySent(supabaseAdmin, claimId);
+          emailOutcome = "sent";
+          reminderRows.push({
+            estimate_id: estimate.id,
+            business_id: business.id,
+            channel: "email",
+            stage: stageName,
+            message: buildPaymentReminderEmailBody(stageName, ctx),
+          });
+        }
       }
     } catch (err) {
       emailOutcome = "failed";

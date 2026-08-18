@@ -1,36 +1,49 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { Resend } from 'resend';
+import { checkRateLimit } from '@/lib/rate-limit';
+import { getRequestIp, normalizeEmail } from '@/lib/request-guards';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
+const GENERIC_RESPONSE = { ok: true };
 
 export async function POST(request: NextRequest) {
   try {
-    const { email } = await request.json();
-    if (!email) return NextResponse.json({ error: 'Email required' }, { status: 400 });
+    const body: unknown = await request.json();
+    const email =
+      typeof body === 'object' && body !== null && 'email' in body
+        ? (body as { email?: unknown }).email
+        : undefined;
+    const normalizedEmail = typeof email === 'string' ? normalizeEmail(email) : null;
+    if (!normalizedEmail) return NextResponse.json({ error: 'Enter a valid email address.' }, { status: 400 });
+
+    const ipLimit = await checkRateLimit(supabaseAdmin, getRequestIp(request), 'password-reset-ip', 5, 3600);
+    const emailLimit = await checkRateLimit(supabaseAdmin, normalizedEmail, 'password-reset-email', 3, 3600);
+    if (!ipLimit.allowed || !emailLimit.allowed) return NextResponse.json(GENERIC_RESPONSE);
 
     const { data, error } = await supabaseAdmin.auth.admin.generateLink({
       type: 'recovery',
-      email,
+      email: normalizedEmail,
       options: {
         redirectTo: 'https://www.trytradepulse.com/reset-password',
       },
     });
 
     if (error || !data?.properties?.action_link) {
-      return NextResponse.json({ error: 'Could not generate reset link' }, { status: 500 });
+      console.error('[send-reset-email] recovery link generation failed:', error?.message ?? 'no link');
+      return NextResponse.json(GENERIC_RESPONSE);
     }
 
     await resend.emails.send({
       from: 'estimates@trytradepulse.com',
-      to: email,
+      to: normalizedEmail,
       subject: 'Reset your TradePulse password',
       text: `Click the link below to reset your password. This link expires in 1 hour.\n\n${data.properties.action_link}\n\nIf you did not request a password reset, ignore this email.`,
     });
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json(GENERIC_RESPONSE);
   } catch (err) {
     console.error("[send-reset-email] unhandled error", err instanceof Error ? err.message : err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(GENERIC_RESPONSE);
   }
 }

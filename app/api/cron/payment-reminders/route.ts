@@ -15,6 +15,9 @@ import {
   type PaymentReminderEmailContext,
 } from "@/lib/payment-reminder-message";
 import { computeNextReminderStage, formatDueDateText } from "@/lib/payment-reminder-stage";
+import { claimDelivery, markDeliverySent } from "@/lib/delivery-claims";
+
+const MAX_REMINDERS_PER_RUN = 100;
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const authHeader = request.headers.get("authorization");
@@ -67,7 +70,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   let sent = 0;
 
-  for (const estimate of estimates) {
+  for (const estimate of estimates.slice(0, MAX_REMINDERS_PER_RUN)) {
     if (!estimate.business_id || !estimate.due_date || estimate.invoice_amount === null) continue;
 
     // Not entitled to Pro Payments (Starter, cancelled, past due, or an
@@ -130,18 +133,31 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             paymentLink: ctx.paymentLink,
           });
           try {
-            await twilioClient.messages.create({
-              body: smsBody,
-              from: process.env.TWILIO_FROM_NUMBER,
-              to: formattedPhone,
-            });
-            reminderRows.push({
-              estimate_id: estimate.id,
-              business_id: estimate.business_id,
+            const claimId = await claimDelivery(supabaseAdmin, {
+              businessId: estimate.business_id,
+              estimateId: estimate.id,
               channel: "sms",
-              stage: stageName,
-              message: smsBody,
+              recipient: formattedPhone,
+              action: "payment-reminder",
+              stage: `${stageName}:${nextReminderCount}`,
             });
+            if (!claimId) {
+              console.info(`[payment-reminders] duplicate SMS claim skipped for estimate ${estimate.id}`);
+            } else {
+              await twilioClient.messages.create({
+                body: smsBody,
+                from: process.env.TWILIO_FROM_NUMBER,
+                to: formattedPhone,
+              });
+              await markDeliverySent(supabaseAdmin, claimId);
+              reminderRows.push({
+                estimate_id: estimate.id,
+                business_id: estimate.business_id,
+                channel: "sms",
+                stage: stageName,
+                message: smsBody,
+              });
+            }
           } catch (err) {
             // Twilio reporting 21610 typically means the inbound STOP
             // webhook hasn't recorded it locally yet, or arrived out of
@@ -162,22 +178,36 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (resend && estimate.customer_email?.trim()) {
       const html = buildPaymentReminderEmailHtml(stageName, ctx);
       try {
-        const result = await resend.emails.send({
-          from: "TradePulse Estimates <estimates@trytradepulse.com>",
-          to: estimate.customer_email.trim(),
-          subject: `Invoice reminder -- ${businessName}`,
-          html,
+        const recipient = estimate.customer_email.trim().toLowerCase();
+        const claimId = await claimDelivery(supabaseAdmin, {
+          businessId: estimate.business_id,
+          estimateId: estimate.id,
+          channel: "email",
+          recipient,
+          action: "payment-reminder",
+          stage: `${stageName}:${nextReminderCount}`,
         });
-        if (result.error) {
-          console.error(`[payment-reminders] email failed for estimate ${estimate.id}:`, result.error);
+        if (!claimId) {
+          console.info(`[payment-reminders] duplicate email claim skipped for estimate ${estimate.id}`);
         } else {
-          reminderRows.push({
-            estimate_id: estimate.id,
-            business_id: estimate.business_id,
-            channel: "email",
-            stage: stageName,
-            message: buildPaymentReminderEmailBody(stageName, ctx),
+          const result = await resend.emails.send({
+            from: "TradePulse Estimates <estimates@trytradepulse.com>",
+            to: recipient,
+            subject: `Invoice reminder -- ${businessName}`,
+            html,
           });
+          if (result.error) {
+            console.error(`[payment-reminders] email failed for estimate ${estimate.id}:`, result.error);
+          } else {
+            await markDeliverySent(supabaseAdmin, claimId);
+            reminderRows.push({
+              estimate_id: estimate.id,
+              business_id: estimate.business_id,
+              channel: "email",
+              stage: stageName,
+              message: buildPaymentReminderEmailBody(stageName, ctx),
+            });
+          }
         }
       } catch (err) {
         console.error(`[payment-reminders] email failed for estimate ${estimate.id}:`, err);

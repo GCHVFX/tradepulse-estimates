@@ -95,6 +95,60 @@ export type Database = {
         }
         Relationships: []
       }
+      tpe_delivery_claims: {
+        Row: {
+          action: string
+          business_id: string
+          channel: string
+          claimed_at: string
+          estimate_id: string
+          id: string
+          recipient: string
+          sent_at: string | null
+          stage: string
+          status: string
+        }
+        Insert: {
+          action: string
+          business_id: string
+          channel: string
+          claimed_at?: string
+          estimate_id: string
+          id?: string
+          recipient: string
+          sent_at?: string | null
+          stage: string
+          status?: string
+        }
+        Update: {
+          action?: string
+          business_id?: string
+          channel?: string
+          claimed_at?: string
+          estimate_id?: string
+          id?: string
+          recipient?: string
+          sent_at?: string | null
+          stage?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tpe_delivery_claims_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "tpe_businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tpe_delivery_claims_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "tpe_estimates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tpe_estimate_changes: {
         Row: {
           change_type: string
@@ -475,6 +529,54 @@ export type Database = {
           },
         ]
       }
+      tpe_photo_upload_reservations: {
+        Row: {
+          business_id: string
+          estimate_id: string
+          expected_byte_count: number
+          expected_file_count: number
+          id: string
+          released_at: string | null
+          reserved_at: string
+          status: string
+        }
+        Insert: {
+          business_id: string
+          estimate_id: string
+          expected_byte_count: number
+          expected_file_count: number
+          id?: string
+          released_at?: string | null
+          reserved_at?: string
+          status?: string
+        }
+        Update: {
+          business_id?: string
+          estimate_id?: string
+          expected_byte_count?: number
+          expected_file_count?: number
+          id?: string
+          released_at?: string | null
+          reserved_at?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tpe_photo_upload_reservations_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "tpe_businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tpe_photo_upload_reservations_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "tpe_estimates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tpe_pricebook_items: {
         Row: {
           active: boolean
@@ -590,10 +692,55 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_delivery: {
+        Args: {
+          p_action: string
+          p_business_id: string
+          p_channel: string
+          p_estimate_id: string
+          p_recipient: string
+          p_stage: string
+        }
+        Returns: {
+          claim_id: string
+          claimed: boolean
+        }[]
+      }
       increment_rate_limit: {
         Args: { p_action: string; p_key: string }
         Returns: {
           new_count: number
+          window_expires_at: string
+        }[]
+      }
+      mark_delivery_sent: { Args: { p_claim_id: string }; Returns: undefined }
+      release_estimate_photo_upload_reservation: {
+        Args: { p_reservation_id: string }
+        Returns: undefined
+      }
+      reserve_estimate_photo_upload: {
+        Args: {
+          p_business_id: string
+          p_estimate_id: string
+          p_expected_byte_count: number
+          p_expected_file_count: number
+        }
+        Returns: {
+          reason: string
+          reservation_id: string
+          reserved: boolean
+        }[]
+      }
+      take_rate_limit: {
+        Args: {
+          p_action: string
+          p_key: string
+          p_limit: number
+          p_window_seconds: number
+        }
+        Returns: {
+          allowed: boolean
+          remaining: number
           window_expires_at: string
         }[]
       }

@@ -6,6 +6,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
 import { convertEstimateToStructuredItems } from "@/lib/estimate-item-migration";
+import { notifyInternalError } from "@/lib/notify-error";
 
 const client = new Anthropic();
 
@@ -168,8 +169,6 @@ export async function POST(request: NextRequest) {
 
   const userMessage = lines.join("\n");
 
-  const baseUrl = request.nextUrl.origin;
-
   let stream;
   try {
     stream = client.messages.stream({
@@ -186,14 +185,10 @@ export async function POST(request: NextRequest) {
       console.error("[generate-estimate] failed to create stream:", err instanceof Error ? err.message : err);
     }
     if (typeof errStatus === "number") {
-      void fetch(`${baseUrl}/api/notify-error`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          error: err instanceof Error ? err.message : "Failed to start estimate generation",
-          status: errStatus,
-          context: "generate-estimate",
-        }),
+      void notifyInternalError({
+        error: err instanceof Error ? err.message : "Failed to start estimate generation",
+        status: errStatus,
+        context: "generate-estimate",
       });
     }
     return applyTo(
@@ -310,10 +305,10 @@ export async function POST(request: NextRequest) {
         }
 
         if (typeof errStatus === "number") {
-          void fetch(`${baseUrl}/api/notify-error`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ error: message, status: errStatus, context: "generate-estimate" }),
+          void notifyInternalError({
+            error: message,
+            status: errStatus,
+            context: "generate-estimate",
           });
         }
         controller.enqueue(

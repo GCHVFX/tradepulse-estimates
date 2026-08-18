@@ -4,6 +4,7 @@ import { validateContentType } from "@/lib/api-utils";
 import { NextRequest, NextResponse } from "next/server";
 import twilio from "twilio";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
+import { claimDelivery, markDeliverySent } from "@/lib/delivery-claims";
 import {
   normalizePhoneE164,
   createSupabaseSmsSuppressionStore,
@@ -118,12 +119,24 @@ if (!hasAccess) return applyTo(NextResponse.json({ error: "Subscription required
     ? `${greeting} ${bizName} has sent you an estimate: ${shareUrl}`
     : `${greeting} your estimate is ready: ${shareUrl}`;
 
-  let formattedPhone: string;
+  let suppliedPhone: string;
   try {
-    formattedPhone = formatPhone(to);
+    suppliedPhone = formatPhone(to);
   } catch (formatErr) {
     const message = formatErr instanceof Error ? formatErr.message : "Invalid phone number";
     return applyTo(NextResponse.json({ error: message }, { status: 400 }));
+  }
+
+  let formattedPhone = suppliedPhone;
+  if (estimate.customer_phone) {
+    try {
+      formattedPhone = formatPhone(estimate.customer_phone);
+    } catch {
+      return applyTo(NextResponse.json({ error: "Stored customer phone is invalid" }, { status: 400 }));
+    }
+    if (formattedPhone !== suppliedPhone) {
+      return applyTo(NextResponse.json({ error: "Use the customer phone saved on this estimate" }, { status: 400 }));
+    }
   }
 
   const suppressionStore = createSupabaseSmsSuppressionStore(supabaseAdmin);
@@ -138,6 +151,23 @@ if (!hasAccess) return applyTo(NextResponse.json({ error: "Subscription required
     return applyTo(
       NextResponse.json({ error: SMS_OPTED_OUT_MESSAGE, code: SMS_OPTED_OUT_CODE }, { status: 409 })
     );
+  }
+
+  let claimId: string | null;
+  try {
+    claimId = await claimDelivery(supabaseAdmin, {
+      businessId: business.id,
+      estimateId,
+      channel: "sms",
+      recipient: suppressionKey,
+      action: "estimate-send",
+      stage: "initial",
+    });
+  } catch {
+    return applyTo(NextResponse.json({ error: "Unable to prepare SMS delivery" }, { status: 503 }));
+  }
+  if (!claimId) {
+    return applyTo(NextResponse.json({ error: "This estimate was already sent by SMS to this customer" }, { status: 409 }));
   }
 
   try {
@@ -162,7 +192,9 @@ if (!hasAccess) return applyTo(NextResponse.json({ error: "Subscription required
       throw sendErr;
     }
 
-    const phoneUpdate = !estimate.customer_phone ? { customer_phone: to.trim() } : {};
+    await markDeliverySent(supabaseAdmin, claimId);
+
+    const phoneUpdate = !estimate.customer_phone ? { customer_phone: formattedPhone } : {};
     const { error: updateError } = await supabaseAdmin
       .from("tpe_estimates")
       .update({
