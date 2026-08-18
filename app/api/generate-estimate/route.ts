@@ -7,6 +7,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
 import { convertEstimateToStructuredItems } from "@/lib/estimate-item-migration";
 import { notifyInternalError } from "@/lib/notify-error";
+import {
+  claimEstimateGeneration,
+  releaseEstimateGenerationClaim,
+  runWithEstimateGenerationClaim,
+  startWithEstimateGenerationClaim,
+} from "@/lib/estimate-generation-claims";
 
 const client = new Anthropic();
 
@@ -169,13 +175,18 @@ export async function POST(request: NextRequest) {
 
   const userMessage = lines.join("\n");
 
-  let stream;
+  const claimInput = { businessId: business.id, ownerUserId: user.id };
+  let claimedStream;
   try {
-    stream = client.messages.stream({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 8192,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userMessage }],
+    claimedStream = await startWithEstimateGenerationClaim({
+      claim: () => claimEstimateGeneration(supabaseAdmin, claimInput),
+      release: (claimId) => releaseEstimateGenerationClaim(supabaseAdmin, { ...claimInput, claimId }),
+      start: () => client.messages.stream({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 8192,
+        system: SYSTEM_PROMPT,
+        messages: [{ role: "user", content: userMessage }],
+      }),
     });
   } catch (err) {
     const errStatus = (err as { status?: number }).status;
@@ -199,6 +210,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  if (!claimedStream) {
+    return applyTo(
+      new NextResponse("Estimate generation is temporarily unavailable. Please try again in a few minutes.", {
+        status: 409,
+      })
+    );
+  }
+
+  const { claimId, value: stream } = claimedStream;
+
   const safeCustomerName = typeof customerName === "string" ? customerName.trim() : "";
   const safeCustomerPhone = typeof customerPhone === "string" ? customerPhone.trim() : "";
   const safeCustomerEmail = typeof customerEmail === "string" ? customerEmail.trim() : "";
@@ -207,117 +228,124 @@ export async function POST(request: NextRequest) {
 
   const readable = new ReadableStream({
     async start(controller) {
-      let fullText = "";
-      try {
-        for await (const event of stream) {
-          if (
-            event.type === "content_block_delta" &&
-            event.delta.type === "text_delta"
-          ) {
-            fullText += event.delta.text;
-            controller.enqueue(new TextEncoder().encode(event.delta.text));
-          }
-        }
+      await runWithEstimateGenerationClaim({
+        claimId,
+        release: (activeClaimId) =>
+          releaseEstimateGenerationClaim(supabaseAdmin, { ...claimInput, claimId: activeClaimId }),
+        work: async () => {
+          let fullText = "";
+          try {
+            for await (const event of stream) {
+              if (
+                event.type === "content_block_delta" &&
+                event.delta.type === "text_delta"
+              ) {
+                fullText += event.delta.text;
+                controller.enqueue(new TextEncoder().encode(event.delta.text));
+              }
+            }
 
-        // Extract job title, find first H1 that isn't the business name
-        const businessNameClean = (business?.name ?? "").trim().toLowerCase();
-        const titleLine = fullText
-          .split("\n")
-          .filter((l) => l.startsWith("# "))
-          .find((l) => {
-            const clean = l.replace(/^#\s*/, "").trim().toLowerCase();
-            return clean.length > 0 && clean !== businessNameClean;
-          });
-        const title = titleLine?.replace(/^#\s*/, "").trim() ?? "Untitled Estimate";
+            // Extract job title, find first H1 that isn't the business name
+            const businessNameClean = (business?.name ?? "").trim().toLowerCase();
+            const titleLine = fullText
+              .split("\n")
+              .filter((l) => l.startsWith("# "))
+              .find((l) => {
+                const clean = l.replace(/^#\s*/, "").trim().toLowerCase();
+                return clean.length > 0 && clean !== businessNameClean;
+              });
+            const title = titleLine?.replace(/^#\s*/, "").trim() ?? "Untitled Estimate";
 
-        const { data, error } = await supabaseAdmin
-          .from("tpe_estimates")
-          .insert({
-            title,
-            summary: fullText,
-            status: "draft",
-            source: "ai_generated",
-            business_id: business.id,
-            customer_name: safeCustomerName,
-            customer_phone: safeCustomerPhone,
-            customer_email: safeCustomerEmail,
-            job_address: safeJobAddress,
-            description: safeJobAddress,
-            service_type: "estimate",
-            location: "",
-            urgency: "flexible",
-            prepared_by: safePreparedBy,
-            deposit_amount: null,
-          })
-          .select();
+            const { data, error } = await supabaseAdmin
+              .from("tpe_estimates")
+              .insert({
+                title,
+                summary: fullText,
+                status: "draft",
+                source: "ai_generated",
+                business_id: business.id,
+                customer_name: safeCustomerName,
+                customer_phone: safeCustomerPhone,
+                customer_email: safeCustomerEmail,
+                job_address: safeJobAddress,
+                description: safeJobAddress,
+                service_type: "estimate",
+                location: "",
+                urgency: "flexible",
+                prepared_by: safePreparedBy,
+                deposit_amount: null,
+              })
+              .select();
 
-        if (error || !data?.[0]?.id) {
-          console.error("[generate-estimate] DB insert failed", error?.message ?? "no id returned");
-          controller.enqueue(new TextEncoder().encode(`\n__ERROR__:Failed to save estimate. Please try again.`));
-          controller.close();
-          return;
-        }
-        const newEstimateId = data[0].id;
-        controller.enqueue(new TextEncoder().encode(`\n__ID__:${newEstimateId}`));
+            if (error || !data?.[0]?.id) {
+              console.error("[generate-estimate] DB insert failed", error?.message ?? "no id returned");
+              controller.enqueue(new TextEncoder().encode(`\n__ERROR__:Failed to save estimate. Please try again.`));
+              controller.close();
+              return;
+            }
+            const newEstimateId = data[0].id;
+            controller.enqueue(new TextEncoder().encode(`\n__ID__:${newEstimateId}`));
 
-        // Structured pricing, for NEWLY GENERATED estimates only.
-        //
-        // Best effort and strictly non-fatal. The estimate is already saved and
-        // the client already has its id, so if anything here refuses or throws,
-        // the estimate simply stays markdown-authoritative, exactly as every
-        // estimate created before today. No existing estimate is touched.
-        //
-        // The markdown summary is preserved either way, so detailed rendering
-        // (share page, PDF, editor, preview) is byte-for-byte what it was.
-        // Grouping is written to the rows only; nothing renders it yet.
-        //
-        // This runs before controller.close() so it cannot be cut short by the
-        // runtime freezing the instance once the response completes. It costs a
-        // few database round trips after a generation that already took seconds.
-        try {
-          const conversion = await convertEstimateToStructuredItems({
-            estimateId: newEstimateId,
-            userId: user.id,
-            dryRun: false,
-            assignGroups: true,
-          });
-          if (!conversion.success) {
-            console.info(
-              `[generate-estimate] structured pricing skipped for ${newEstimateId}: ${conversion.refusalReason}`
+            // Structured pricing, for NEWLY GENERATED estimates only.
+            //
+            // Best effort and strictly non-fatal. The estimate is already saved and
+            // the client already has its id, so if anything here refuses or throws,
+            // the estimate simply stays markdown-authoritative, exactly as every
+            // estimate created before today. No existing estimate is touched.
+            //
+            // The markdown summary is preserved either way, so detailed rendering
+            // (share page, PDF, editor, preview) is byte-for-byte what it was.
+            // Grouping is written to the rows only; nothing renders it yet.
+            //
+            // This runs before controller.close() so it cannot be cut short by the
+            // runtime freezing the instance once the response completes. It costs a
+            // few database round trips after a generation that already took seconds.
+            try {
+              const conversion = await convertEstimateToStructuredItems({
+                estimateId: newEstimateId,
+                userId: user.id,
+                dryRun: false,
+                assignGroups: true,
+              });
+              if (!conversion.success) {
+                console.info(
+                  `[generate-estimate] structured pricing skipped for ${newEstimateId}: ${conversion.refusalReason}`
+                );
+              }
+            } catch (conversionErr) {
+              console.error(
+                "[generate-estimate] structured pricing failed, estimate remains markdown:",
+                conversionErr instanceof Error ? conversionErr.message : conversionErr
+              );
+            }
+
+            controller.close();
+          } catch (err) {
+            const errStatus = (err as { status?: number }).status;
+            const message = err instanceof Error ? err.message : "Estimate generation failed";
+
+            if (errStatus === 401) {
+              console.error("[generate-estimate] Anthropic API authentication failed. Check ANTHROPIC_API_KEY is valid.");
+            } else {
+              console.error("[generate-estimate] stream error:", message);
+            }
+
+            if (typeof errStatus === "number") {
+              void notifyInternalError({
+                error: message,
+                status: errStatus,
+                context: "generate-estimate",
+              });
+            }
+            controller.enqueue(
+              new TextEncoder().encode(
+                `\n__ERROR__:Something went wrong generating your estimate. Our support team has been notified.`
+              )
             );
+            controller.close();
           }
-        } catch (conversionErr) {
-          console.error(
-            "[generate-estimate] structured pricing failed, estimate remains markdown:",
-            conversionErr instanceof Error ? conversionErr.message : conversionErr
-          );
-        }
-
-        controller.close();
-      } catch (err) {
-        const errStatus = (err as { status?: number }).status;
-        const message = err instanceof Error ? err.message : "Estimate generation failed";
-
-        if (errStatus === 401) {
-          console.error("[generate-estimate] Anthropic API authentication failed. Check ANTHROPIC_API_KEY is valid.");
-        } else {
-          console.error("[generate-estimate] stream error:", message);
-        }
-
-        if (typeof errStatus === "number") {
-          void notifyInternalError({
-            error: message,
-            status: errStatus,
-            context: "generate-estimate",
-          });
-        }
-        controller.enqueue(
-          new TextEncoder().encode(
-            `\n__ERROR__:Something went wrong generating your estimate. Our support team has been notified.`
-          )
-        );
-        controller.close();
-      }
+        },
+      });
     },
   });
 

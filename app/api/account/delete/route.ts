@@ -8,9 +8,21 @@ import {
 } from "@/lib/account-deletion";
 import { stripe } from "@/lib/stripe";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
+import {
+  beginBusinessDeletion as beginBusinessDeletionClaim,
+  BusinessDeletionInProgressError,
+  BusinessDeletionUnavailableError,
+  ESTIMATE_GENERATION_IN_PROGRESS,
+  EstimateGenerationInProgressError,
+  releaseBusinessDeletion as releaseBusinessDeletionClaim,
+} from "@/lib/estimate-generation-claims";
 
 function isMissingAuthUser(error: { code?: string; message?: string } | null): boolean {
   return error?.code === "user_not_found" || /user.*not found/i.test(error?.message ?? "");
+}
+
+function isEstimateGenerationInProgress(error: { message?: string } | null): boolean {
+  return error?.message === ESTIMATE_GENERATION_IN_PROGRESS;
 }
 
 function hasCrossOriginRequest(request: NextRequest): boolean {
@@ -64,6 +76,31 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             logoUrl: data.logo_url,
           };
         },
+        async beginBusinessDeletion(business): Promise<void> {
+          try {
+            await beginBusinessDeletionClaim(supabaseAdmin, {
+              businessId: business.id,
+              ownerUserId: business.ownerUserId,
+            });
+          } catch (error) {
+            if (error instanceof EstimateGenerationInProgressError) {
+              throw new AccountDeletionError("Estimate generation is in progress. Try again in a few minutes.", 409);
+            }
+            if (error instanceof BusinessDeletionInProgressError) {
+              throw new AccountDeletionError("Account deletion is already in progress. Try again in a few minutes.", 409);
+            }
+            if (error instanceof BusinessDeletionUnavailableError) {
+              throw new AccountDeletionError("Your account is no longer available for deletion. Please sign in again.", 409);
+            }
+            throw error;
+          }
+        },
+        async releaseBusinessDeletion(business): Promise<void> {
+          await releaseBusinessDeletionClaim(supabaseAdmin, {
+            businessId: business.id,
+            ownerUserId: business.ownerUserId,
+          });
+        },
         async listStorageObjects(business): Promise<StorageObject[]> {
           const { data: estimates, error: estimatesError } = await supabaseAdmin
             .from("tpe_estimates")
@@ -116,6 +153,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             p_business_id: business.id,
             p_owner_user_id: business.ownerUserId,
           });
+          if (isEstimateGenerationInProgress(error)) {
+            throw new AccountDeletionError("Estimate generation is in progress. Try again in a few minutes.", 409);
+          }
           if (error) throw error;
         },
         async deleteAuthUser(userId): Promise<void> {

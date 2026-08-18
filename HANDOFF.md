@@ -1,15 +1,27 @@
 # TradePulse handoff
 
-Updated: 2026-08-17 (Preview billing recovery reviewed; Production preflight pending)
+Updated: 2026-08-18 (estimate-generation deletion-race migration applied and locally verified; commit and release pending)
 
 ## Current state
 
-- **Branch:** `fix/cost-amplification-guards` from `main` commit `6856303`.
-- **Cost-amplification guards:** committed and pushed on this branch at `6048ff05d9cf1f8269d1b966c9374330142bf346`, with Preview-only testing in progress. They are not merged to `main` or deployed to Production. The applied remote migration `20260817044348_cost_amplification_guards` matches the repo file of the same name. It deduplicates existing rate-limit rows, makes `(key, action)` unique, adds atomic `take_rate_limit`, and adds service-role-only durable delivery claims. The additive remote migrations `20260817145800_add_photo_upload_reservations`, `20260817150102_cleanup_photo_upload_reservations`, and `20260817150442_fix_photo_reservation_file_count` match the repo files of the same names, atomically reserve business photo count and byte capacity before Storage writes, count pending requested files rather than batches, and delete handled reservation rows.
-- **Deployed Production application commit:** `6856303`, deployment `dpl_Dbbzmd4GRX9QN6YAtkbYyi2FQU6c`, READY. It is the current `main` deployment and does not include the cost-amplification guards or Preview billing recovery.
-- **Prior Production deployment:** `dpl_F3No6EAu8FLbYH6GSRjLXt5qe8BZ`, READY, Git-sourced from `a58cc00` (`Improve homepage proof and support access`).
+- **Branch:** `fix/estimate-generation-deletion-race`, created from deployed `main` commit `6f01d14f2eff7803fe7cef94b82066e5f9c3ea31`. The fix is uncommitted and has not been pushed or deployed.
+- **Deployed Production application:** `6f01d14`, deployment `dpl_3iUq8stTQayT733poUURdiEmfXX4`, READY. It includes cost-amplification guards `6048ff0` and Stripe billing recovery `19860c7`.
+- **Pending estimate-generation deletion-race fix:** `POST /api/generate-estimate` obtains a 15-minute, service-role-only database generation claim before Anthropic streaming. Account deletion first acquires a mutually exclusive 30-minute deletion lease before any Stripe cancellation or Storage removal. The generation-claim RPC refuses an active deletion lease, while the deletion-lease RPC refuses active generation claims with `ESTIMATE_GENERATION_IN_PROGRESS`; the protected route maps that to `Estimate generation is in progress. Try again in a few minutes.` The final deletion transaction requires its deletion lease and locks the business, so it cannot remove the business after the lease has expired or been released. Generation claims are released after provider-start failure, stream failure, or successful save. A deletion-lease release is attempted if an external deletion step fails; if that release RPC itself fails, the 30-minute expiry safely clears the temporary block. This fixes the FK race where a business could be deleted between the initial lookup and post-stream estimate insert without allowing a 409 after irreversible external deletion work.
+- **Applied estimate-generation deletion-race migration:** `supabase/migrations/20260818150005_estimate_generation_claims.sql` was applied to Production Supabase and recorded as remote version `20260818150005`. The Supabase apply operation assigned that version, so the local migration filename was reconciled to match. `lib/database.types.ts` was regenerated from that schema; only the claim table and its four RPCs were added.
+- **Release constraints:** keep Vercel cron disabled, do not invoke it, and keep `GOOGLE_PLACES_API_KEY` absent from Production. Do not send SMS/email, create Checkout, or complete payment for this fix.
 - **Pricing:** Starter is **CA$29/month** and Pro is **CA$59/month**. Stripe price IDs remain environment-driven. Production pricing and Checkout paths were verified during the completed cutover.
 - **Communications:** remain disabled unless a future task explicitly authorises them.
+
+### Estimate-generation deletion-race verification (local only)
+
+- Root cause confirmed from Production logs: a business was present at the access check but missing for the later `tpe_estimates` insert. Anthropic streaming starts before that insert.
+- `git diff --check` passed.
+- `npx.cmd tsc --noEmit` passed after the deletion-lease correction.
+- Focused estimate-generation claim, account-deletion, and cost-guard tests: 20 passed.
+- Full safe unit suite: 218 passed. The two stale manual-reminder source-text assertions were corrected to locate the specific existing reminder timestamp update without depending on line endings; reminder behaviour was not changed.
+- The local Supabase CLI cannot validate migrations because no local database is running. Production migration application was confirmed through the Supabase remote migration list. No Production data, deployment, or provider action was performed.
+- **Release verification after migration:** `git diff --check` passed, including the reconciled untracked migration; `npx.cmd tsc --noEmit` passed; focused estimate-generation claim, account-deletion, and cost-guard tests passed (**20 passed**); full safe unit suite passed (**218 passed**). Post-migration Supabase security advisors show only the same four pre-existing informational RLS-without-policy notices for service-role-only tables. No new claim-table finding appeared.
+- **Exact next action:** commit only the intended files, push and merge with cron still disabled, then run the constrained controlled-account Production smoke test without sending communications or completing payment.
 
 ## Completed product and platform work
 
@@ -52,7 +64,7 @@ Updated: 2026-08-17 (Preview billing recovery reviewed; Production preflight pen
 
 ## Preserved local state and known limits
 
-- Do not discard, reset, stash, clean, or commit the pre-existing unrelated changes: `.claude/settings.local.json`, `.gitignore`, `CLAUDE.md`, `CODEX.md`, `.ai-control-centre/`, the four `.bak-*` files, and `supabase/.temp/`.
+- Do not discard, reset, stash, clean, or commit the pre-existing unrelated changes: `.claude/settings.local.json`, `.gitignore`, `AGENTS.md`, `CLAUDE.md`, `CODEX.md`, `.ai-control-centre/`, the existing `AGENTS.md.bak-*` and `CLAUDE.md.bak-*` files, and `supabase/.temp/`.
 - Existing full-lint baseline remains **7 errors and 18 warnings**. The account release did not change that baseline. Build warnings are the three existing `metadataBase` notices.
 - The Stripe acceptance deliberately did not use a real card or send communications. Do not recreate its synthetic Stripe objects or repeat that audit without a new explicit need.
 - The rate-limit count observation above is the only unresolved verification ambiguity from the hosted deletion. All owned synthetic records were directly read back as absent.

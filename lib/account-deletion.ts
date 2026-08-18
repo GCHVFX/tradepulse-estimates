@@ -29,6 +29,8 @@ export interface AccountDeletionDependencies {
   listStorageObjects(business: AccountDeletionBusiness): Promise<StorageObject[]>;
   removeStorageObjects(objects: StorageObject[]): Promise<void>;
   cancelSubscription(business: AccountDeletionBusiness): Promise<void>;
+  beginBusinessDeletion(business: AccountDeletionBusiness): Promise<void>;
+  releaseBusinessDeletion(business: AccountDeletionBusiness): Promise<void>;
   deleteBusinessData(business: AccountDeletionBusiness): Promise<void>;
   deleteAuthUser(userId: string): Promise<void>;
   clearSession(): Promise<void>;
@@ -126,10 +128,16 @@ export async function deleteAuthenticatedAccount(input: {
       throw new AccountDeletionError('Business ownership could not be verified.', 403);
     }
 
-    await input.dependencies.cancelSubscription(business);
-    const storageObjects = await input.dependencies.listStorageObjects(business);
-    await input.dependencies.removeStorageObjects(storageObjects);
-    await input.dependencies.deleteBusinessData(business);
+    await input.dependencies.beginBusinessDeletion(business);
+    try {
+      await input.dependencies.cancelSubscription(business);
+      const storageObjects = await input.dependencies.listStorageObjects(business);
+      await input.dependencies.removeStorageObjects(storageObjects);
+      await input.dependencies.deleteBusinessData(business);
+    } catch (error) {
+      await input.dependencies.releaseBusinessDeletion(business);
+      throw error;
+    }
   }
 
   // Auth is intentionally last. If Storage, Stripe, or the database step

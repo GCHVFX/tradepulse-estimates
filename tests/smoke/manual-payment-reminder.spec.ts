@@ -197,7 +197,7 @@ test("no channel sending anything leaves reminder_count and last_reminder_sent_a
   const source = routeSource();
   expect(source).toContain("if (reminderRows.length === 0)");
   const guardIndex = source.indexOf("if (reminderRows.length === 0)");
-  const updateIndex = source.indexOf('.update({');
+  const updateIndex = source.indexOf('last_reminder_sent_at: new Date().toISOString()');
   expect(guardIndex).toBeGreaterThan(-1);
   expect(updateIndex).toBeGreaterThan(guardIndex);
   // The early return happens before the update call is ever reached.
@@ -207,7 +207,7 @@ test("no channel sending anything leaves reminder_count and last_reminder_sent_a
 
 test("a successful send advances reminder_count via an optimistic (compare-and-swap) update, guarding against duplicate requests", () => {
   const source = routeSource();
-  const updateIndex = source.indexOf('.update({\n      last_reminder_sent_at');
+  const updateIndex = source.indexOf('last_reminder_sent_at: new Date().toISOString()');
   expect(updateIndex).toBeGreaterThan(-1);
   const updateBlock = source.slice(updateIndex, updateIndex + 400);
   expect(updateBlock).toContain('.eq("id", estimate.id)');
@@ -259,7 +259,7 @@ test("a successful manual send records exactly one reminder row per channel that
 
 test("another invoice is never touched: the update and the select are both scoped to this one estimate id", () => {
   const source = routeSource();
-  const updateIndex = source.indexOf('.update({\n      last_reminder_sent_at');
+  const updateIndex = source.indexOf('last_reminder_sent_at: new Date().toISOString()');
   const updateBlock = source.slice(updateIndex, updateIndex + 400);
   expect(updateBlock).toContain('.eq("id", estimate.id)');
   // No unscoped update/select against tpe_estimates anywhere in the route.

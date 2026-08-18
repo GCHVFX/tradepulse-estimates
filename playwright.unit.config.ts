@@ -23,6 +23,7 @@ export default defineConfig({
     "payment-reminder-message-preview.spec.ts",
     "manual-payment-reminder.spec.ts",
     "cost-amplification-guards.spec.ts",
+    "estimate-generation-claims.spec.ts",
   ],
   fullyParallel: false,
   workers: 1,

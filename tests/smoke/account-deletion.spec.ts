@@ -39,6 +39,12 @@ function createDependencies(events: string[], overrides: Partial<AccountDeletion
     async cancelSubscription() {
       events.push("stripe-cancel");
     },
+    async beginBusinessDeletion() {
+      events.push("deletion-claim");
+    },
+    async releaseBusinessDeletion() {
+      events.push("deletion-claim-release");
+    },
     async deleteBusinessData() {
       events.push("database-transaction");
     },
@@ -105,6 +111,7 @@ test("removes storage before the dependent-row transaction and deletes Auth last
 
   expect(events).toEqual([
     "business",
+    "deletion-claim",
     "stripe-cancel",
     "storage-list",
     `storage-remove:${userId}/logo,${userId}/estimate-1/photo.jpg`,
@@ -114,7 +121,7 @@ test("removes storage before the dependent-row transaction and deletes Auth last
   ]);
 });
 
-test("does not delete database rows, Auth, or the session after a storage failure", async () => {
+test("releases the deletion claim and does not delete database rows, Auth, or the session after a storage failure", async () => {
   const events: string[] = [];
   await expect(
     deleteAuthenticatedAccount({
@@ -129,7 +136,33 @@ test("does not delete database rows, Auth, or the session after a storage failur
       }),
     })
   ).rejects.toThrow("Storage unavailable");
-  expect(events).toEqual(["business", "stripe-cancel", "storage-list", "storage-remove"]);
+  expect(events).toEqual([
+    "business",
+    "deletion-claim",
+    "stripe-cancel",
+    "storage-list",
+    "storage-remove",
+    "deletion-claim-release",
+  ]);
+});
+
+test("an active generation blocks deletion before Stripe or Storage work begins", async () => {
+  const events: string[] = [];
+  await expect(
+    deleteAuthenticatedAccount({
+      confirmation: ACCOUNT_DELETION_CONFIRMATION,
+      userId,
+      lastSignInAt: new Date().toISOString(),
+      dependencies: createDependencies(events, {
+        async beginBusinessDeletion() {
+          events.push("deletion-claim");
+          throw new AccountDeletionError("Estimate generation is in progress. Try again in a few minutes.", 409);
+        },
+      }),
+    })
+  ).rejects.toMatchObject({ status: 409 });
+
+  expect(events).toEqual(["business", "deletion-claim"]);
 });
 
 test("can safely retry when the business data was already deleted", async () => {
@@ -210,10 +243,7 @@ test("does not cancel a subscription when its customer reference is missing", as
 });
 
 test("the database transaction deletes every owned dependency before the business row", () => {
-  const migration = readFileSync(
-    "supabase/migrations/20260806044126_delete_tradepulse_account_data.sql",
-    "utf8"
-  );
+  const migration = readFileSync("supabase/migrations/20260818150005_estimate_generation_claims.sql", "utf8");
   const orderedTables = [
     "tpe_payment_reminders",
     "tpe_estimate_changes",
@@ -229,4 +259,6 @@ test("the database transaction deletes every owned dependency before the busines
   expect(positions).toEqual([...positions].sort((first, second) => first - second));
   expect(migration).toContain("for update");
   expect(migration).toContain("p_owner_user_id");
+  expect(migration).toContain("BUSINESS_DELETION_CLAIM_REQUIRED");
+  expect(migration).toContain("claim_type = 'deletion'");
 });

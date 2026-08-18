@@ -149,6 +149,41 @@ export type Database = {
           },
         ]
       }
+      tpe_estimate_generation_claims: {
+        Row: {
+          business_id: string
+          claim_type: string
+          created_at: string
+          expires_at: string
+          id: string
+          owner_user_id: string
+        }
+        Insert: {
+          business_id: string
+          claim_type: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          owner_user_id: string
+        }
+        Update: {
+          business_id?: string
+          claim_type?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          owner_user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tpe_estimate_generation_claims_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "tpe_businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tpe_estimate_changes: {
         Row: {
           change_type: string
@@ -692,6 +727,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      begin_business_deletion: {
+        Args: { p_business_id: string; p_owner_user_id: string }
+        Returns: boolean
+      }
       claim_delivery: {
         Args: {
           p_action: string
@@ -706,6 +745,10 @@ export type Database = {
           claimed: boolean
         }[]
       }
+      claim_estimate_generation: {
+        Args: { p_business_id: string; p_owner_user_id: string }
+        Returns: string
+      }
       increment_rate_limit: {
         Args: { p_action: string; p_key: string }
         Returns: {
@@ -714,6 +757,18 @@ export type Database = {
         }[]
       }
       mark_delivery_sent: { Args: { p_claim_id: string }; Returns: undefined }
+      release_business_deletion_claim: {
+        Args: { p_business_id: string; p_owner_user_id: string }
+        Returns: undefined
+      }
+      release_estimate_generation_claim: {
+        Args: {
+          p_business_id: string
+          p_claim_id: string
+          p_owner_user_id: string
+        }
+        Returns: undefined
+      }
       release_estimate_photo_upload_reservation: {
         Args: { p_reservation_id: string }
         Returns: undefined
