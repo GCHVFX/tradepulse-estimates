@@ -1,12 +1,14 @@
 # TradePulse handoff
 
-Updated: 2026-08-18 (Profile mobile settings polish locally verified; local commit and deployment pending)
+Updated: 2026-08-18 (safe Profile polish verified locally; commit and Production deployment pending)
 
 ## Current state
 
 - **Branch:** `codex/profile-settings-mobile-polish`, created from local `main` commit `9399524` (the reviewed reminder-preview terminology correction). Production remains at `6250a9279098060737ea3650c598bfce3618aef1` (`Improve Profile Pro setup mobile UX`), deployment `dpl_G2PhqQG5ZTNSr5EkxoNNvDZoWsmr`, READY. Vercel cron remains disabled.
-- **Pending Profile mobile polish:** `app/components/profile-form.tsx` stacks company logo and company-name fields on mobile, replaces status pills with quiet checked settings rows, makes manual review-link entry a true secondary button, and reduces visual weight of the editable payment link. The collapsed preview uses estimate terminology. Actual payment-reminder generation and sending remain unchanged.
-- **Local verification:** `git diff --check`, `npx.cmd tsc --noEmit`, the focused payment-reminder preview suite (**11 passed**), and the complete safe unit suite (**218 passed**) passed.
+- **Pending revised Profile mobile polish:** the green bordered review/payment status rows were removed in favour of plain settings copy. The Profile form still stacks logo and company name on mobile, keeps the manual review-link action as a real secondary button, and retains the compact payment-link input. Customer-facing helper copy now describes actual name, phone, and email uses. The collapsed reminder preview uses estimate terminology, a clear example business name before Profile setup, and the same shared formatter as sent SMS.
+- **Profile save regression fixed:** the uncommitted `Show business name on estimates` control was sending `show_business_name_on_estimates` through every Profile PATCH, but that column was only in an unapplied local migration and was absent from the generated schema types. The database rejected the update, causing the local “Could not save” state and later apparent default values after re-login. The control, its migration, header/PDF wiring, and its incomplete tests were removed. No existing Profile data was deleted.
+- **Persisted setting prerequisite:** a new supported version requires a non-Production Supabase target. There is no local Supabase stack (Docker unavailable) and no Supabase development branch; the only connected TradePulse project is Production. Do not apply or test a new migration until a safe development target is supplied or a narrow Production schema migration is explicitly authorised.
+- **Local verification:** `npx.cmd tsc --noEmit` and `git diff --check` passed (only existing CRLF notices). Focused Profile/reminder tests passed (**12 passed**); full safe unit suite passed (**219 passed**). No deployment or provider action was performed. Re-run the same checks immediately before committing.
 - **Release constraints:** do not re-enable or invoke Vercel cron. Do not send SMS, create Checkout, complete payment, or alter Stripe, Google, or payment behaviour for this UX change.
 - **Pricing:** Starter is **CA$29/month** and Pro is **CA$59/month**. Stripe price IDs remain environment-driven. Production pricing and Checkout paths were verified during the completed cutover.
 - **Communications:** remain disabled unless a future task explicitly authorises them.
@@ -20,7 +22,7 @@ Updated: 2026-08-18 (Profile mobile settings polish locally verified; local comm
 - Full safe unit suite: 218 passed. The two stale manual-reminder source-text assertions were corrected to locate the specific existing reminder timestamp update without depending on line endings; reminder behaviour was not changed.
 - The local Supabase CLI cannot validate migrations because no local database is running. Production migration application was confirmed through the Supabase remote migration list. No Production data, deployment, or provider action was performed.
 - **Release verification after migration:** `git diff --check` passed, including the reconciled untracked migration; `npx.cmd tsc --noEmit` passed; focused estimate-generation claim, account-deletion, and cost-guard tests passed (**20 passed**); full safe unit suite passed (**218 passed**). Post-migration Supabase security advisors show only the same four pre-existing informational RLS-without-policy notices for service-role-only tables. No new claim-table finding appeared.
-- **Exact next action:** commit only the Profile mobile-polish files, then obtain approval before pushing or deploying the combined Profile updates.
+- **Exact next action:** commit only the safe Profile-polish files, push and fast-forward `main`, then confirm the Git-triggered Production deployment and perform a constrained authenticated mobile Profile visual check if a controlled browser session is available.
 
 ## Completed product and platform work
 

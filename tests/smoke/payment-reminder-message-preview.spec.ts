@@ -26,13 +26,11 @@ test("the Profile preview calls buildPaymentReminderSms rather than duplicating 
   expect(source).not.toContain("Reply STOP to stop text reminders.");
 });
 
-test("the preview reads the live (not just saved) business name and payment link state", () => {
+test("the preview reads the live payment link and uses a clear example business name until one is entered", () => {
   const source = readFileSync("app/components/profile-form.tsx", "utf8");
-  // name / paymentLink are the same useState values the input fields below
-  // write to on every keystroke, so the preview call reading them directly
-  // updates before save, with no separate "preview state" to fall out of
-  // sync.
-  expect(source).toContain("businessName: name.trim(),");
+  // The live name takes precedence; the fallback keeps the read-only example
+  // understandable before a new business has completed its Profile.
+  expect(source).toContain('businessName: name.trim() || "Clearwater Plumbing",');
   expect(source).toContain("paymentLink: paymentLink.trim() || null,");
 });
 
@@ -46,7 +44,7 @@ test("the example reminder text is collapsed, read-only markup, not rendered ins
   expect(previewSection).toContain("<details");
   expect(previewSection).toContain("Example only");
   expect(previewSection).toContain('}).replace("Invoice #", "Estimate #")');
-  expect(previewSection).toContain("TradePulse fills in the estimate number, amount, due date, and payment link when a reminder is sent.");
+  expect(previewSection).toContain("TradePulse fills in your business name, estimate number, amount, due date, and payment link when a reminder is sent.");
   expect(previewSection).not.toContain("<textarea");
   expect(previewSection).not.toContain("<input");
   expect(previewSection).not.toContain("onChange");
@@ -60,8 +58,14 @@ test("the Pro setup cards expose clear review and payment actions without implyi
   expect(source).toContain("Review requests send customers to this Google review page.");
   expect(source).toContain("Customers can pay from reminder texts.");
   expect(source).toContain("Paste review link manually");
-  expect(source).toContain('Connected to {connectedBusinessName || "your Google review page"}');
+  expect(source).toContain("Review link connected");
+  expect(source).toContain('{connectedBusinessName || "Your Google review page"}');
   expect(source).toContain("Payment link added");
+  expect(source).toContain("Add the link customers should use to pay.");
+  expect(source).toContain('placeholder="e.g. https://buy.stripe.com/..."');
+  expect(source).not.toContain("Review link added.");
+  expect(source).not.toContain("border-emerald-400/15");
+  expect(source).not.toContain("bg-emerald-400/[0.04]");
   expect(source).toContain("compactLinkInputClass");
   expect(source).toContain("flex flex-col items-start gap-5 sm:flex-row sm:items-center sm:gap-4");
   expect(source).toContain("min-h-[44px] self-start rounded-xl border border-zinc-700");
@@ -69,6 +73,14 @@ test("the Pro setup cards expose clear review and payment actions without implyi
   expect(source).toContain('paymentLink.trim() ? "Edit payment link" : "Add payment link"');
   expect(source).not.toContain("we process");
   expect(source).not.toContain("TradePulse processes");
+});
+
+test("Profile saves use only fields supported by the current business schema", () => {
+  const formSource = readFileSync("app/components/profile-form.tsx", "utf8");
+  const profileRouteSource = readFileSync("app/api/profile/route.ts", "utf8");
+
+  expect(formSource).not.toContain("show_business_name_on_estimates");
+  expect(profileRouteSource).not.toContain("show_business_name_on_estimates");
 });
 
 test("example estimate data is clearly not real: fixed, non-empty, and distinct from any real field", () => {

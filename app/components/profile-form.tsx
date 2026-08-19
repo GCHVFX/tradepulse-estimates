@@ -80,7 +80,6 @@ export function ProfileForm({
   const [connectedBusinessName, setConnectedBusinessName] = useState("");
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [reviewLinkSaveError, setReviewLinkSaveError] = useState("");
-  const [reviewLinkAdded, setReviewLinkAdded] = useState(false);
   const [copied, setCopied] = useState(false);
   const [upgrading, setUpgrading] = useState(false);
   const [upgraded, setUpgraded] = useState(false);
@@ -320,7 +319,6 @@ export function ProfileForm({
     setFindResults(null);
     setFindExtraDetails("");
     setFindWeakMatch(false);
-    setReviewLinkAdded(false);
     setShowFindLinkSheet(true);
   }
 
@@ -474,7 +472,7 @@ export function ProfileForm({
               </button>
             )}
             {!logoUrl && (
-              <p className="text-zinc-400 text-xs text-center leading-tight">PNG or JPG<br />max 2MB</p>
+              <p className="max-w-32 text-center text-xs leading-tight text-zinc-400">PNG or JPG from Photos, Files, or Drive. Max 2MB.</p>
             )}
           </div>
 
@@ -488,7 +486,7 @@ export function ProfileForm({
               onChange={(e) => setName(e.target.value)}
               autoComplete="organization"
             />
-            <p className="text-zinc-400 text-xs">Used in estimates, emails, texts, and review requests.</p>
+            <p className="text-zinc-400 text-xs">Used on estimates, emails, texts, and review requests.</p>
           </div>
         </div>
 
@@ -529,6 +527,7 @@ export function ProfileForm({
             onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
             autoComplete="tel"
           />
+          <p className="text-zinc-400 text-xs">Included in review requests so customers can contact you.</p>
         </div>
 
         {/* Email */}
@@ -545,6 +544,7 @@ export function ProfileForm({
             autoCapitalize="none"
             spellCheck={false}
           />
+          <p className="text-zinc-400 text-xs">Shown on estimates.</p>
         </div>
 
         {plan === "pro" && (
@@ -562,19 +562,13 @@ export function ProfileForm({
               </div>
 
               {googleReviewLink.trim() ? (
-                <p className="flex items-center gap-2 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.04] px-3 py-2 text-sm text-emerald-300">
-                  <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4 shrink-0" aria-hidden="true">
-                    <path d="M3.5 8.5 6.5 11.5l6-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  Connected to {connectedBusinessName || "your Google review page"}
-                </p>
+                <div className="flex flex-col gap-0.5 text-sm">
+                  <p className="font-medium text-zinc-200">Review link connected</p>
+                  <p className="text-zinc-400">{connectedBusinessName || "Your Google review page"}</p>
+                </div>
               ) : (
                 <p className="text-sm text-zinc-400">Add a review link to use review requests.</p>
               )}
-              {reviewLinkAdded && (
-                <p className="text-emerald-400 text-xs">Review link added.</p>
-              )}
-
               <button
                 type="button"
                 onClick={openFinder}
@@ -605,7 +599,6 @@ export function ProfileForm({
                       setGoogleReviewLink(e.target.value);
                       setConnectedBusinessName("");
                       setReviewLinkSaveError("");
-                      setReviewLinkAdded(false);
                     }}
                     autoComplete="url"
                     autoCorrect="off"
@@ -650,20 +643,15 @@ export function ProfileForm({
                 <p className="mt-1 text-xs leading-relaxed text-zinc-400">Customers can pay from reminder texts.</p>
               </div>
               {paymentLink.trim() ? (
-                <p className="flex items-center gap-2 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.04] px-3 py-2 text-sm text-emerald-300">
-                  <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4 shrink-0" aria-hidden="true">
-                    <path d="M3.5 8.5 6.5 11.5l6-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  Payment link added
-                </p>
+                <p className="text-sm font-medium text-zinc-200">Payment link added</p>
               ) : (
-                <p className="text-sm text-zinc-400">Add a payment link before sending reminders.</p>
+                <p className="text-sm text-zinc-400">Add the link customers should use to pay.</p>
               )}
               <label className="text-sm font-medium text-zinc-300">{paymentLink.trim() ? "Edit payment link" : "Add payment link"}</label>
               <input
                 type="text"
                 className={compactLinkInputClass}
-                placeholder="e.g. paypal.me/yourbusiness or your e-transfer email"
+                placeholder="e.g. https://buy.stripe.com/..."
                 value={paymentLink}
                 onChange={(e) => setPaymentLink(e.target.value)}
                 autoCorrect="off"
@@ -695,14 +683,14 @@ export function ProfileForm({
                   {buildPaymentReminderSms("overdue_1", {
                     invoiceRef: PREVIEW_ESTIMATE_REF,
                     amount: PREVIEW_AMOUNT,
-                    businessName: name.trim(),
+                    businessName: name.trim() || "Clearwater Plumbing",
                     dueDateText: PREVIEW_DUE_DATE,
                     paymentLink: paymentLink.trim() || null,
                   }).replace("Invoice #", "Estimate #")}
                 </p>
               </div>
               <p className="px-4 pb-4 text-zinc-500 text-xs leading-relaxed">
-                Example only. TradePulse fills in the estimate number, amount, due date, and payment link when a reminder is sent.
+                Example only. TradePulse fills in your business name, estimate number, amount, due date, and payment link when a reminder is sent.
               </p>
             </details>
           </section>
@@ -962,7 +950,6 @@ export function ProfileForm({
                         const rl = match.reviewLink || `https://search.google.com/local/writereview?placeid=${match.placeId}`;
                         setGoogleReviewLink(rl);
                         setConnectedBusinessName(match.placeName);
-                        setReviewLinkAdded(true);
                         setShowManualEntry(false);
                         setShowFindLinkSheet(false);
                       }}
