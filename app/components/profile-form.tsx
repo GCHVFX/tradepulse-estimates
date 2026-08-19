@@ -10,10 +10,10 @@ import { formatMonthlyPlanPrice } from "@/lib/plan-pricing";
 import { buildPaymentReminderSms } from "@/lib/payment-reminder-message";
 
 // Fixed example values for the read-only message preview below. These are
-// never real invoice data -- the actual reference, amount, and due date are
+// never real estimate data -- the actual reference, amount, and due date are
 // filled in automatically by app/api/cron/payment-reminders/route.ts at
 // send time, using the same buildPaymentReminderSms() this preview calls.
-const PREVIEW_INVOICE_REF = "1042";
+const PREVIEW_ESTIMATE_REF = "1042";
 const PREVIEW_AMOUNT = "350";
 const PREVIEW_DUE_DATE = "August 4, 2026";
 
@@ -100,6 +100,8 @@ export function ProfileForm({
 
   const inputClass =
     "w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3.5 text-white placeholder-zinc-600 text-base focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]";
+  const compactLinkInputClass =
+    "w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]";
 
   useEffect(() => {
     if (openSection === "reviews") {
@@ -423,8 +425,8 @@ export function ProfileForm({
     <>
       <div className="flex flex-col gap-4">
 
-        <div className="flex items-center gap-4">
-          <div className="flex flex-col items-center gap-1.5 shrink-0">
+        <div className="flex flex-col items-start gap-5 sm:flex-row sm:items-center sm:gap-4">
+          <div className="flex shrink-0 flex-col items-start gap-1.5 sm:items-center">
             <label className="text-sm font-medium text-zinc-400 self-start">Company logo</label>
             <button
               type="button"
@@ -476,7 +478,7 @@ export function ProfileForm({
             )}
           </div>
 
-          <div className="flex flex-col gap-1.5 flex-1">
+          <div className="flex w-full flex-1 flex-col gap-1.5">
             <label className="text-sm font-medium text-zinc-400">Company name</label>
             <input
               type="text"
@@ -549,23 +551,25 @@ export function ProfileForm({
           <section className="flex flex-col gap-3">
             <div>
               <h2 className="text-base font-semibold text-white">Reviews &amp; payment reminders</h2>
-              <p className="mt-1 text-xs text-zinc-400">Set up the links customers use after a job or when an invoice is due.</p>
+              <p className="mt-1 text-xs text-zinc-400">Set up the links customers use after a job or when payment is due.</p>
             </div>
 
             {/* Google Reviews */}
             <div ref={reviewSectionRef} className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 flex flex-col gap-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-semibold text-white">Google reviews</h3>
-                  <p className="mt-1 text-xs leading-relaxed text-zinc-400">Review requests send customers to this Google review page.</p>
-                </div>
-                <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${googleReviewLink.trim() ? "bg-emerald-400/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"}`}>
-                  {googleReviewLink.trim() ? "Connected" : "Needs setup"}
-                </span>
+              <div>
+                <h3 className="text-sm font-semibold text-white">Google reviews</h3>
+                <p className="mt-1 text-xs leading-relaxed text-zinc-400">Review requests send customers to this Google review page.</p>
               </div>
 
-              {googleReviewLink.trim() && connectedBusinessName && (
-                <p className="text-sm text-zinc-300">{connectedBusinessName}</p>
+              {googleReviewLink.trim() ? (
+                <p className="flex items-center gap-2 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.04] px-3 py-2 text-sm text-emerald-300">
+                  <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4 shrink-0" aria-hidden="true">
+                    <path d="M3.5 8.5 6.5 11.5l6-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  Connected to {connectedBusinessName || "your Google review page"}
+                </p>
+              ) : (
+                <p className="text-sm text-zinc-400">Add a review link to use review requests.</p>
               )}
               {reviewLinkAdded && (
                 <p className="text-emerald-400 text-xs">Review link added.</p>
@@ -584,7 +588,7 @@ export function ProfileForm({
               <button
                 type="button"
                 onClick={() => setShowManualEntry(!showManualEntry)}
-                className="min-h-[44px] self-start text-sm font-medium text-zinc-400 transition-colors hover:text-zinc-200"
+                className="min-h-[44px] self-start rounded-xl border border-zinc-700 px-3 text-sm font-medium text-zinc-300 transition-colors hover:border-zinc-500 hover:bg-zinc-800"
               >
                 Paste review link manually
               </button>
@@ -641,19 +645,24 @@ export function ProfileForm({
 
             {/* Payment link */}
             <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 flex flex-col gap-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-semibold text-white">Payment reminders</h3>
-                  <p className="mt-1 text-xs leading-relaxed text-zinc-400">Payment reminders include this link so customers can pay.</p>
-                </div>
-                <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${paymentLink.trim() ? "bg-emerald-400/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"}`}>
-                  {paymentLink.trim() ? "Ready" : "Needs setup"}
-                </span>
+              <div>
+                <h3 className="text-sm font-semibold text-white">Payment reminders</h3>
+                <p className="mt-1 text-xs leading-relaxed text-zinc-400">Customers can pay from reminder texts.</p>
               </div>
+              {paymentLink.trim() ? (
+                <p className="flex items-center gap-2 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.04] px-3 py-2 text-sm text-emerald-300">
+                  <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4 shrink-0" aria-hidden="true">
+                    <path d="M3.5 8.5 6.5 11.5l6-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  Payment link added
+                </p>
+              ) : (
+                <p className="text-sm text-zinc-400">Add a payment link before sending reminders.</p>
+              )}
               <label className="text-sm font-medium text-zinc-300">{paymentLink.trim() ? "Edit payment link" : "Add payment link"}</label>
               <input
                 type="text"
-                className={inputClass}
+                className={compactLinkInputClass}
                 placeholder="e.g. paypal.me/yourbusiness or your e-transfer email"
                 value={paymentLink}
                 onChange={(e) => setPaymentLink(e.target.value)}
@@ -668,7 +677,7 @@ export function ProfileForm({
                 app/api/cron/payment-reminders/route.ts sends, so this can
                 never drift from the real message. Business name and payment
                 link reflect what's currently typed above, updating before
-                save; invoice reference, amount, and due date are always the
+                save; estimate reference, amount, and due date are always the
                 fixed example values, since real ones only exist at send
                 time. */}
             <details className="rounded-xl border border-zinc-800 bg-zinc-950/60">
@@ -684,7 +693,7 @@ export function ProfileForm({
               <div className="flex flex-col gap-2 border-t border-zinc-800 px-4 py-3">
                 <p className="text-sm text-zinc-200 leading-relaxed break-words">
                   {buildPaymentReminderSms("overdue_1", {
-                    invoiceRef: PREVIEW_INVOICE_REF,
+                    invoiceRef: PREVIEW_ESTIMATE_REF,
                     amount: PREVIEW_AMOUNT,
                     businessName: name.trim(),
                     dueDateText: PREVIEW_DUE_DATE,

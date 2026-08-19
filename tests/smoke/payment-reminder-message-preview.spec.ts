@@ -3,17 +3,17 @@ import { expect, test } from "@playwright/test";
 import { buildPaymentReminderSms } from "../../lib/payment-reminder-message";
 
 // The Profile "Message preview" section's exact fixed example values, kept
-// in sync with app/components/profile-form.tsx's PREVIEW_INVOICE_REF /
+// in sync with app/components/profile-form.tsx's PREVIEW_ESTIMATE_REF /
 // PREVIEW_AMOUNT / PREVIEW_DUE_DATE constants (asserted below via source
 // inspection, since profile-form.tsx is a client component this Playwright
 // unit config can't render without a DOM testing library).
-const PREVIEW_INVOICE_REF = "1042";
+const PREVIEW_ESTIMATE_REF = "1042";
 const PREVIEW_AMOUNT = "350";
 const PREVIEW_DUE_DATE = "August 4, 2026";
 
 test("the preview's fixed example values match what the Profile UI actually renders", () => {
   const source = readFileSync("app/components/profile-form.tsx", "utf8");
-  expect(source).toContain(`const PREVIEW_INVOICE_REF = "${PREVIEW_INVOICE_REF}"`);
+  expect(source).toContain(`const PREVIEW_ESTIMATE_REF = "${PREVIEW_ESTIMATE_REF}"`);
   expect(source).toContain(`const PREVIEW_AMOUNT = "${PREVIEW_AMOUNT}"`);
   expect(source).toContain(`const PREVIEW_DUE_DATE = "${PREVIEW_DUE_DATE}"`);
 });
@@ -58,27 +58,30 @@ test("the Pro setup cards expose clear review and payment actions without implyi
   expect(source).toContain("Google reviews");
   expect(source).toContain("Payment reminders");
   expect(source).toContain("Review requests send customers to this Google review page.");
-  expect(source).toContain("Payment reminders include this link so customers can pay.");
+  expect(source).toContain("Customers can pay from reminder texts.");
   expect(source).toContain("Paste review link manually");
-  expect(source).toContain('googleReviewLink.trim() ? "Connected" : "Needs setup"');
-  expect(source).toContain('paymentLink.trim() ? "Ready" : "Needs setup"');
+  expect(source).toContain('Connected to {connectedBusinessName || "your Google review page"}');
+  expect(source).toContain("Payment link added");
+  expect(source).toContain("compactLinkInputClass");
+  expect(source).toContain("flex flex-col items-start gap-5 sm:flex-row sm:items-center sm:gap-4");
+  expect(source).toContain("min-h-[44px] self-start rounded-xl border border-zinc-700");
   expect(source).toContain('googleReviewLink.trim() ? "Change business" : "Find review link"');
   expect(source).toContain('paymentLink.trim() ? "Edit payment link" : "Add payment link"');
   expect(source).not.toContain("we process");
   expect(source).not.toContain("TradePulse processes");
 });
 
-test("example invoice data is clearly not real: fixed, non-empty, and distinct from any real field", () => {
+test("example estimate data is clearly not real: fixed, non-empty, and distinct from any real field", () => {
   // The whole point of these constants is that they never come from
   // tpe_estimates -- they're hardcoded in the component, not looked up.
-  expect(PREVIEW_INVOICE_REF).toBe("1042");
+  expect(PREVIEW_ESTIMATE_REF).toBe("1042");
   expect(PREVIEW_AMOUNT).toBe("350");
   expect(PREVIEW_DUE_DATE).toBe("August 4, 2026");
 });
 
 test("preview message with a configured payment link matches the required structure", () => {
   const message = buildPaymentReminderSms("overdue_1", {
-    invoiceRef: PREVIEW_INVOICE_REF,
+    invoiceRef: PREVIEW_ESTIMATE_REF,
     amount: PREVIEW_AMOUNT,
     businessName: "Clearwater Plumbing",
     dueDateText: PREVIEW_DUE_DATE,
@@ -91,7 +94,7 @@ test("preview message with a configured payment link matches the required struct
 
 test("preview message with no payment link falls back to the generic ask", () => {
   const message = buildPaymentReminderSms("overdue_1", {
-    invoiceRef: PREVIEW_INVOICE_REF,
+    invoiceRef: PREVIEW_ESTIMATE_REF,
     amount: PREVIEW_AMOUNT,
     businessName: "Clearwater Plumbing",
     dueDateText: PREVIEW_DUE_DATE,
@@ -105,14 +108,14 @@ test("preview message with no payment link falls back to the generic ask", () =>
 
 test("business name always appears in the preview", () => {
   const withLink = buildPaymentReminderSms("overdue_1", {
-    invoiceRef: PREVIEW_INVOICE_REF,
+    invoiceRef: PREVIEW_ESTIMATE_REF,
     amount: PREVIEW_AMOUNT,
     businessName: "Clearwater Plumbing",
     dueDateText: PREVIEW_DUE_DATE,
     paymentLink: "https://pay.example.com/abc",
   });
   const withoutLink = buildPaymentReminderSms("overdue_1", {
-    invoiceRef: PREVIEW_INVOICE_REF,
+    invoiceRef: PREVIEW_ESTIMATE_REF,
     amount: PREVIEW_AMOUNT,
     businessName: "Clearwater Plumbing",
     dueDateText: PREVIEW_DUE_DATE,
@@ -125,7 +128,7 @@ test("business name always appears in the preview", () => {
 test("STOP wording always appears in the preview, with or without a payment link", () => {
   for (const paymentLink of ["https://pay.example.com/abc", null]) {
     const message = buildPaymentReminderSms("overdue_1", {
-      invoiceRef: PREVIEW_INVOICE_REF,
+      invoiceRef: PREVIEW_ESTIMATE_REF,
       amount: PREVIEW_AMOUNT,
       businessName: "Clearwater Plumbing",
       dueDateText: PREVIEW_DUE_DATE,
@@ -137,7 +140,7 @@ test("STOP wording always appears in the preview, with or without a payment link
 
 test("toggling the payment link between configured and empty changes only the CTA sentence", () => {
   const base = {
-    invoiceRef: PREVIEW_INVOICE_REF,
+    invoiceRef: PREVIEW_ESTIMATE_REF,
     amount: PREVIEW_AMOUNT,
     businessName: "Clearwater Plumbing",
     dueDateText: PREVIEW_DUE_DATE,
