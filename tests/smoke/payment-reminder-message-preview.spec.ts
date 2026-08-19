@@ -36,22 +36,30 @@ test("the preview reads the live (not just saved) business name and payment link
   expect(source).toContain("paymentLink: paymentLink.trim() || null,");
 });
 
-test("the preview is read-only markup, not rendered inside an editable input", () => {
+test("the example reminder text is collapsed, read-only markup, not rendered inside an editable input", () => {
   const source = readFileSync("app/components/profile-form.tsx", "utf8");
-  const previewSectionStart = source.indexOf("Message preview");
+  const previewSectionStart = source.indexOf("<details");
   expect(previewSectionStart).toBeGreaterThan(-1);
-  // The preview block itself (label through the closing example-values
-  // caption) is short; 700 chars comfortably covers it without reaching the
-  // next unrelated field.
-  const previewSection = source.slice(previewSectionStart, previewSectionStart + 700);
+  const previewSection = source.slice(previewSectionStart, previewSectionStart + 900);
+  expect(previewSection).toContain("<details");
+  expect(previewSection).toContain("Example only");
   expect(previewSection).not.toContain("<textarea");
   expect(previewSection).not.toContain("<input");
   expect(previewSection).not.toContain("onChange");
 });
 
-test("the guidance copy near the payment-link field is exact and doesn't imply TradePulse processes payment", () => {
+test("the Pro setup cards expose clear review and payment actions without implying TradePulse processes payment", () => {
   const source = readFileSync("app/components/profile-form.tsx", "utf8");
-  expect(source).toContain("Payment reminders include this link so customers can pay directly from the text.");
+  expect(source).toContain("Reviews &amp; payment reminders");
+  expect(source).toContain("Google reviews");
+  expect(source).toContain("Payment reminders");
+  expect(source).toContain("Review requests send customers to this Google review page.");
+  expect(source).toContain("Payment reminders include this link so customers can pay.");
+  expect(source).toContain("Paste review link manually");
+  expect(source).toContain('googleReviewLink.trim() ? "Connected" : "Needs setup"');
+  expect(source).toContain('paymentLink.trim() ? "Ready" : "Needs setup"');
+  expect(source).toContain('googleReviewLink.trim() ? "Change business" : "Find review link"');
+  expect(source).toContain('paymentLink.trim() ? "Edit payment link" : "Add payment link"');
   expect(source).not.toContain("we process");
   expect(source).not.toContain("TradePulse processes");
 });

@@ -546,59 +546,52 @@ export function ProfileForm({
         </div>
 
         {plan === "pro" && (
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.04] p-4 flex flex-col gap-5">
-            <p className="text-xs font-semibold text-amber-500 uppercase tracking-widest">Pro Features</p>
+          <section className="flex flex-col gap-3">
+            <div>
+              <h2 className="text-base font-semibold text-white">Reviews &amp; payment reminders</h2>
+              <p className="mt-1 text-xs text-zinc-400">Set up the links customers use after a job or when an invoice is due.</p>
+            </div>
 
             {/* Google Reviews */}
-            <div ref={reviewSectionRef} className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-zinc-400">Google Reviews</label>
+            <div ref={reviewSectionRef} className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 flex flex-col gap-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-white">Google reviews</h3>
+                  <p className="mt-1 text-xs leading-relaxed text-zinc-400">Review requests send customers to this Google review page.</p>
+                </div>
+                <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${googleReviewLink.trim() ? "bg-emerald-400/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"}`}>
+                  {googleReviewLink.trim() ? "Connected" : "Needs setup"}
+                </span>
+              </div>
 
-              {googleReviewLink.trim() ? (
-                <>
-                  <div className="bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3.5 flex items-center gap-3">
-                    <svg viewBox="0 0 20 20" fill="none" className="w-4 h-4 text-emerald-400 shrink-0" aria-hidden="true">
-                      <path d="M4 10l4.5 4.5L16 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    <div>
-                      <p className="text-emerald-400 text-sm font-medium">Connected</p>
-                      {connectedBusinessName && (
-                        <p className="text-zinc-400 text-xs mt-0.5">{connectedBusinessName}</p>
-                      )}
-                    </div>
-                  </div>
-                  {reviewLinkAdded && (
-                    <p className="text-emerald-400 text-xs">Review link added.</p>
-                  )}
-                  <button
-                    type="button"
-                    onClick={openFinder}
-                    className="text-xs text-amber-400 hover:text-amber-300 transition-colors min-h-[32px] self-start font-medium"
-                  >
-                    Change Business
-                  </button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={openFinder}
-                  className="w-full bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-white font-semibold text-base rounded-xl py-3.5 transition-colors min-h-[56px]"
-                >
-                  Find My Review Link
-                </button>
+              {googleReviewLink.trim() && connectedBusinessName && (
+                <p className="text-sm text-zinc-300">{connectedBusinessName}</p>
               )}
-              <p className="text-zinc-400 text-xs">Included in review requests so customers can leave you a review.</p>
+              {reviewLinkAdded && (
+                <p className="text-emerald-400 text-xs">Review link added.</p>
+              )}
+
+              <button
+                type="button"
+                onClick={openFinder}
+                className={googleReviewLink.trim()
+                  ? "w-full rounded-xl border border-amber-500/30 px-4 py-3 text-sm font-semibold text-amber-400 transition-colors hover:bg-amber-500/10 active:bg-amber-500/15 min-h-[44px]"
+                  : "w-full rounded-xl bg-amber-500 px-4 py-3 text-sm font-bold text-zinc-950 transition-colors hover:bg-amber-400 active:bg-amber-600 min-h-[44px]"}
+              >
+                {googleReviewLink.trim() ? "Change business" : "Find review link"}
+              </button>
 
               <button
                 type="button"
                 onClick={() => setShowManualEntry(!showManualEntry)}
-                className="text-xs text-zinc-400 hover:text-zinc-300 transition-colors min-h-[32px] self-start"
+                className="min-h-[44px] self-start text-sm font-medium text-zinc-400 transition-colors hover:text-zinc-200"
               >
-                Can&apos;t find your business?
+                Paste review link manually
               </button>
 
               {showManualEntry && (
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium text-zinc-400">Google Review Link</label>
+                <div className="flex flex-col gap-1.5 border-t border-zinc-800 pt-3">
+                  <label className="text-sm font-medium text-zinc-400">Google review link</label>
                   <input
                     type="url"
                     className={inputClass}
@@ -621,7 +614,7 @@ export function ProfileForm({
                   <button
                     type="button"
                     onClick={() => setShowReviewLinkHelp(!showReviewLinkHelp)}
-                    className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-300 transition-colors min-h-[32px]"
+                    className="flex min-h-[44px] items-center gap-1 text-sm text-zinc-400 transition-colors hover:text-zinc-200"
                   >
                     <svg
                       viewBox="0 0 16 16"
@@ -631,7 +624,7 @@ export function ProfileForm({
                     >
                       <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
-                    How do I find it?
+                    How to find your review link
                   </button>
                   {showReviewLinkHelp && (
                     <ol className="ml-1 flex flex-col gap-1 text-xs text-zinc-400 list-decimal list-inside">
@@ -647,8 +640,17 @@ export function ProfileForm({
             </div>
 
             {/* Payment link */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-zinc-400">Payment link</label>
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 flex flex-col gap-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-white">Payment reminders</h3>
+                  <p className="mt-1 text-xs leading-relaxed text-zinc-400">Payment reminders include this link so customers can pay.</p>
+                </div>
+                <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${paymentLink.trim() ? "bg-emerald-400/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"}`}>
+                  {paymentLink.trim() ? "Ready" : "Needs setup"}
+                </span>
+              </div>
+              <label className="text-sm font-medium text-zinc-300">{paymentLink.trim() ? "Edit payment link" : "Add payment link"}</label>
               <input
                 type="text"
                 className={inputClass}
@@ -659,12 +661,9 @@ export function ProfileForm({
                 autoCapitalize="none"
                 spellCheck={false}
               />
-              <p className="text-zinc-400 text-xs">
-                Payment reminders include this link so customers can pay directly from the text.
-              </p>
             </div>
 
-            {/* Message preview -- read only, not a template editor. Built from
+            {/* Example reminder text -- read only, not a template editor. Built from
                 the exact same buildPaymentReminderSms() that
                 app/api/cron/payment-reminders/route.ts sends, so this can
                 never drift from the real message. Business name and payment
@@ -672,9 +671,17 @@ export function ProfileForm({
                 save; invoice reference, amount, and due date are always the
                 fixed example values, since real ones only exist at send
                 time. */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-zinc-400">Message preview</label>
-              <div className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3">
+            <details className="rounded-xl border border-zinc-800 bg-zinc-950/60">
+              <summary className="flex min-h-[44px] cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-zinc-300">
+                Example reminder text
+                <span className="flex items-center gap-2 text-xs font-normal text-zinc-500">
+                  Example only
+                  <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4" aria-hidden="true">
+                    <path d="m4 6 4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </span>
+              </summary>
+              <div className="flex flex-col gap-2 border-t border-zinc-800 px-4 py-3">
                 <p className="text-sm text-zinc-200 leading-relaxed break-words">
                   {buildPaymentReminderSms("overdue_1", {
                     invoiceRef: PREVIEW_INVOICE_REF,
@@ -685,11 +692,11 @@ export function ProfileForm({
                   })}
                 </p>
               </div>
-              <p className="text-zinc-500 text-xs">
+              <p className="px-4 pb-4 text-zinc-500 text-xs leading-relaxed">
                 Example only, using invoice #{PREVIEW_INVOICE_REF}. The real invoice number, amount, and due date are filled in automatically when a reminder is sent.
               </p>
-            </div>
-          </div>
+            </details>
+          </section>
         )}
 
         {status === "error" && errorMsg && (

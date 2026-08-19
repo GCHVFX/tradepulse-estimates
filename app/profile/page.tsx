@@ -61,7 +61,7 @@ export default async function ProfilePage({
         )}
       </header>
 
-      <main className="flex-1 px-5 pb-28">
+      <main className="flex-1 px-5 pb-36">
         <ProfileForm
           profile={profile}
           userId={user.id}
