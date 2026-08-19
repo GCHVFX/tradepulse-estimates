@@ -40,9 +40,13 @@ test("the example reminder text is collapsed, read-only markup, not rendered ins
   const source = readFileSync("app/components/profile-form.tsx", "utf8");
   const previewSectionStart = source.indexOf("<details");
   expect(previewSectionStart).toBeGreaterThan(-1);
-  const previewSection = source.slice(previewSectionStart, previewSectionStart + 900);
+  const previewSectionEnd = source.indexOf("</details>", previewSectionStart);
+  expect(previewSectionEnd).toBeGreaterThan(previewSectionStart);
+  const previewSection = source.slice(previewSectionStart, previewSectionEnd + "</details>".length);
   expect(previewSection).toContain("<details");
   expect(previewSection).toContain("Example only");
+  expect(previewSection).toContain('}).replace("Invoice #", "Estimate #")');
+  expect(previewSection).toContain("TradePulse fills in the estimate number, amount, due date, and payment link when a reminder is sent.");
   expect(previewSection).not.toContain("<textarea");
   expect(previewSection).not.toContain("<input");
   expect(previewSection).not.toContain("onChange");

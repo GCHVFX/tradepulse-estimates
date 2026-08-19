@@ -1,13 +1,12 @@
 # TradePulse handoff
 
-Updated: 2026-08-18 (Profile Pro setup mobile UX locally verified; local commit pending)
+Updated: 2026-08-18 (Profile reminder-preview terminology correction locally verified; commit and deployment pending)
 
 ## Current state
 
-- **Branch:** `codex/profile-pro-setup-ux`, created from `main` at deployed commit `074dc18a2eeee7cf7dff6a518743e4f2811454fe`. The Profile UX patch is locally verified, uncommitted, and has not been pushed or deployed.
-- **Deployed Production application:** `074dc18`. The previously released cost-amplification guards, Stripe billing recovery, and estimate-generation deletion-race protection remain in Production. Vercel cron remains disabled.
-- **Pending Profile Pro setup UX:** `app/components/profile-form.tsx` now separates the Pro area into Google reviews, payment reminders, and a collapsed example reminder-text card. It presents connected/ready/needs-setup states, clear task actions, and keeps the existing review-link and payment-link fields and save behaviour. `app/profile/page.tsx` adds lower-page breathing room above the fixed bottom navigation.
-- **Local verification:** `git diff --check`, `npx.cmd tsc --noEmit`, the focused payment-reminder preview suite (**11 passed**), and the complete safe unit suite (**218 passed**) passed. No browser-authenticated visual check was run in this session.
+- **Branch:** `main`, at deployed commit `6250a9279098060737ea3650c598bfce3618aef1` (`Improve Profile Pro setup mobile UX`). The Git-triggered Production deployment `dpl_G2PhqQG5ZTNSr5EkxoNNvDZoWsmr` is READY. Vercel cron remains disabled.
+- **Pending Profile reminder-preview terminology correction:** `app/components/profile-form.tsx` changes only the collapsed example display from invoice to estimate language. Actual payment-reminder generation and sending remain unchanged. The helper text now says TradePulse fills in the estimate number, amount, due date, and payment link when a reminder is sent.
+- **Local verification:** `git diff --check`, `npx.cmd tsc --noEmit`, the focused payment-reminder preview suite (**11 passed**), and the complete safe unit suite (**218 passed**) passed.
 - **Release constraints:** do not re-enable or invoke Vercel cron. Do not send SMS, create Checkout, complete payment, or alter Stripe, Google, or payment behaviour for this UX change.
 - **Pricing:** Starter is **CA$29/month** and Pro is **CA$59/month**. Stripe price IDs remain environment-driven. Production pricing and Checkout paths were verified during the completed cutover.
 - **Communications:** remain disabled unless a future task explicitly authorises them.
@@ -21,7 +20,7 @@ Updated: 2026-08-18 (Profile Pro setup mobile UX locally verified; local commit 
 - Full safe unit suite: 218 passed. The two stale manual-reminder source-text assertions were corrected to locate the specific existing reminder timestamp update without depending on line endings; reminder behaviour was not changed.
 - The local Supabase CLI cannot validate migrations because no local database is running. Production migration application was confirmed through the Supabase remote migration list. No Production data, deployment, or provider action was performed.
 - **Release verification after migration:** `git diff --check` passed, including the reconciled untracked migration; `npx.cmd tsc --noEmit` passed; focused estimate-generation claim, account-deletion, and cost-guard tests passed (**20 passed**); full safe unit suite passed (**218 passed**). Post-migration Supabase security advisors show only the same four pre-existing informational RLS-without-policy notices for service-role-only tables. No new claim-table finding appeared.
-- **Exact next action:** commit only the intended Profile UX files, then obtain approval before pushing or deploying.
+- **Exact next action:** commit only the reminder-preview copy files, then obtain approval before pushing or deploying.
 
 ## Completed product and platform work
 

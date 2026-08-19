@@ -689,11 +689,11 @@ export function ProfileForm({
                     businessName: name.trim(),
                     dueDateText: PREVIEW_DUE_DATE,
                     paymentLink: paymentLink.trim() || null,
-                  })}
+                  }).replace("Invoice #", "Estimate #")}
                 </p>
               </div>
               <p className="px-4 pb-4 text-zinc-500 text-xs leading-relaxed">
-                Example only, using invoice #{PREVIEW_INVOICE_REF}. The real invoice number, amount, and due date are filled in automatically when a reminder is sent.
+                Example only. TradePulse fills in the estimate number, amount, due date, and payment link when a reminder is sent.
               </p>
             </details>
           </section>
