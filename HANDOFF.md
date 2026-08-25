@@ -214,7 +214,38 @@ Every test-driven POST to `/api/auth/signup` goes through one wrapper, `postSign
 
 **Teardown is now deterministic even with no business row.** `cleanupTestAccount()` resolves the Stripe customer from the business row when present and otherwise from `metadata['user_id']`, so a missing `tpe_businesses` row can never silently skip Stripe again. That silent skip is exactly what let the five survive a teardown that had already removed their database and Auth records. Stripe is resolved and deleted **before** any database or Auth deletion. Only an explicitly already-missing customer is tolerated; only transient failures retry, bounded at three attempts. A failed or ambiguous resolution throws with the user id and the candidate customer ids, and leaves every record needed for recovery in place.
 
-### Exact Production cutover sequence still required
+## Currency cutover COMPLETED in Production (2026-08-24)
+
+Steps 1 to 3 of the cutover below are **done**. Only push and deploy remain.
+
+### Migration applied
+
+`supabase/migrations/20260825000000_add_currency_columns.sql` was applied through the Supabase MCP `apply_migration` workflow, byte-identical to the committed file (md5 verified against `HEAD` first). No ad hoc SQL was executed.
+
+Recorded **exactly once** in `supabase_migrations.schema_migrations` as version `20260825035227`, name `add_currency_columns`.
+
+Verified after: `tpe_businesses.estimate_currency` and `tpe_estimates.currency` both exist as `text`, `NOT NULL`, default `'cad'::text`, each with a check constraint `CHECK (col = ANY (ARRAY['cad','usd']))`. **7 of 7 businesses and 19 of 19 estimates read `cad`.** Nothing else moved: RLS policies 9 to 9, public functions 12 to 12, triggers 0 to 0, auth users 7 to 7. `tpe_` constraints went 53 to 55, exactly the two new checks.
+
+### Types regenerated, temporary casts removed
+
+`lib/database.types.ts` refreshed from the now-current Production schema via the Supabase MCP generator. Drift check: the types file declares 25 Row columns for `tpe_businesses` and 36 for `tpe_estimates`, matching the live schema exactly. `lib/currency-db.ts` no longer contains the `AnyClient` cast or its `no-explicit-any` disable, and is now typed against the real `Database`.
+
+### Live Stripe Prices updated
+
+Both existing Prices were re-read immediately before their update and every guard passed. No new Price, no new Product, no change to CAD amounts, default currency, archive state, or the legacy archived CAD 3900 Price. Stripe Tax and automatic tax were not touched.
+
+| | Starter `price_1U166o…` | Pro `price_1TzwEC…` |
+|---|---|---|
+| Product | `prod_Uzw4COlgTWZnhc` TradePulse Starter, unchanged | `prod_Uzw6WQ8HsaqblQ` TradePulse Pro, unchanged |
+| Default currency | cad, unchanged | cad, unchanged |
+| CAD | 2900 before and after | 5900 before and after |
+| USD | absent → **1900** | absent → **3900** |
+| `tax_behavior` | `unspecified` on price, CAD and USD options | same |
+| `currency_options` | `['cad']` → `['cad','usd']` | `['cad']` → `['cad','usd']` |
+
+Account-wide after: 3 Prices (unchanged count), 2 Products (unchanged), **0 live Customers**, 459 subscriptions all `canceled`, none active, trialling, or past-due. **No Customer or Subscription was created.**
+
+### Exact Production cutover sequence (steps 1 to 3 now complete)
 
 1. Apply `20260825000000_add_currency_columns.sql` to Production (authorisation still outstanding).
 2. Verify all businesses and estimates read `cad`.

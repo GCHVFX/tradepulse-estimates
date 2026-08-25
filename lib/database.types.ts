@@ -20,6 +20,7 @@ export type Database = {
           deposit_percent: number | null
           deposit_threshold: number | null
           email: string | null
+          estimate_currency: string
           google_review_link: string | null
           id: string
           labour_rate: number
@@ -46,6 +47,7 @@ export type Database = {
           deposit_percent?: number | null
           deposit_threshold?: number | null
           email?: string | null
+          estimate_currency?: string
           google_review_link?: string | null
           id?: string
           labour_rate?: number
@@ -72,6 +74,7 @@ export type Database = {
           deposit_percent?: number | null
           deposit_threshold?: number | null
           email?: string | null
+          estimate_currency?: string
           google_review_link?: string | null
           id?: string
           labour_rate?: number
@@ -404,6 +407,7 @@ export type Database = {
           completed_at: string | null
           copied_at: string | null
           created_at: string
+          currency: string
           customer_email: string
           customer_name: string
           customer_phone: string
@@ -441,6 +445,7 @@ export type Database = {
           completed_at?: string | null
           copied_at?: string | null
           created_at?: string
+          currency?: string
           customer_email: string
           customer_name: string
           customer_phone: string
@@ -478,6 +483,7 @@ export type Database = {
           completed_at?: string | null
           copied_at?: string | null
           created_at?: string
+          currency?: string
           customer_email?: string
           customer_name?: string
           customer_phone?: string
