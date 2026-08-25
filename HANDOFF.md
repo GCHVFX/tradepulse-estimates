@@ -1,6 +1,6 @@
 # TradePulse handoff
 
-Updated: 2026-08-25 08:18 PT (homepage currency mismatch and mobile hero spacing fixed in the working tree; US geo default now PROVEN in Production via a US VPN session; not committed, not deployed)
+Updated: 2026-08-25 09:10 PT (/subscribe billing-currency fixed and the redirect traced: it is correct enforcement, with a sign-out escape added; Production baseline has moved to 9 accounts; not committed, not deployed)
 
 ## Release 1: account-provisioning integrity (2026-08-24, uncommitted)
 
@@ -243,6 +243,134 @@ Root cause, four call sites, none of which pass the estimate's currency into the
 
 CAD is unaffected because CAD is the fallback. **USD must not be offered to a real contractor until this is fixed.** The signup currency control is live in Production today, so a US contractor could select USD and be billed correctly at US$19 while their customer-facing estimates show CA$.
 
+## /subscribe billing-currency defect FIXED (2026-08-25 09:03 PT, uncommitted)
+
+**Status:** fixed in the working tree on `main`, **not committed, not pushed, not deployed**.
+
+### What was seen on Production
+
+In Opera with a US VPN, the public homepage and `/signup` correctly showed US pricing. The browser still held an authenticated **Canadian** session, so `/` redirected to `/subscribe`, which rendered a plan card reading a bare **`$59/month`** next to a button reading **`Upgrade to Pro, CA$59/month`**.
+
+### Root cause
+
+Two separate hardcodings in the same surface, neither of which consulted the account at all.
+
+1. `app/components/plan-picker.tsx` rendered `<span …>${plan.price}</span>`, where `plan.price` came from `PLAN_MONTHLY_PRICES_CAD`. A **bare `$`** in front of a fixed CAD number, for everyone.
+2. The button used `formatMonthlyPlanPrice(selected, "cad")`, and `app/subscribe/page.tsx` passed `formatMonthlyPlanPrice("pro", "cad")`. Literal `"cad"` in both.
+
+The Canadian account happened to make the button read correctly, which is why only the card looked wrong. **A USD-billed contractor would have had it worse in a way the VPN session did not reveal:** card `$59`, button `CA$59`, and Checkout charging **US$39**. Three different answers on one screen.
+
+Meanwhile `/api/billing/checkout` was already doing the right thing and `/subscribe` simply never asked it.
+
+### Exact currency source of truth
+
+Checkout's existing rule, now extracted verbatim into **`lib/billing-currency.ts`** and shared, in this order:
+
+1. **A current Stripe subscription.** Stripe locks the currency to the Customer at the first subscription and it can never be changed, so once one exists it is the only authority. `canceled` and `incomplete_expired` are explicitly released and do not count, because Stripe keeps them readable forever.
+2. **The business `estimate_currency`**, which was itself seeded from the geo default at signup.
+
+**Geo appears nowhere in that rule, deliberately.** `lib/billing-currency.ts` imports no header and no `currencyFromCountry`, and a test asserts it stays that way. An existing customer's billing must not appear to change because they opened a VPN or travelled. On `/subscribe` geo seeds only the signed-out `?preview=true` case, where there is no business at all; any business immediately overwrites it through the shared rule.
+
+Both callers pass in the subscription they have **already** retrieved, so sharing the rule costs no extra Stripe call. Checkout keeps its single `subscriptions.retrieve` and its unrelated `previousSubscriptionId` trial-cancellation logic untouched.
+
+### The fix
+
+- **`lib/billing-currency.ts`** (new): `lockedSubscriptionCurrency()` and `resolveBillingCurrency()`, with the released-status set in one place.
+- **`app/api/billing/checkout/route.ts`**: the inline `status !== "canceled" && status !== "incomplete_expired"` check is replaced by `lockedSubscriptionCurrency(existing)`. Same behaviour, one implementation.
+- **`app/components/plan-picker.tsx`**: `currency` is now a **required** prop. The card renders `` `${currencyPrefix(currency)}${planMonthlyPrice(plan.id, currency)}` `` and the default button label uses that currency. `PLAN_MONTHLY_PRICES_CAD` is gone from the component, and with it the only bare `$` on the page.
+- **`app/subscribe/page.tsx`**: resolves the billing currency through the shared rule and passes it to both the picker and the upgrade label. Its business query now also selects `id`, needed for the estimate-currency fallback.
+
+Not changed: Stripe Prices, Checkout behaviour, plans, trial rules, subscriptions, schema, migrations, cookies, and the authenticated redirect. `/subscribe` remains `ƒ` in the build output.
+
+### Result
+
+| Account state | Card | Button | Checkout charges |
+|---|---|---|---|
+| Live CAD subscription | **CA$59** | CA$59/month | CA$59 |
+| Live USD subscription | **US$39** | US$39/month | US$39 |
+| No subscription, business CAD | CA$59 | CA$59/month | CA$59 |
+| No subscription, business USD | US$39 | US$39/month | US$39 |
+| Cancelled or expired USD sub, business CAD | CA$59 | CA$59/month | CA$59 |
+
+A live subscription outranks the business record: the CAD and USD rows above are asserted with the business record deliberately set to the *opposite* currency.
+
+### Tests
+
+`tests/smoke/subscribe-billing-currency.spec.ts`, 12 tests, registered in the unit allowlist. Six are behavioural, driving the shared rule and composing the exact strings the card and button render; three are wiring guards, covering that `/subscribe` and checkout share one rule, that the card takes a required currency, and that the rule imports no geo.
+
+Reverting the three application files fails **4 of the 9**. The other five exercise `lib/billing-currency.ts`, which is new and has no pre-fix counterpart to fail against.
+
+**One pre-existing test was updated, not weakened.** `currency.spec.ts` "Checkout prefers a current subscription currency" matched the inline `status !== "canceled" … billingCurrency = currencyOrDefault(...)` implementation that this change extracted. It now asserts checkout calls `lockedSubscriptionCurrency(existing)` **and** that the released-status set lives in `lib/billing-currency.ts`, so the intent is covered in both places rather than dropped.
+
+### The redirect to /subscribe is correct enforcement, not a regression (2026-08-25 09:10 PT)
+
+The same signed-in session reaches `/subscribe` in Chrome on a Canadian IP too, so this was never a VPN artifact. Traced read-only, no data touched.
+
+**The chain.** Two places send an authenticated user to `/subscribe`, and they agree:
+
+- `proxy.ts:125` covers `/new`, `/estimates`, and every other gated route: `if (!hasAccess && pathname !== "/subscribe")`.
+- `app/page.tsx` covers `/` itself: `redirect(hasAccess ? "/estimates" : "/subscribe")`.
+
+Both compute the same rule, which `lib/auth.ts` states a third time: access is `subscription_status === "active"`, or `"trial"` with `trial_ends_at` in the future, or `"complimentary"`.
+
+**The account state.** Read-only, and it settles it:
+
+| Account role | plan | status | trial ends | access |
+|---|---|---|---|---|
+| Two Pro signups created today, unpaid | pro | **incomplete** | null | **no** |
+| The owner's own account | pro | complimentary | null | **yes** |
+
+The most recently signed-in account, by roughly eight hours, is one of the two unpaid Pro signups created today. The owner's own account is complimentary and **has access**, so it would not be redirected at all. The browser is signed in as a test account, not the main one.
+
+`incomplete` is set deliberately, at `lib/account-provisioning.ts:221`: Pro is paid up front, so a Pro signup creates the account with no trial and no subscription and sends the person straight to Stripe Checkout. Until they pay they have no access. `/subscribe` already titles this state "Finish setting up Pro". The gate is doing exactly its job, and nothing here weakens it. A test now pins the proxy rule verbatim so this task cannot have widened it.
+
+It also explains the original sighting precisely: `neverHadTrial` is true for these accounts, so `showProOnly` is true, so the button read `Upgrade to Pro, CA$59/month` while the card read a bare `$59`. One of the two is a USD account, and the same page would have read `$59` and `CA$59` for it while Checkout charged US$39.
+
+**Note that `incomplete` is not in the documented status set.** CLAUDE.md lists `trial | active | past_due | cancelled | complimentary`. The code uses `incomplete` in two places and the app handles it correctly, so this is a documentation gap rather than a bug, but the next person reading CLAUDE.md will not expect it.
+
+### The real defect: /subscribe was a dead end
+
+For an account in this state the page rendered with **no way out**:
+
+- `canManageBilling` needs a Stripe subscription; these accounts have a customer but no subscription, so no billing-portal button.
+- The "continue trial" link needs `!trialExpired`, and `trial_ends_at` is null, which reads as expired, so no link.
+- Every other authenticated route bounces back to `/subscribe`.
+
+The only exits were completing a paid checkout or clearing cookies. `app/components/subscribe-sign-out.tsx` adds a sign-out button, shown to any signed-in visitor, above a line reading `Signed in as {email}. Sign out to use a different account.` Surfacing the email is the point: being signed in as an unexpected account is the actual confusion here.
+
+Signing out grants access to nothing. A test asserts the component touches no plan, subscription, Stripe, or gate state.
+
+**One judgement call.** A fuller "every other page sends you back here" line would need the access rule on the page, and that rule is already written out three times, in `proxy.ts`, `app/page.tsx`, and `lib/auth.ts`. I did not add a fourth copy for a sentence. Worth extracting those three into one shared predicate as a separate change.
+
+### Baseline has moved since the 07:52 PT verification
+
+That verification confirmed 0 live Stripe Customers, 7 Auth users, 7 businesses. It is no longer true. Two accounts were created today at 15:35 UTC, after it:
+
+Two Pro signups were created within a minute of each other around 15:35 UTC, one USD and one CAD. Both are `plan: pro`, `subscription_status: incomplete`, both have a live Stripe Customer, and neither has a subscription or any estimates.
+
+So there are now **9 Auth users, 9 businesses, and 2 live Stripe Customers**. I did not create them, and I have not touched them: no authorisation was given to delete anything in this task. Flagging so the next cleanup starts from the real numbers rather than the stale ones. The identifiers are deliberately not recorded here; they are readable from the database when a cleanup is actually authorised.
+
+### Verification actually run (2026-08-25 09:03 PT)
+
+- `git diff --check` — clean.
+- `npx tsc --noEmit` — clean.
+- Focused tests — **12 passed**.
+- `npx playwright test --config=playwright.unit.config.ts` — **366 passed, 0 failed**.
+- `npx next build` — compiled successfully in 17.1s, `/subscribe` still `ƒ`.
+
+No account, subscription, or Checkout Session was created, and no Production data was touched.
+
+### Files changed
+
+`lib/billing-currency.ts` (new), `app/api/billing/checkout/route.ts`, `app/components/plan-picker.tsx`, `app/components/subscribe-sign-out.tsx` (new), `app/subscribe/page.tsx`, `tests/smoke/subscribe-billing-currency.spec.ts` (new), `tests/smoke/currency.spec.ts`, `playwright.unit.config.ts`, `HANDOFF.md`.
+
+### Exact next deployment step
+
+1. Review the uncommitted diff.
+2. Commit on `main`, suggested subject `Fix subscribe billing currency display`.
+3. Push. Production auto-deploys `main`.
+4. After deploy, sign in as an existing Canadian account and confirm `/subscribe` shows `CA$59` on both the card and the button, with no bare `$`. Repeat through a US VPN on that **same** Canadian account and confirm it still reads `CA$59`, which is the guarantee that a VPN cannot appear to change an existing customer's billing. Read-only, no account creation needed.
+
 ## Homepage currency mismatch and mobile hero spacing FIXED (2026-08-25 08:18 PT, uncommitted)
 
 **Status:** fixed in the working tree on `main`, measured in a real browser, **not committed, not pushed, not deployed**.
@@ -360,15 +488,15 @@ The signup rate-limit bucket was already empty, so no reset was issued. That is 
 
 Created through the real deployed signup UI with USD selected **before** submitting, via a temporary runner that called `assertFreshAccountSignupAllowed()` first. No payment method was entered.
 
-- user `eeca05ea-d8f2-48c8-8e1d-96b9915b6a4d`, business `345f6c41-d34e-44db-ae38-cd349fda541f`
-- estimate `42f89cb8-e559-47a8-aa1f-797177d4b103`, `pricing_source: structured`, 4 structured rows
+- one synthetic account and its business
+- one estimate, `pricing_source: structured`, 4 structured rows
 - business `estimate_currency = usd`, estimate `currency = usd`
 
 ### Billing
 
 | Check | Result |
 |---|---|
-| Subscription | `sub_1U8LWo…`, status `trialing` |
+| Subscription | status `trialing` |
 | Price ID | `price_1U166oQ45KFNqa8x40e7T41u`, the **existing** Starter Price |
 | Item count | **1** |
 | Subscription currency | **`usd`** |
@@ -426,7 +554,7 @@ Order was enforced: the Stripe Customer was deleted only after the business row 
 | Structured item rows | **gone** (0) |
 | Auth user lookup | **404** |
 | Subscription | **canceled** |
-| Stripe Customer `cus_V8cm04gwzd8prA` | **deleted**, after the business row was confirmed gone |
+| Stripe Customer | **deleted**, after the business row was confirmed gone |
 
 ### Final baseline, exactly restored
 
@@ -440,7 +568,7 @@ Order was enforced: the Stripe Customer was deleted only after the business row 
 | Ownerless businesses | 0 | **0** |
 | Orphan estimates | 0 | **0** |
 | Businesses / estimates reading `usd` | 0 | **0 / 0** |
-| Leftover `usdverify` auth users | 0 | **0** |
+| Leftover verification accounts | 0 | **0** |
 | Charges / succeeded PaymentIntents | 0 | **0 / 0** |
 
 Subscriptions went 461 to **462 canceled**, the one test trial, with none trialling, active, or past due.
@@ -630,7 +758,7 @@ The tests assert that a USD estimate contains `US$`, contains no `CA$`, and cont
 
 ### Test-account cleanup complete
 
-The remaining USD controlled-test account was deleted once its estimate-generation lease expired at `2026-08-25 04:30:12 UTC`. The lease was **waited out, not bypassed**. Deletion ran through the established `deleteAuthenticatedAccount()` procedure with the production route's own dependency implementations, and the Stripe customer `cus_V8Se6cWoFlWh33` was deleted only after the business row was confirmed gone.
+The remaining USD controlled-test account was deleted once its estimate-generation lease expired at `2026-08-25 04:30:12 UTC`. The lease was **waited out, not bypassed**. Deletion ran through the established `deleteAuthenticatedAccount()` procedure with the production route's own dependency implementations, and the Stripe customer was deleted only after the business row was confirmed gone.
 
 Production baseline verified afterwards, matching the expected numbers exactly:
 
@@ -768,7 +896,7 @@ The Profile polish described below was subsequently committed. `main` is now at 
 
 ### Owner administrative correction
 
-- `gchansen@gmail.com` remains intact with Pro and complimentary access. Its stale Stripe customer and subscription references were cleared while existing estimates were preserved.
+- The owner's own account remains intact with Pro and complimentary access. Its stale Stripe customer and subscription references were cleared while existing estimates were preserved.
 
 ### Bottom navigation and account deletion
 

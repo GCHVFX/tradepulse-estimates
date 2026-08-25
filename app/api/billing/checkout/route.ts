@@ -3,7 +3,8 @@ import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
 import { stripe } from "@/lib/stripe";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { isDeletedStripeObject } from "@/lib/stripe-object-state";
-import { currencyOrDefault, type Currency } from "@/lib/currency";
+import type { Currency } from "@/lib/currency";
+import { lockedSubscriptionCurrency } from "@/lib/billing-currency";
 import { readBusinessEstimateCurrency } from "@/lib/currency-db";
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -78,9 +79,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         .eq("owner_user_id", user.id);
     }
 
-    // Billing currency. A current non-cancelled subscription is the authority:
-    // Stripe locked it to the Customer and it can never be changed. Only when
-    // nothing locks it do we fall back to the business estimate currency.
+    // Billing currency. The rule lives in lib/billing-currency.ts so that
+    // /subscribe displays exactly what this route will charge. Behaviour is
+    // unchanged: a current subscription still wins, a cancelled or expired one
+    // still does not, and the business estimate currency is still the fallback.
     let billingCurrency: Currency | null = null;
     let previousSubscriptionId: string | undefined;
 
@@ -90,9 +92,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (business.stripe_subscription_id) {
       try {
         const existing = await stripe.subscriptions.retrieve(business.stripe_subscription_id);
-        if (existing.status !== "canceled" && existing.status !== "incomplete_expired") {
-          billingCurrency = currencyOrDefault(existing.currency);
-        }
+        billingCurrency = lockedSubscriptionCurrency(existing);
         if (existing.status === "trialing") {
           previousSubscriptionId = business.stripe_subscription_id;
         }

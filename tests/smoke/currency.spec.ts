@@ -209,10 +209,18 @@ test("the direct trial subscription selects its currency explicitly", () => {
 test("Checkout prefers a current subscription currency and disables adaptive pricing", () => {
   const route = code("app/api/billing/checkout/route.ts");
 
+  const rule = code("lib/billing-currency.ts");
+
   expect(route).toContain("adaptive_pricing: { enabled: false }");
   expect(route).toContain("currency: resolvedCurrency");
-  // Current non-cancelled subscription wins.
-  expect(route).toMatch(/status !== "canceled"[\s\S]{0,160}billingCurrency = currencyOrDefault\(existing\.currency\)/);
+
+  // Current non-cancelled subscription wins. That rule moved into
+  // lib/billing-currency.ts so /subscribe can display exactly what this route
+  // charges; checkout asks for it now instead of re-deriving it inline.
+  expect(route).toContain("billingCurrency = lockedSubscriptionCurrency(existing)");
+  expect(rule).toMatch(/RELEASED_STATUSES[\s\S]{0,120}"canceled"/);
+  expect(rule).toContain("incomplete_expired");
+
   // Only when nothing locks it does the business estimate currency apply.
   expect(route).toMatch(/billingCurrency \?\? \(await readBusinessEstimateCurrency/);
 });

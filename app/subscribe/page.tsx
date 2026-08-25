@@ -1,8 +1,14 @@
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createSupabaseServerClient, supabaseAdmin } from "@/lib/supabase-server";
 import { PlanPicker } from "@/app/components/plan-picker";
+import { SubscribeSignOut } from "@/app/components/subscribe-sign-out";
 import { formatMonthlyPlanPrice } from "@/lib/plan-pricing";
+import { resolveBillingCurrency } from "@/lib/billing-currency";
+import { readBusinessEstimateCurrency } from "@/lib/currency-db";
+import { currencyFromCountry, type Currency } from "@/lib/currency";
+import { stripe } from "@/lib/stripe";
 
 export default async function SubscribePage({ searchParams }: { searchParams: Promise<{ preview?: string }> }) {
   const { preview } = await searchParams;
@@ -16,10 +22,41 @@ export default async function SubscribePage({ searchParams }: { searchParams: Pr
   const { data: business } = user
     ? await supabaseAdmin
         .from("tpe_businesses")
-        .select("subscription_status, trial_ends_at, name, plan, stripe_customer_id, stripe_subscription_id")
+        .select("id, subscription_status, trial_ends_at, name, plan, stripe_customer_id, stripe_subscription_id")
         .eq("owner_user_id", user.id)
         .maybeSingle()
     : { data: null };
+
+  // Billing currency, through the one shared rule that /api/billing/checkout
+  // uses, so the card, the button, and the actual charge cannot disagree.
+  //
+  // Geo is only consulted when there is no business at all, which on this page
+  // means the signed-out ?preview=true case. A signed-in contractor's currency
+  // comes from their subscription or their business record, never from their
+  // IP, so opening a VPN cannot appear to change what they are billed.
+  let billingCurrency: Currency = currencyFromCountry(
+    (await headers()).get("x-vercel-ip-country")
+  );
+
+  if (business) {
+    let subscription: { status: string; currency: string } | null = null;
+    if (business.stripe_subscription_id) {
+      try {
+        subscription = await stripe.subscriptions.retrieve(business.stripe_subscription_id);
+      } catch (err) {
+        // A currency we cannot read falls through to the business record
+        // rather than guessing, exactly as checkout does.
+        console.error(
+          "[subscribe] failed to read subscription:",
+          err instanceof Error ? err.message : err
+        );
+      }
+    }
+    billingCurrency = await resolveBillingCurrency({
+      subscription,
+      readEstimateCurrency: () => readBusinessEstimateCurrency(supabaseAdmin, business.id),
+    });
+  }
 
   const isActive = business?.subscription_status === "active";
   const isComplimentary = business?.subscription_status === "complimentary";
@@ -106,7 +143,8 @@ export default async function SubscribePage({ searchParams }: { searchParams: Pr
                 defaultPlan={showProOnly ? "pro" : business?.plan === "pro" && proBillingReady ? "pro" : "starter"}
                 availablePlans={availablePlans}
                 submitAction={showProOnly ? "/api/billing/upgrade" : undefined}
-                submitLabel={showProOnly ? `Upgrade to Pro, ${formatMonthlyPlanPrice("pro", "cad")}` : undefined}
+                currency={billingCurrency}
+                submitLabel={showProOnly ? `Upgrade to Pro, ${formatMonthlyPlanPrice("pro", billingCurrency)}` : undefined}
                 disabled={isPreview}
               />
             </>
@@ -140,6 +178,15 @@ export default async function SubscribePage({ searchParams }: { searchParams: Pr
         <p className="text-center text-zinc-500 text-xs mt-3">
           Powered by Stripe. Your payment is secure. Refund requests are handled manually by support.
         </p>
+
+        {user && !isPreview && (
+          <div className="mt-6 border-t border-zinc-800 pt-4">
+            <p className="text-center text-zinc-500 text-xs">
+              Signed in as {user.email}. Sign out to use a different account.
+            </p>
+            <SubscribeSignOut />
+          </div>
+        )}
 
         <p className="text-center text-zinc-400 text-sm mt-4">
           Questions?{" "}

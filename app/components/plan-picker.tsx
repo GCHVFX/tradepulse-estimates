@@ -2,11 +2,11 @@
 
 import { useMemo, useState } from "react";
 import {
-  PLAN_MONTHLY_PRICES_CAD,
   checkoutPathForPlan,
   formatMonthlyPlanPrice,
   type BillingPlan,
 } from "@/lib/plan-pricing";
+import { currencyPrefix, planMonthlyPrice, type Currency } from "@/lib/currency";
 
 type PlanId = BillingPlan;
 
@@ -14,25 +14,30 @@ const plans = [
   {
     id: "starter" as const,
     name: "Starter",
-    price: PLAN_MONTHLY_PRICES_CAD.starter,
     features: ["Unlimited estimates", "SMS and email sending", "Custom rates and price book", "Your logo on estimates", "PDF download"],
   },
   {
     id: "pro" as const,
     name: "Pro",
-    price: PLAN_MONTHLY_PRICES_CAD.pro,
     features: ["Everything in Starter", "AI photo analysis", "Google review requests", "Payment tracking and reminders", "Follow-up (coming soon)"],
   },
 ];
 
 export function PlanPicker({
   defaultPlan,
+  currency,
   disabled,
   availablePlans = ["starter", "pro"],
   submitAction,
   submitLabel,
 }: {
   defaultPlan: PlanId;
+  /**
+   * The business's billing currency, resolved server-side by
+   * lib/billing-currency.ts. Required: it used to be hardcoded CAD here, so a
+   * USD-billed contractor saw CAD amounts and was charged USD.
+   */
+  currency: Currency;
   disabled?: boolean;
   availablePlans?: PlanId[];
   submitAction?: string;
@@ -45,7 +50,7 @@ export function PlanPicker({
     [availablePlans]
   );
   const action = submitAction ?? checkoutPathForPlan(selected);
-  const label = submitLabel ?? `Subscribe, ${formatMonthlyPlanPrice(selected, "cad")}`;
+  const label = submitLabel ?? `Subscribe, ${formatMonthlyPlanPrice(selected, currency)}`;
 
   return (
     <>
@@ -62,7 +67,7 @@ export function PlanPicker({
             }`}
           >
             <div className="flex items-end gap-2 mb-3">
-              <span className="text-3xl font-bold">${plan.price}</span>
+              <span className="text-3xl font-bold">{`${currencyPrefix(currency)}${planMonthlyPrice(plan.id, currency)}`}</span>
               <span className="text-zinc-400 mb-0.5">/month</span>
             </div>
             <p className="text-white font-semibold text-base mb-3">{plan.name}</p>
