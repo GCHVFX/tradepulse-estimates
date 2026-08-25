@@ -119,7 +119,7 @@ export default async function SubscribePage({ searchParams }: { searchParams: Pr
     : "Choose Starter or Pro when you're ready. You can also keep using your trial until it ends.";
 
   return (
-    <div className="min-h-dvh bg-zinc-950 text-white flex flex-col items-center justify-center px-5 py-16">
+    <div className="min-h-dvh bg-zinc-950 text-white flex flex-col items-center justify-center px-5 py-8 sm:py-16">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -129,6 +129,20 @@ export default async function SubscribePage({ searchParams }: { searchParams: Pr
             {description}
           </p>
         </div>
+
+        {/*
+          Recovery, directly under the description and above the price card.
+          It used to sit below the card, the CTA, the guarantee copy, and a
+          divider, roughly 900px down a 812px viewport, so someone signed in
+          to the wrong account would never have found it.
+        */}
+        {user && !isPreview && (
+          <div className="mb-8 text-center">
+            <p className="text-zinc-400 text-sm">Not the account you meant to use?</p>
+            <p className="text-zinc-500 text-xs mt-1">Signed in as {user.email}.</p>
+            <SubscribeSignOut />
+          </div>
+        )}
 
         <div className="mb-4">
           {showPlanPicker ? (
@@ -178,15 +192,6 @@ export default async function SubscribePage({ searchParams }: { searchParams: Pr
         <p className="text-center text-zinc-500 text-xs mt-3">
           Powered by Stripe. Your payment is secure. Refund requests are handled manually by support.
         </p>
-
-        {user && !isPreview && (
-          <div className="mt-6 border-t border-zinc-800 pt-4">
-            <p className="text-center text-zinc-500 text-xs">
-              Signed in as {user.email}. Sign out to use a different account.
-            </p>
-            <SubscribeSignOut />
-          </div>
-        )}
 
         <p className="text-center text-zinc-400 text-sm mt-4">
           Questions?{" "}

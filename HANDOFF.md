@@ -1,6 +1,6 @@
 # TradePulse handoff
 
-Updated: 2026-08-25 09:10 PT (/subscribe billing-currency fixed and the redirect traced: it is correct enforcement, with a sign-out escape added; Production baseline has moved to 9 accounts; not committed, not deployed)
+Updated: 2026-08-25 09:38 PT (/subscribe recovery block moved above the price card and mobile top spacing reduced, in the working tree; not committed, not deployed)
 
 ## Release 1: account-provisioning integrity (2026-08-24, uncommitted)
 
@@ -296,7 +296,7 @@ A live subscription outranks the business record: the CAD and USD rows above are
 
 ### Tests
 
-`tests/smoke/subscribe-billing-currency.spec.ts`, 12 tests, registered in the unit allowlist. Six are behavioural, driving the shared rule and composing the exact strings the card and button render; three are wiring guards, covering that `/subscribe` and checkout share one rule, that the card takes a required currency, and that the rule imports no geo.
+`tests/smoke/subscribe-billing-currency.spec.ts`, 15 tests, registered in the unit allowlist. Six are behavioural, driving the shared rule and composing the exact strings the card and button render; three are wiring guards, covering that `/subscribe` and checkout share one rule, that the card takes a required currency, and that the rule imports no geo.
 
 Reverting the three application files fails **4 of the 9**. The other five exercise `lib/billing-currency.ts`, which is new and has no pre-fix counterpart to fail against.
 
@@ -350,13 +350,48 @@ Two Pro signups were created within a minute of each other around 15:35 UTC, one
 
 So there are now **9 Auth users, 9 businesses, and 2 live Stripe Customers**. I did not create them, and I have not touched them: no authorisation was given to delete anything in this task. Flagging so the next cleanup starts from the real numbers rather than the stale ones. The identifiers are deliberately not recorded here; they are readable from the database when a cleanup is actually authorised.
 
+### Recovery block moved above the fold, and mobile top spacing reduced (2026-08-25 09:38 PT, uncommitted)
+
+The sign-out escape shipped in the right shape but the wrong place. Measured at 375x812, it sat below the price card, the CTA, the guarantee copy, and a divider: **Sign out at y=1077 on an 812px viewport**, 409px below the fold. Functionally correct, practically invisible to the person it exists for.
+
+It now renders directly under the description and above the price card, with a plain lead-in, the email retained so the account is identifiable, and the same sign-out control unchanged.
+
+Separately, the page wrapper carried `py-16` at every width, leaving a 64px band above the icon on a phone. It is now `py-8 sm:py-16`, mobile only.
+
+**Measured at 375x812, local dev server, `getBoundingClientRect()`:**
+
+| | Before | After |
+|---|---|---|
+| Gap above icon | 64px | **32px** |
+| Heading | 140 to 172 | 108 to 140 |
+| Recovery lead-in | absent | 220 to 240 |
+| "Signed in as" notice | 1045 to 1077 | **244 to 260** |
+| Sign out | 1077 to 1121 | **260 to 304** |
+| First price card | 288 to 556 | 372 to 640 |
+| CTA | 856 to 912 | 940 to 996 |
+| Sign out visible without scrolling | **no** | **yes** |
+| Notice before the price card | **no** | **yes** |
+| Page height | 1221px | 1156px |
+
+No overlap between heading, recovery block, card, or CTA, and no horizontal scroll at either width.
+
+**Desktop is untouched.** At 1280x800 the computed `padding-top` is 64px and the gap above the icon is 64px, identical before and after, because `sm:py-16` carries it.
+
+**Verifying this needed a temporary local scaffold.** `/subscribe` is not in `PUBLIC_PATHS`, so the proxy sends a signed-out request to `/login` and `?preview=true` never reaches the page. Measurement used a local-only scaffold that made the path public and rendered the block with a placeholder address. Both were reverted immediately; `proxy.ts` shows no diff against HEAD and the placeholder appears nowhere.
+
+**Tests.** Three added to `tests/smoke/subscribe-billing-currency.spec.ts`, bringing it to 15: the recovery block renders after the description and before both the price card and the guarantee copy; the block is still sign-out only, with no billing route, checkout path, submit action, or form post inside it; and mobile padding is at most 32px while `sm:py-16` survives. Reverting the page fails two of the three. The third, the sign-out-only guard, passes either way by design, since the block was already inert before the move and the point is that moving it did not change that.
+
+One detail worth recording: the first version of the sign-out-only test sliced from the recovery text to `<PlanPicker` and failed by matching `showPlanPicker`. That was a false positive in the test, not a finding. The slice now runs from the block's own guard to its closing brace.
+
+Behaviour, auth implementation, redirect target, access gate, billing rule, Stripe, pricing, and all copy outside the recovery block are unchanged. No card, modal, toast, or account-management flow was added.
+
 ### Verification actually run (2026-08-25 09:03 PT)
 
 - `git diff --check` — clean.
 - `npx tsc --noEmit` — clean.
-- Focused tests — **12 passed**.
-- `npx playwright test --config=playwright.unit.config.ts` — **366 passed, 0 failed**.
-- `npx next build` — compiled successfully in 17.1s, `/subscribe` still `ƒ`.
+- Focused tests — **15 passed**.
+- `npx playwright test --config=playwright.unit.config.ts` — **369 passed, 0 failed**.
+- `npx next build` — compiled successfully in 30.1s, `/subscribe` still `ƒ`.
 
 No account, subscription, or Checkout Session was created, and no Production data was touched.
 

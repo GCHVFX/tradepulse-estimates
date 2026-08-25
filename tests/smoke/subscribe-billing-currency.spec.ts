@@ -221,3 +221,59 @@ test("the subscription gate itself is unchanged", () => {
   expect(proxy).toMatch(/isActive \|\| isTrialing \|\| business\.subscription_status === "complimentary"/);
   expect(proxy).toMatch(/if \(!hasAccess && pathname !== "\/subscribe"\)/);
 });
+
+// ── Recovery block placement and mobile spacing ─────────────────────────────
+
+test("the recovery block renders before the price card and the CTA", () => {
+  // It used to sit below the card, the CTA, the guarantee copy, and a divider.
+  // Measured at 375x812 that put Sign out at y=1077 on an 812px viewport, so
+  // someone in the wrong account would never have found it. It now renders at
+  // y=260, directly under the description.
+  const page = code("app/subscribe/page.tsx");
+
+  const recovery = page.indexOf("Not the account you meant to use?");
+  const signOut = page.indexOf("<SubscribeSignOut />");
+  const description = page.indexOf("{description}");
+  const planPicker = page.indexOf("<PlanPicker");
+  const guarantee = page.indexOf("Powered by Stripe");
+
+  expect(recovery, "recovery block must exist").toBeGreaterThan(-1);
+  expect(recovery, "recovery belongs under the description").toBeGreaterThan(description);
+  expect(recovery, "recovery belongs above the price card").toBeLessThan(planPicker);
+  expect(signOut, "Sign out belongs above the price card").toBeLessThan(planPicker);
+  expect(signOut, "Sign out belongs above the guarantee copy").toBeLessThan(guarantee);
+
+  // The email stays, so someone can tell which account they are in.
+  expect(page).toContain("Signed in as {user.email}");
+});
+
+test("relocating the recovery block did not turn it into a billing control", () => {
+  const page = code("app/subscribe/page.tsx");
+  // Exactly the recovery block: its opening guard to its closing brace. A
+  // looser slice runs into `showPlanPicker` and matches "PlanPicker" by
+  // accident, which is a false positive rather than a real finding.
+  const start = page.indexOf("{user && !isPreview && (");
+  const block = page.slice(start, page.indexOf(")}", start) + 2);
+
+  // Sign-out only. No plan, subscription, checkout, or portal action may live
+  // in this block, and it must not have grown a form that posts anywhere.
+  for (const forbidden of ["/api/billing", "checkoutPathForPlan", "submitAction", "method=\"POST\"", "PlanPicker"]) {
+    expect(block, forbidden).not.toContain(forbidden);
+  }
+  expect(block).toContain("<SubscribeSignOut />");
+});
+
+test("mobile top spacing is reduced without moving desktop", () => {
+  const page = code("app/subscribe/page.tsx");
+
+  const wrapper = page.match(/className="min-h-dvh[^"]*"/)![0];
+  // Measured at 375x812: py-16 left a 64px gap above the icon and pushed the
+  // page to 1221px. py-8 halves it to 32px, which is what keeps the relocated
+  // Sign out inside the first viewport. Tailwind spacing is 4px per step.
+  const mobilePy = Number(wrapper.match(/(?:^|\s)py-(\d+)(?:\s|")/)![1]) * 4;
+  expect(mobilePy, "mobile vertical padding").toBeLessThanOrEqual(32);
+
+  // Desktop keeps its own value through a separate sm: class. Measured
+  // identical at 1280x800 before and after: 64px padding, 64px gap.
+  expect(wrapper).toContain("sm:py-16");
+});
