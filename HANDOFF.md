@@ -1,8 +1,71 @@
 # TradePulse handoff
 
-Updated: 2026-08-18 (safe Profile polish verified locally; commit and Production deployment pending)
+Updated: 2026-08-24 (Release 1 account-provisioning integrity implemented and verified locally; not committed, not deployed)
 
-## Current state
+## Release 1: account-provisioning integrity (2026-08-24, uncommitted)
+
+**Status:** implemented on `main` in the working tree, fully verified locally, **not committed and not deployed**.
+
+### What it fixes
+
+`app/api/auth/signup/route.ts` created the Stripe customer and the trial subscription before writing the `tpe_businesses` row, and its `dbError` branch deleted the Auth user while leaving both Stripe objects alive. Because the Auth user was the only handle carrying `metadata.user_id`, the surviving customer and its trialing subscription became unattributable. `app/auth/callback/route.ts` had the same asymmetry in `ensureBusiness()`.
+
+### What changed
+
+- **`lib/account-provisioning.ts` (new).** Dependency-injected `provisionNewAccount()`. Runs Stripe customer, then Starter trial subscription, then the business row, and compensates the whole attempt on any failure. No fallback path, so one call can never create two subscriptions.
+- **`lib/account-provisioning-server.ts` (new).** Real Stripe/Supabase wiring plus the Sentry reporter. Keeps the saga module free of server-only imports so it stays unit-testable.
+- **`lib/stripe-object-state.ts` (new).** `isMissingStripeObject()` (moved here, still re-exported from `lib/stripe-billing-recovery.ts` so the existing name keeps working) and the new `isDeletedStripeObject()`.
+- **`app/api/auth/signup/route.ts`**, **`app/auth/callback/route.ts`.** Both now provision through the shared helper. Neither calls Stripe or `auth.admin.deleteUser` inline any more. Success behaviour is byte-identical.
+- **`app/api/billing/checkout/route.ts`**, **`lib/stripe-billing-recovery.ts`.** A retrieved Stripe customer carrying `deleted: true` is now treated as missing. Stripe keeps deleted customers retrievable, so a catch-only check let a dead reference through and failed later at session creation instead of recreating the customer.
+
+### Compensation order (after Stripe creation)
+
+Business row, then Stripe customer (which also cancels its subscription), then the Auth user **last**. If any earlier step fails the sequence stops, the Auth user is preserved, and `reportCleanupFailure()` records `userId`, `customerId`, `subscriptionId`, `operation`, and `cleanupStep` to Sentry and the console. Deleting the Auth user while a Stripe object survives is precisely what created the unattributable orphans, so that is never done.
+
+Google OAuth failures always preserve the Auth identity (`deleteAuthUserOnFailure: false`), sign the user out, and redirect to `/signup?error=setup_failed`. A later Google signup by that identity retries provisioning because no business row exists. **No timing heuristic is used anywhere.**
+
+### Verification actually run (2026-08-24)
+
+- `git diff --check`: passed, only the pre-existing benign CRLF notices.
+- `npx.cmd tsc --noEmit`: passed.
+- Focused new/changed tests (`account-provisioning`, `stripe-object-state`, `stripe-billing-recovery`): **24 passed**.
+- Full safe unit suite: **240 passed**, 0 failed (was 219; +21 new).
+- `npx.cmd next build`: passed, only the three known `metadataBase` notices.
+- Targeted ESLint on all changed and new files: one `prefer-const` error at `lib/stripe-billing-recovery.ts:44`, **confirmed pre-existing** by linting the HEAD version of that file in isolation (same error, line 50 there).
+
+### Corrected baseline
+
+The full-lint baseline recorded below as "7 errors and 18 warnings" is **stale**. The verified current baseline is **8 errors and 18 warnings**, and the eighth is the `prefer-const` error above, which is present at HEAD.
+
+### Read-only orphan diagnostic (2026-08-24, nothing mutated or cleaned)
+
+Live Stripe: 384 customers (0 deleted in the list), 434 subscriptions (210 trialing, 164 past_due, 60 canceled). Only **9** customers are referenced by a `tpe_businesses` row, leaving **375 orphan customers and 425 orphan subscriptions**, every one created in 2026-08 and every one carrying `metadata.user_id`. No customer holds more than one subscription, so orphans are one-per-attempt, consistent with the fixed failure path rather than a duplicate-creation bug.
+
+Supabase: 15 `auth.users` rows, **0 without a business row** (so no unprovisioned identity exists today), against 39 business rows. 34 business rows store a `stripe_customer_id`; 6 sampled ones that are absent from the Stripe list return `resource_missing`, meaning genuinely gone rather than deleted-and-retrievable. **No currently-stored reference to a deleted-but-retrievable customer was found**, so the deleted-customer handling closes a latent gap rather than an observed live failure.
+
+### Authorised live Stripe orphan cleanup (2026-08-24, completed)
+
+The owner explicitly authorised deleting these orphan records, confirming zero real subscribers. Executed with a temporary, auditable script (deleted afterwards), never through the Dashboard. No application code, schema, environment variable, Stripe Product/Price, webhook, or portal configuration was changed.
+
+**Preflight (read-only, all guards passed).** Fully paginated live Stripe: 384 customers, 434 subscriptions, 598 invoices, 164 PaymentIntents, 0 charges. **Zero real money has ever moved in this account**: 0 charges, 0 succeeded PaymentIntents (all 164 sit at `requires_payment_method`, i.e. trials that ended with no card), and 0 invoices with `amount_paid > 0`. All 434 invoices in `paid` status are the $0 invoices Stripe issues for a trial, which is why the paid check requires `amount_paid > 0`, matching the guard the billing webhook already uses.
+
+Target rule: not referenced by any `tpe_businesses.stripe_customer_id`, created in August 2026, has `metadata.user_id`, and no successful charge, paid invoice, or succeeded PaymentIntent. That produced **exactly 375** eligible customers, matching the required guard, with 0 overlap against the 9 referenced customers and 0 targets holding any paid record. Subscription ownership reconciled exactly: 374 on targets, 51 already-canceled on previously deleted customers, 9 on the referenced businesses (8 trialing, 1 past_due), totalling 434.
+
+**Result.** 375 customers deleted, 0 failures, 0 already gone. 374 subscriptions cancelled by that deletion (202 trialing, 163 past_due, 9 already canceled). Stripe transitioned the 163 open invoices to `uncollectible` automatically as part of customer deletion, so the script voided 0 and deleted 0 drafts; `uncollectible` is a terminal state and was deliberately left alone, as were the 374 paid $0 trial invoices.
+
+**Post-cleanup verification.** All 375 targets return `deleted: true`; none still live. 0 target subscriptions remain trialing, active, or past_due. 0 target open or draft invoices remain. Live customers now number 9, exactly the referenced set, and their 8 trialing plus 1 past_due subscriptions are unchanged. Both active CAD Prices and the archived one are untouched. Supabase is byte-for-byte unchanged (39 businesses, 34 with a customer reference, 33 with a subscription reference, 41 estimates, 15 auth users, identical plan/status distribution), and `max(tpe_businesses.updated_at)` remains 2026-08-23, proving no webhook wrote a business row. The single webhook endpoint is still enabled on the canonical URL with its 6 events, and **0 events have `pending_webhooks > 0`**, so nothing failed delivery. The `customer.subscription.deleted` deliveries were correctly no-ops because none of the deleted customers was referenced by a business row.
+
+Note the 25 stored `stripe_customer_id` values that already pointed at absent customers are unrelated to this cleanup and were not touched.
+
+### Explicitly deferred to Release 2 (access control), not started
+
+`proxy.ts` still redirects an authenticated user with no business row to `/onboarding`, and `app/onboarding/page.tsx` still creates a business row with `plan: 'starter'`, `subscription_status: 'trial'` and **no Stripe customer or subscription**, which `proxy.ts` then honours as a valid trial. That unbilled-trial path is untouched by this release. Release 2 removes the `/onboarding` insert, repoints the proxy redirect to `/signup`, and repoints `safeNextPath()`. The diagnostic above shows 0 accounts currently in that state, so Release 2 is behaviourally inert for existing users. Also deferred: Google `intent` login/signup split, all currency work, Stripe Price `currency_options`, and any migration.
+
+**Exact next action for Release 1:** review the uncommitted diff, then commit and deploy if approved. Nothing has been committed, pushed, or deployed.
+
+## Current state (pre-Release-1 context, retained)
+
+The Profile polish described below was subsequently committed. `main` is now at `c27c563` ("Finalize Profile settings polish") and is level with `origin/main`.
 
 - **Branch:** `codex/profile-settings-mobile-polish`, created from local `main` commit `9399524` (the reviewed reminder-preview terminology correction). Production remains at `6250a9279098060737ea3650c598bfce3618aef1` (`Improve Profile Pro setup mobile UX`), deployment `dpl_G2PhqQG5ZTNSr5EkxoNNvDZoWsmr`, READY. Vercel cron remains disabled.
 - **Pending revised Profile mobile polish:** the green bordered review/payment status rows were removed in favour of plain settings copy. The Profile form still stacks logo and company name on mobile, keeps the manual review-link action as a real secondary button, and retains the compact payment-link input. Customer-facing helper copy now describes actual name, phone, and email uses. The collapsed reminder preview uses estimate terminology, a clear example business name before Profile setup, and the same shared formatter as sent SMS.

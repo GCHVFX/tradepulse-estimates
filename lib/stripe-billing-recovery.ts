@@ -1,3 +1,5 @@
+import { isDeletedStripeObject, isMissingStripeObject } from "./stripe-object-state";
+
 export type StoredStripeBillingReferences = {
   customerId: string | null;
   subscriptionId: string | null;
@@ -27,15 +29,7 @@ export type RecoveredStripeBillingReferences = {
   subscriptionLookupError: unknown | null;
 };
 
-export function isMissingStripeObject(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const candidate = error as { code?: unknown; message?: unknown; statusCode?: unknown };
-  return (
-    candidate.code === "resource_missing" ||
-    candidate.statusCode === 404 ||
-    (typeof candidate.message === "string" && /no such (customer|subscription)/i.test(candidate.message))
-  );
-}
+export { isMissingStripeObject };
 
 /**
  * Validates saved Stripe references before reusing them for a new upgrade.
@@ -50,10 +44,19 @@ export async function recoverStoredStripeBillingReferences(
   let customerId = stored.customerId;
 
   if (customerId) {
+    let customer: unknown;
     try {
-      await stripe.customers.retrieve(customerId);
+      customer = await stripe.customers.retrieve(customerId);
     } catch (error) {
       if (!isMissingStripeObject(error)) throw error;
+      await store.clearCustomerAndSubscription();
+      return { customerId: null, previousTrialSubscriptionId: undefined, subscriptionLookupError: null };
+    }
+
+    // A deleted customer still resolves here, so this cannot be folded into
+    // the catch above. Stripe rejects every later operation against it, so
+    // reusing it would fail at Checkout instead of recreating the customer.
+    if (isDeletedStripeObject(customer)) {
       await store.clearCustomerAndSubscription();
       return { customerId: null, previousTrialSubscriptionId: undefined, subscriptionLookupError: null };
     }

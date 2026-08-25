@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { supabaseAdmin } from '@/lib/supabase-server';
-import { stripe } from '@/lib/stripe';
+import { provisionNewAccount } from '@/lib/account-provisioning';
+import { createAccountProvisioningDependencies } from '@/lib/account-provisioning-server';
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
@@ -35,7 +36,27 @@ export async function GET(request: NextRequest) {
       if (user) {
         const provisioned = await ensureBusiness(user.id, user.email ?? undefined);
         if (!provisioned) {
-          return NextResponse.redirect(`${origin}/login?error=oauth_setup_failed`);
+          // The Google identity is the person's own account, so it is always
+          // preserved. Signing out stops a half-provisioned user from staying
+          // active, and /signup lets them retry: ensureBusiness provisions
+          // again on the next attempt because no business row exists yet.
+          try {
+            await supabase.auth.signOut();
+          } catch (signOutError) {
+            console.error(
+              '[auth/callback] sign out after failed provisioning failed:',
+              signOutError instanceof Error ? signOutError.message : signOutError
+            );
+          }
+
+          const failure = NextResponse.redirect(`${origin}/signup?error=setup_failed`);
+          // signOut clears the session cookies onto `response`; carry them
+          // across or the browser keeps the old access token.
+          response.cookies.getAll().forEach((cookie) => {
+            const { name, value, ...options } = cookie;
+            failure.cookies.set(name, value, options);
+          });
+          return failure;
         }
       }
       return response;
@@ -55,52 +76,41 @@ async function ensureBusiness(userId: string, email?: string): Promise<boolean> 
 
   if (existing) return true;
 
-  let customerId: string | undefined;
-  try {
-    const customer = await stripe.customers.create({
-      ...(email ? { email } : {}),
-      metadata: { user_id: userId },
-    });
-    customerId = customer.id;
+  // Same sequence and same compensation as email/password signup, except the
+  // Auth identity is preserved: it is the person's own Google account, and
+  // deleting it would destroy a real identity rather than a half-made one.
+  const provisioned = await provisionNewAccount(
+    createAccountProvisioningDependencies(async (record) => {
+      const { error: dbError } = await supabaseAdmin
+        .from('tpe_businesses')
+        .upsert(
+          {
+            owner_user_id: userId,
+            name: '',
+            slug: userId,
+            plan: 'starter',
+            subscription_status: record.subscriptionStatus,
+            trial_ends_at: record.trialEndsAt,
+            stripe_customer_id: record.customerId,
+            stripe_subscription_id: record.subscriptionId,
+            signup_source: 'google',
+            email: email ?? '',
+          },
+          { onConflict: 'owner_user_id' }
+        );
 
-    const subscription = await stripe.subscriptions.create({
-      customer: customer.id,
-      items: [{ price: process.env.STRIPE_PRICE_ID! }],
-      trial_period_days: 14,
-      payment_settings: { save_default_payment_method: 'on_subscription' },
-    });
+      if (dbError) throw new Error(dbError.message);
+    }),
+    { userId, email, plan: 'starter', deleteAuthUserOnFailure: false }
+  );
 
-    const trialEndsAt = subscription.trial_end
-      ? new Date(subscription.trial_end * 1000).toISOString()
-      : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
-
-    const { error: dbError } = await supabaseAdmin
-      .from('tpe_businesses')
-      .upsert(
-        {
-          owner_user_id: userId,
-          name: '',
-          slug: userId,
-          plan: 'starter',
-          subscription_status: 'trial',
-          trial_ends_at: trialEndsAt,
-          stripe_customer_id: customer.id,
-          stripe_subscription_id: subscription.id,
-          signup_source: 'google',
-          email: email ?? '',
-        },
-        { onConflict: 'owner_user_id' }
-      );
-
-    if (dbError) {
-      console.error('[auth/callback] tpe_businesses upsert failed:', dbError.message);
-      return false;
-    }
-    return true;
-  } catch (err) {
-    console.error('[auth/callback] OAuth provisioning failed:', err instanceof Error ? err.message : err);
-    // Clean up the orphaned Stripe customer so a retry starts clean.
-    try { if (customerId) await stripe.customers.del(customerId); } catch {}
+  if (!provisioned.ok) {
+    console.error(
+      `[auth/callback] OAuth provisioning failed at ${provisioned.stage}:`,
+      provisioned.error instanceof Error ? provisioned.error.message : provisioned.error
+    );
     return false;
   }
+
+  return true;
 }

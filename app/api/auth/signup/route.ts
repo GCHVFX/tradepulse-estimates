@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { supabaseAdmin } from "@/lib/supabase-server";
-import { stripe } from "@/lib/stripe";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { provisionNewAccount } from "@/lib/account-provisioning";
+import { createAccountProvisioningDependencies } from "@/lib/account-provisioning-server";
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
@@ -64,68 +65,51 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const userId = data.user.id;
 
-  let customer: { id: string } | undefined;
+  // Stripe customer, trial subscription, then the business row. A failure at
+  // any step compensates the whole attempt: business row, then Stripe
+  // customer (which cancels its subscription), then the Auth user last. See
+  // lib/account-provisioning.ts for why that order matters.
+  const provisioned = await provisionNewAccount(
+    createAccountProvisioningDependencies(async (record) => {
+      const { error: dbError } = await supabaseAdmin
+        .from("tpe_businesses")
+        .upsert(
+          {
+            owner_user_id: userId,
+            name: "",
+            slug: userId,
+            plan,
+            subscription_status: record.subscriptionStatus,
+            trial_ends_at: record.trialEndsAt,
+            stripe_customer_id: record.customerId,
+            stripe_subscription_id: record.subscriptionId,
+            email,
+            ...(signupSource ? { signup_source: signupSource } : {}),
+          },
+          { onConflict: "owner_user_id" }
+        );
 
-  try {
-    customer = await stripe.customers.create({
-      email,
-      metadata: { user_id: userId },
-    });
+      if (dbError) throw new Error(dbError.message);
+    }),
+    { userId, email, plan, deleteAuthUserOnFailure: true }
+  );
 
-    let subscriptionStatus = "trial";
-    let trialEndsAt: string | null = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
-    let stripeSubscriptionId: string | null = null;
+  if (!provisioned.ok) {
+    console.error(
+      `[signup] provisioning failed at ${provisioned.stage}:`,
+      provisioned.error instanceof Error ? provisioned.error.message : provisioned.error
+    );
 
-    if (plan === "starter") {
-      const subscription = await stripe.subscriptions.create({
-        customer: customer.id,
-        items: [{ price: process.env.STRIPE_PRICE_ID! }],
-        trial_period_days: 14,
-        payment_settings: {
-          save_default_payment_method: "on_subscription",
-        },
-        expand: ["latest_invoice.payment_intent"],
-      });
-      trialEndsAt = subscription.trial_end
-        ? new Date(subscription.trial_end * 1000).toISOString()
-        : trialEndsAt;
-      stripeSubscriptionId = subscription.id;
-    } else {
-      // Pro is paid up front, no trial, no subscription created yet.
-      // The user goes straight to Stripe Checkout right after this.
-      subscriptionStatus = "incomplete";
-      trialEndsAt = null;
-    }
-
-    const { error: dbError } = await supabaseAdmin
-      .from("tpe_businesses")
-      .upsert(
-        {
-          owner_user_id: userId,
-          name: "",
-          slug: userId,
-          plan,
-          subscription_status: subscriptionStatus,
-          trial_ends_at: trialEndsAt,
-          stripe_customer_id: customer.id,
-          stripe_subscription_id: stripeSubscriptionId,
-          email,
-          ...(signupSource ? { signup_source: signupSource } : {}),
-        },
-        { onConflict: "owner_user_id" }
+    // Cookies from signUp are deliberately not applied on this path, so a
+    // failed attempt never leaves a usable session behind.
+    if (provisioned.cleanupFailed) {
+      return NextResponse.json(
+        { error: "Account setup could not be completed. Please contact support before trying again." },
+        { status: 500 }
       );
-
-    if (dbError) {
-      console.error("tpe_businesses upsert failed:", dbError.message);
-      await supabaseAdmin.auth.admin.deleteUser(userId);
-      return NextResponse.json({ error: "Account setup failed. Please try again." }, { status: 500 });
     }
-  } catch (err) {
-    // Stripe or DB failed — remove the auth user so they can try again cleanly
-    await supabaseAdmin.auth.admin.deleteUser(userId);
-    try { if (customer?.id) await stripe.customers.del(customer.id); } catch {}
-    const message = err instanceof Error ? err.message : "Account setup failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+
+    return NextResponse.json({ error: "Account setup failed. Please try again." }, { status: 500 });
   }
 
   const response = NextResponse.json({ success: true, userId });

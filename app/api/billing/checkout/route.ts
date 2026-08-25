@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
 import { stripe } from "@/lib/stripe";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { isDeletedStripeObject } from "@/lib/stripe-object-state";
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const { supabase, applyTo } = createApiClient(request);
@@ -39,7 +40,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // If customer ID exists, verify it's still valid in Stripe
     if (customerId) {
       try {
-        await stripe.customers.retrieve(customerId);
+        const existingCustomer = await stripe.customers.retrieve(customerId);
+        // A deleted customer still retrieves successfully, so this check has
+        // to happen on the resolved value. Stripe blocks every further
+        // operation on it, so reusing one would fail at session creation.
+        if (isDeletedStripeObject(existingCustomer)) {
+          console.warn("[checkout] stored customer is deleted in Stripe, recreating:", customerId);
+          customerId = null; // Force recreation
+        }
       } catch {
         console.warn("[checkout] customer not found in Stripe, recreating:", customerId);
         customerId = null; // Force recreation
