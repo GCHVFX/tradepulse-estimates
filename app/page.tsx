@@ -4,7 +4,9 @@ import { redirect } from "next/navigation";
 import { createSupabaseServerClient, supabaseAdmin } from "@/lib/supabase-server";
 import { EstimateDemo } from "@/app/components/EstimateDemo";
 import { TradeExamples } from "@/app/components/TradeExamples";
-import { PRO_MONTHLY_PRICE_CAD, STARTER_MONTHLY_PRICE_CAD } from "@/lib/plan-pricing";
+import { STARTER_MONTHLY_PRICE_CAD } from "@/lib/plan-pricing";
+import { headers } from "next/headers";
+import { currencyFromCountry, currencyPrefix, formatMonthlyPlanPrice, planMonthlyPrice } from "@/lib/currency";
 
 export const metadata: Metadata = {
   title: "Estimate Software for Contractors & Trades | TradePulse",
@@ -170,6 +172,14 @@ const BENEFITS = [
 ];
 
 export default async function LandingPage() {
+  // The same resolver /signup uses, reading the same Vercel header, so the
+  // price a US visitor sees here cannot disagree with the one they are
+  // offered at signup. currencyFromCountry() is the single country rule:
+  // US is USD, and Canada, an unknown country, and a missing header are all
+  // CAD. Reading a request header keeps this route rendered per request, so
+  // one visitor's country can never be cached and served to another.
+  const currency = currencyFromCountry((await headers()).get("x-vercel-ip-country"));
+
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -289,7 +299,7 @@ export default async function LandingPage() {
         </nav>
 
         {/* Hero */}
-        <section className="relative overflow-hidden noise pt-32 pb-24 sm:pt-40 sm:pb-32"
+        <section className="relative overflow-hidden noise pt-20 pb-24 sm:pt-40 sm:pb-32"
           style={{ background: "linear-gradient(160deg, #0D1B2E 0%, #1a2e47 60%, #0f2236 100%)" }}>
           <div className="dot-grid absolute inset-0 opacity-60" />
           <div className="orb absolute -top-32 -right-32 w-[600px] h-[600px] rounded-full opacity-20"
@@ -360,7 +370,7 @@ export default async function LandingPage() {
         {/* Trust strip */}
         <div className="border-y border-slate-100 bg-slate-50 py-5">
           <div className="mx-auto max-w-4xl px-6 flex flex-wrap items-center justify-center gap-8">
-            {[`CA$${STARTER_MONTHLY_PRICE_CAD}/month flat`, "14-day free trial", "No card required", "Cancel anytime"].map(item => (
+            {[`${formatMonthlyPlanPrice("starter", currency)} flat`, "14-day free trial", "No card required", "Cancel anytime"].map(item => (
               <div key={item} className="flex items-center gap-2 text-sm text-slate-500">
                 <svg className="w-4 h-4 text-emerald-500 shrink-0" viewBox="0 0 16 16" fill="none">
                   <path d="M3 8l3.5 3.5 6.5-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -522,7 +532,7 @@ export default async function LandingPage() {
               <div className="rounded-2xl border-2 p-8 relative" style={{ borderColor: "#E2E8F0" }}>
                 <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: "#94A3B8" }}>Starter</p>
                 <div className="flex items-end gap-2 mb-2">
-                  <span className="text-4xl font-bold text-slate-900">CA${STARTER_MONTHLY_PRICE_CAD}</span>
+                  <span className="text-4xl font-bold text-slate-900">{`${currencyPrefix(currency)}${planMonthlyPrice("starter", currency)}`}</span>
                   <span className="text-slate-500 mb-1">/month</span>
                 </div>
                 <p className="text-sm text-slate-400 mb-6">Estimates only. No card required for a 14-day trial.</p>
@@ -562,7 +572,7 @@ export default async function LandingPage() {
                 </div>
                 <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: "#0D1B2E" }}>Pro</p>
                 <div className="flex items-end gap-2 mb-2">
-                  <span className="text-4xl font-bold text-slate-900">CA${PRO_MONTHLY_PRICE_CAD}</span>
+                  <span className="text-4xl font-bold text-slate-900">{`${currencyPrefix(currency)}${planMonthlyPrice("pro", currency)}`}</span>
                   <span className="text-slate-500 mb-1">/month</span>
                 </div>
                 <p className="text-sm text-slate-400 mb-6">Everything in Starter, plus:</p>

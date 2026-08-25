@@ -274,10 +274,25 @@ test("no superseded $39 or $69 plan pricing remains on product surfaces", () => 
   }
 });
 
-test("public pricing states CA$ explicitly and never a bare $ amount", () => {
+test("public pricing states CA$ or US$ explicitly and never a bare $ amount", () => {
   const home = readFileSync("app/page.tsx", "utf8");
-  expect(home).toContain("CA${STARTER_MONTHLY_PRICE_CAD}");
-  expect(home).toContain("CA${PRO_MONTHLY_PRICE_CAD}");
+
+  // This used to require the literal "CA${STARTER_MONTHLY_PRICE_CAD}", which
+  // pinned the hardcoded-CAD homepage. That implementation was the defect: a
+  // US visitor saw CA$29 here while /signup offered them US$19. The rule that
+  // always mattered is the one kept below, that an amount is never printed
+  // without an explicit currency. See homepage-pricing.spec.ts for the
+  // per-country values themselves.
+  expect(home).toContain("currencyPrefix(currency)");
+  expect(home).toContain('planMonthlyPrice("starter", currency)');
+  expect(home).toContain('planMonthlyPrice("pro", currency)');
+
+  // The static metadata description is the search snippet, not an on-page
+  // price, and cannot read a request header. It stays explicitly CAD.
+  expect(home).toContain("CA$${STARTER_MONTHLY_PRICE_CAD}/month.");
+
+  // No amount reaches the markup unprefixed.
   expect(home).not.toContain('">${STARTER_MONTHLY_PRICE_CAD}<');
   expect(home).not.toContain('">${PRO_MONTHLY_PRICE_CAD}<');
+  expect(home).not.toMatch(/">\$\{/);
 });

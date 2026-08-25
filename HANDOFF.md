@@ -1,6 +1,6 @@
 # TradePulse handoff
 
-Updated: 2026-08-25 07:21 PT (signup currency-control layout fixed and its remaining initial-paint overlap closed, in the working tree; USD rendering hotfix `df16aaa` is pushed but Production still serves the `1bdc011` rollback; not committed, not deployed)
+Updated: 2026-08-25 08:18 PT (homepage currency mismatch and mobile hero spacing fixed in the working tree; US geo default now PROVEN in Production via a US VPN session; not committed, not deployed)
 
 ## Release 1: account-provisioning integrity (2026-08-24, uncommitted)
 
@@ -242,6 +242,228 @@ Root cause, four call sites, none of which pass the estimate's currency into the
 4. `app/new/page.tsx` renders `EditableEstimateBody` without the `currency` prop.
 
 CAD is unaffected because CAD is the fallback. **USD must not be offered to a real contractor until this is fixed.** The signup currency control is live in Production today, so a US contractor could select USD and be billed correctly at US$19 while their customer-facing estimates show CA$.
+
+## Homepage currency mismatch and mobile hero spacing FIXED (2026-08-25 08:18 PT, uncommitted)
+
+**Status:** fixed in the working tree on `main`, measured in a real browser, **not committed, not pushed, not deployed**.
+
+### The US geo default is now proven
+
+A single Opera VPN session from a US exit reached `/signup` and saw `US$19/month` **before** `Change currency` was touched. That closes the item left open at 07:57 PT, when no US egress was available from this machine and the automatic-default claim could not be tested. `currencyFromCountry()` works in Production.
+
+### Mismatch found
+
+The same US session saw **CA$29 and CA$59 on the homepage pricing cards** while `/signup` offered that visitor US$19. The homepage had no country logic at all: it imported the fixed constants `STARTER_MONTHLY_PRICE_CAD` and `PRO_MONTHLY_PRICE_CAD` from `lib/plan-pricing.ts` and printed them behind a hardcoded `CA$`. A US visitor was quoted one price on the marketing page and charged a different one at signup.
+
+### Fix 1, homepage currency
+
+`app/page.tsx` now resolves the currency exactly the way `app/signup/page.tsx` does, with no second country rule anywhere:
+
+```ts
+const currency = currencyFromCountry((await headers()).get("x-vercel-ip-country"));
+```
+
+Three rendered prices switched from hardcoded CAD to that resolved currency: the hero bullet (`formatMonthlyPlanPrice("starter", currency)`), the Starter card, and the Pro card. `PRO_MONTHLY_PRICE_CAD` is no longer imported.
+
+The two cards build their price as a single template literal rather than two adjacent JSX expressions. React had been serialising `{currencyPrefix(currency)}{planMonthlyPrice(...)}` as `US$<!-- -->39`, which renders correctly but splits the price across text nodes and makes any text assertion brittle.
+
+Verified against the local dev server by sending the header directly, which is legitimate local testing rather than evidence about Production, where Vercel controls the header:
+
+| `x-vercel-ip-country` | Starter card | Pro card | Hero bullet |
+|---|---|---|---|
+| US | **US$19** | **US$39** | US$19/month flat |
+| CA | CA$29 | CA$59 | CA$29/month flat |
+| GB | CA$29 | CA$59 | CA$29/month flat |
+| AU | CA$29 | CA$59 | CA$29/month flat |
+| none | CA$29 | CA$59 | CA$29/month flat |
+
+**Per-request rendering.** `/` was already `ƒ` in the build output because `getUser()` reads cookies, and reading a request header keeps it that way. Confirmed `ƒ /` after the change, so one visitor's country-specific price can never be cached and served to another. No `revalidate` and no `force-static` directive exists on the route.
+
+**Deliberately left CAD:** the static `metadata.description`, which is the search snippet rather than an on-page price. `metadata` is a module-level export and cannot read a request header without switching to `generateMetadata`. Making the indexed description vary by crawler country is an SEO decision, not part of this fix. It still states `CA$` explicitly.
+
+No homepage currency selector, no client-side geo lookup, no cookie, no database field, no Stripe change, no migration, no environment variable, and no price changed.
+
+### Fix 2, mobile hero spacing
+
+Measured at 375x812 against the local dev server, `getBoundingClientRect()` rather than eyeballing. The fixed nav is 57px tall. The hero carried `pt-32` (128px), leaving a **95px void** between the header and the first hero content.
+
+Changed the mobile value only, `pt-32` to `pt-20` (80px). `sm:pt-40` is a separate class and was not touched, so the desktop hero cannot move.
+
+| Viewport | Hero padding-top | Nav height | Gap below nav | Gap to h1 |
+|---|---|---|---|---|
+| 375x812 before | 128px | 57px | **95px** | 165px |
+| 375x812 after | 80px | 57px | **47px** | 117px |
+| 1280x800 before | 160px | 89px | 156px | 210px |
+| 1280x800 after | 160px | 89px | **156px, identical** | 210px |
+
+No nav/content overlap, no horizontal scroll. No copy, header behaviour, or other section was touched.
+
+### Tests
+
+`tests/smoke/homepage-pricing.spec.ts`, 8 tests, registered in the `playwright.unit.config.ts` allowlist.
+
+Three are behavioural: they call the same shared functions the page calls and assert the actual strings each country produces, so they check output rather than imports. Five are wiring guards: the homepage reads `x-vercel-ip-country` through `currencyFromCountry`, holds **no** country rule of its own (no `=== "US"`, no `toUpperCase()`, no `navigator.language`, exactly one mention of the header), the cards no longer hardcode a currency, the route stays per-request, and the mobile hero's `pt` is at most 80px while `sm:pt-40` survives.
+
+Reverting `app/page.tsx` to its previous version fails **5 of the 8**, including the spacing guard, so they catch the real defects rather than passing beside them. The three that pass either way are the ones pinning `lib/currency.ts`, which was always correct; the defect was that the homepage never used it.
+
+**One pre-existing test was updated, not weakened.** `currency.spec.ts` "public pricing states CA$ explicitly" required the literal `CA${STARTER_MONTHLY_PRICE_CAD}` in `app/page.tsx`, which pinned the hardcoded-CAD implementation that was the defect. It now asserts the rule that always mattered, that no amount reaches the markup without an explicit `CA$` or `US$`, plus that the metadata description stays CAD. Per-country values live in the new spec.
+
+### Verification actually run (2026-08-25 08:18 PT)
+
+- `git diff --check` — clean.
+- `npx tsc --noEmit` — clean.
+- Focused tests, `tests/smoke/homepage-pricing.spec.ts` — **8 passed**.
+- `npx playwright test --config=playwright.unit.config.ts` — **354 passed, 0 failed**.
+- `npx next build` — compiled successfully in 17.8s, `/` still `ƒ`.
+- Local browser measurement at 375x812 and 1280x800, before and after.
+
+No account was created, the full smoke suite was not run, and no Production data was touched.
+
+### Files changed
+
+`app/page.tsx`, `tests/smoke/homepage-pricing.spec.ts` (new), `tests/smoke/currency.spec.ts`, `playwright.unit.config.ts`, `HANDOFF.md`.
+
+### Exact next deployment step
+
+1. Review the uncommitted diff.
+2. Commit on `main`, suggested subject `Fix homepage currency and mobile hero spacing`.
+3. Push. Production auto-deploys `main`, and no promote step is needed now that the rollback is over.
+4. After deploy, confirm from a US exit that the homepage cards read US$19 and US$39 and that `/signup` still reads US$19, then confirm a Canadian session reads CA$29 and CA$59 on both. Read-only, no account needed.
+
+## Production USD verification PASSED on `7afcd0b` (2026-08-25 07:52 PT)
+
+**Status:** the USD/CAD release is verified end to end against live Production. One synthetic account was created and completely removed. The rollback is over: Production serves `7afcd0b`, and the defect that caused it is confirmed fixed on every customer-facing surface.
+
+### Deployment confirmed first
+
+`https://www.trytradepulse.com/signup` renders `Change currency`, one price line reading `14-day free trial, then CA$29/month`, and the layout-fix classes `pt-8 pb-4`, `gap-5`, and `pb-40`. The `1bdc011` rollback literal `14-day free trial. No card required.` is gone. Selecting USD in the live page switched the copy to `14-day free trial, then US$19/month` with zero `CA$` on the page.
+
+### Preflight, read-only
+
+| Check | Expected | Actual |
+|---|---|---|
+| Live Stripe Customers | 0 | **0** |
+| Trialling / active / past-due | 0 | **0** |
+| Auth users | 7 | **7** |
+| Businesses | 7 | **7** |
+| Estimates | 19 | **19** |
+| Ownerless businesses / orphan estimates | 0 | **0 / 0** |
+| Active generation claims | 0 | **0** |
+| Starter Price `price_1U166o…` | cad 2900, usd 1900 | **cad 2900, usd 1900**, both `tax_behavior: unspecified` |
+| Pro Price `price_1TzwEC…` | cad 5900, usd 3900 | **cad 5900, usd 3900** |
+
+The signup rate-limit bucket was already empty, so no reset was issued. That is one fewer Production mutation than the standard helper performs.
+
+### The one account
+
+`ALLOW_PRODUCTION_SIGNUP_SMOKE=true` was exported into the single test process only. It is not in `.env.local`, was never written to Vercel, and is unset in the shell afterwards.
+
+Created through the real deployed signup UI with USD selected **before** submitting, via a temporary runner that called `assertFreshAccountSignupAllowed()` first. No payment method was entered.
+
+- user `eeca05ea-d8f2-48c8-8e1d-96b9915b6a4d`, business `345f6c41-d34e-44db-ae38-cd349fda541f`
+- estimate `42f89cb8-e559-47a8-aa1f-797177d4b103`, `pricing_source: structured`, 4 structured rows
+- business `estimate_currency = usd`, estimate `currency = usd`
+
+### Billing
+
+| Check | Result |
+|---|---|
+| Subscription | `sub_1U8LWo…`, status `trialing` |
+| Price ID | `price_1U166oQ45KFNqa8x40e7T41u`, the **existing** Starter Price |
+| Item count | **1** |
+| Subscription currency | **`usd`** |
+| Authoritative upcoming invoice | **1900 usd**, line `TradePulse Starter (at $19.00 / month)` |
+| Default payment method | none, on both customer and subscription |
+| Invoices with `amount_paid > 0` | 0 |
+
+`price.unit_amount` and `price.currency` still report the CAD default (2900 / cad) even on this USD subscription. That is a Stripe reporting quirk, not a billing error. The upcoming invoice is the authoritative figure, and it is 1900 usd. Do not re-diagnose this next time.
+
+### Rendered surfaces, all inspected as output rather than read from source
+
+| Surface | Amounts | `US$` | `CA$` | Bare `$` | Label | Verdict |
+|---|---|---|---|---|---|---|
+| `/new` creation screen | 13 | yes | **0** | none | n/a | **PASS** |
+| `/estimates/[id]` editor + detailed pricing | 5 | yes | **0** | none | n/a | **PASS** |
+| `/share/[id]` public page | 13 | yes | **0** | none | `All amounts in USD` | **PASS** |
+| Downloaded PDF (12,298 bytes) | 13 | yes | **0** | none | `All amounts in USD` | **PASS** |
+| Detailed pricing view | 13 | yes | **0** | none | n/a | **PASS** |
+| Grouped pricing view | 8 | yes | **0** | none | n/a | **PASS** |
+| Payment reminder SMS | 1 | yes | **0** | none | n/a | **PASS** |
+| Payment reminder email HTML | 1 | yes | **0** | none | n/a | **PASS** |
+
+No surface combined `All amounts in USD` with `CA$` amounts. That contradiction was asserted against explicitly and did not occur anywhere.
+
+The PDF was the real downloaded artifact, captured through Playwright's download event and scanned as bytes, not a re-render. Grouped pricing produced:
+
+```
+## Line Items
+| Work package | Price |
+|------|------|
+| Additional items | US$190 |
+| Plumbing | US$65 |
+| Painting and finishing | US$12 |
+```
+
+The reminder SMS read: `USD Verification Co.: Invoice #1042 for US$350.00 was due September 4, 2026...`, and the email HTML `<strong>Amount:</strong> US$350.00`. The currency came from `readEstimateCurrencies()`, the cron's own lookup, which returned `usd` for the real estimate id.
+
+### Two surfaces that needed a different route, and why
+
+**Grouped pricing is not reachable in Production.** The estimate detail page showed no grouped toggle. The estimate was `pricing_source: structured` with visible rows and `draft` status, so the only remaining gate is `isGroupedPricingEnabled()`, meaning `ESTIMATE_GROUPED_PRICING_INTERNAL` is not `true` in Production. Grouped was therefore verified by running the real `buildCustomerPricingView()` over the real structured rows and the real snapshot currency with the flag enabled in the test process only. No Production configuration was changed.
+
+**The reminder preview on `/profile` is Pro-gated.** The live page for this Starter trial rendered no `Payment reminders` section and no `<details>` at all, confirmed by inspecting the DOM while signed in as the account. Upgrading to Pro would have required a payment method, so the reminder text was verified by executing `buildPaymentReminderSms()` and `buildPaymentReminderEmailHtml()` with the currency read back out of the real estimate row. That is the same code the cron sends with, so this is an execution check, not a source read, but it is not a Production-rendered pixel.
+
+### Cleanup
+
+Deleted through the production endpoint, `POST /api/account/delete` with `confirmation: "DELETE"` as the signed-in user. That path takes the deletion claim, so an active generation lease would have answered 409 and the runner would have waited. **Succeeded on the first attempt**, no lease conflict: the generation claim had already been released when the estimate finished.
+
+Order was enforced: the Stripe Customer was deleted only after the business row was confirmed gone.
+
+| Step | Result |
+|---|---|
+| `POST /api/account/delete` | **200** `{success: true}` on attempt 1 |
+| Business row | **gone** (`null`) |
+| Estimate row | **gone** (0) |
+| Structured item rows | **gone** (0) |
+| Auth user lookup | **404** |
+| Subscription | **canceled** |
+| Stripe Customer `cus_V8cm04gwzd8prA` | **deleted**, after the business row was confirmed gone |
+
+### Final baseline, exactly restored
+
+| Check | Expected | Actual |
+|---|---|---|
+| Live Stripe Customers | 0 | **0** |
+| Trialling / active / past-due | 0 | **0** |
+| Auth users | 7 | **7** |
+| Businesses | 7 | **7** |
+| Estimates | 19 | **19** |
+| Ownerless businesses | 0 | **0** |
+| Orphan estimates | 0 | **0** |
+| Businesses / estimates reading `usd` | 0 | **0 / 0** |
+| Leftover `usdverify` auth users | 0 | **0** |
+| Charges / succeeded PaymentIntents | 0 | **0 / 0** |
+
+Subscriptions went 461 to **462 canceled**, the one test trial, with none trialling, active, or past due.
+
+Stripe Prices unchanged: 3 Prices and 2 Products, Starter still `cad 2900 / usd 1900`, Pro still `cad 5900 / usd 3900`, both active.
+
+### Verification actually run (2026-08-25 07:52 PT)
+
+- `git diff --check` — clean.
+- `npx tsc --noEmit` — clean.
+- `npx playwright test --config=playwright.unit.config.ts` — **346 passed**.
+- `npx next build` — compiled successfully in 17.2s, 55/55 static pages.
+
+All temporary runners and their result files, which held the throwaway password, were deleted. The full smoke suite was not run.
+
+### Files changed
+
+`HANDOFF.md` only. No application code, Stripe configuration, Supabase schema, migration, Vercel configuration, or pricing was touched.
+
+### Open items
+
+- `ESTIMATE_GROUPED_PRICING_INTERNAL` is not enabled in Production, so grouped customer pricing is built and correct but not reachable by a contractor. Enabling it is a separate decision.
+- A single expired `tpe_estimate_generation_claims` row remains from 2026-08-24 19:39 UTC, owned by pre-existing business `28ba3f1e…`, not by any test account. Expired claims read as free, so it is inert. Not cleaned up, since it belongs to real data and no authorisation was given for it.
 
 ## Signup currency-control layout FIXED (2026-08-24 22:39 PT, closed out 2026-08-25 07:21 PT, uncommitted)
 
