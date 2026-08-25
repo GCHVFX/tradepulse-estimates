@@ -12,41 +12,30 @@ type BusinessSetup = {
   prepared_by: string;
 };
 
-async function getOrCreateBusiness(userId: string): Promise<BusinessSetup | null> {
-  const { data: existing, error: existingError } = await supabaseAdmin
+/**
+ * Looks the business up. It never creates one.
+ *
+ * This page used to insert a tpe_businesses row with plan 'starter',
+ * subscription_status 'trial' and no Stripe customer or subscription behind
+ * it, which proxy.ts then honoured as a valid trial. Any authenticated
+ * identity without a business could reach it and mint itself 14 days of
+ * unbilled access. Accounts are created only by /api/auth/signup and by the
+ * Google signup branch of /auth/callback, both of which provision Stripe
+ * first through lib/account-provisioning.
+ */
+async function findBusiness(userId: string): Promise<BusinessSetup | null> {
+  const { data, error } = await supabaseAdmin
     .from("tpe_businesses")
     .select("id, name, phone, email, logo_url, prepared_by")
     .eq("owner_user_id", userId)
     .maybeSingle();
 
-  if (existingError) {
-    console.error("[onboarding] business lookup failed:", existingError.message);
+  if (error) {
+    console.error("[onboarding] business lookup failed:", error.message);
     return null;
   }
 
-  if (existing) return existing;
-
-  const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
-
-  const { data: created, error: createError } = await supabaseAdmin
-    .from("tpe_businesses")
-    .insert({
-      owner_user_id: userId,
-      name: "",
-      slug: userId,
-      plan: "starter",
-      subscription_status: "trial",
-      trial_ends_at: trialEndsAt,
-    })
-    .select("id, name, phone, email, logo_url, prepared_by")
-    .single();
-
-  if (createError) {
-    console.error("[onboarding] business create failed:", createError.message);
-    return null;
-  }
-
-  return created;
+  return data;
 }
 
 export default async function OnboardingPage({
@@ -58,16 +47,23 @@ export default async function OnboardingPage({
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
 
+  // The route is kept only so stale links stay safe. Signing out has to
+  // happen on a real response, which a server component cannot produce, so
+  // proxy.ts clears the session for a no-business identity before this
+  // renders. These redirects are the backstop for anything that reaches here
+  // anyway, including an unauthenticated visitor.
   if (!user) {
-    redirect("/login?next=/onboarding");
+    redirect("/signup");
   }
 
-  const business = await getOrCreateBusiness(user.id);
+  const business = await findBusiness(user.id);
   if (!business) {
-    redirect("/login?error=business_setup_failed");
+    redirect("/signup?error=setup_required");
   }
 
-  const nextPath = typeof next === "string" && next.startsWith("/") ? next : "/estimates";
+  const nextPath = typeof next === "string" && next.startsWith("/") && !next.startsWith("//")
+    ? next
+    : "/estimates";
 
   return (
     <div className="min-h-dvh bg-zinc-950 text-white flex flex-col">

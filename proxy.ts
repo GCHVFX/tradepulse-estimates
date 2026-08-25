@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
+import { isSupabaseAuthCookie } from "@/lib/auth-session";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -94,15 +95,22 @@ export async function proxy(request: NextRequest) {
     .maybeSingle();
 
   if (!business) {
-    // The onboarding page creates the missing business row, so it has to be
-    // reachable here. Without this guard, redirecting a no-business user to
-    // /onboarding would immediately re-trigger this redirect and loop forever.
-    if (pathname === "/onboarding") {
-      return response;
+    // An authenticated identity with no business row gets no app access and
+    // no business created for it. /onboarding used to be exempted here so it
+    // could insert one, which handed out a 14-day trial with no Stripe
+    // customer or subscription behind it. It no longer creates anything, so
+    // there is nothing to exempt.
+    //
+    // The session is cleared rather than merely redirected, so a stale cookie
+    // cannot keep re-entering protected routes. /signup is public, so the
+    // proxy does not run on the destination and this cannot loop.
+    const signupUrl = new URL("/signup", request.url);
+    signupUrl.searchParams.set("error", "setup_required");
+    const redirect = NextResponse.redirect(signupUrl);
+    for (const cookie of request.cookies.getAll()) {
+      if (isSupabaseAuthCookie(cookie.name)) redirect.cookies.delete(cookie.name);
     }
-    const onboardingUrl = new URL("/onboarding", request.url);
-    onboardingUrl.searchParams.set("next", pathname);
-    return withSessionCookies(NextResponse.redirect(onboardingUrl), response);
+    return redirect;
   }
 
   const isActive = business.subscription_status === "active";

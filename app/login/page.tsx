@@ -235,7 +235,7 @@ export default function LoginPage() {
                 </button>
               </div>
 
-              <GoogleAuth />
+              <GoogleAuth intent="login" />
             </div>
 
             <p className="text-xs text-zinc-600 text-center mt-4">

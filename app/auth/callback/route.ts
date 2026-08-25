@@ -3,6 +3,7 @@ import { createServerClient } from '@supabase/ssr';
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { provisionNewAccount } from '@/lib/account-provisioning';
 import { createAccountProvisioningDependencies } from '@/lib/account-provisioning-server';
+import { OAUTH_INTENT_COOKIE, OAUTH_NONCE_PARAM, resolveOAuthIntent } from '@/lib/oauth-intent';
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
@@ -27,43 +28,88 @@ export async function GET(request: NextRequest) {
       }
     );
 
+    // Sign out and leave for /signup, carrying the cleared session cookies
+    // across so the browser cannot keep the old access token.
+    const abandon = async (errorCode: string): Promise<NextResponse> => {
+      try {
+        await supabase.auth.signOut();
+      } catch (signOutError) {
+        console.error(
+          '[auth/callback] sign out failed:',
+          signOutError instanceof Error ? signOutError.message : signOutError
+        );
+      }
+
+      const failure = NextResponse.redirect(`${origin}/signup?error=${errorCode}`);
+      response.cookies.getAll().forEach((cookie) => {
+        const { name, value, ...options } = cookie;
+        failure.cookies.set(name, value, options);
+      });
+      failure.cookies.delete(OAUTH_INTENT_COOKIE);
+      return failure;
+    };
+
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
       const user = data.user;
-      // OAuth users skip /api/auth/signup, so make sure they get a business
-      // row and trial subscription on first login. Existing users are left
-      // untouched.
+
       if (user) {
+        // The intent is never read from the callback URL. It comes from the
+        // HttpOnly cookie written when the flow started, and is only trusted
+        // when its nonce matches the one that came back with the redirect.
+        const intent = resolveOAuthIntent(
+          request.cookies.get(OAUTH_INTENT_COOKIE)?.value,
+          searchParams.get(OAUTH_NONCE_PARAM)
+        );
+
+        if (!intent) {
+          return abandon('signin_expired');
+        }
+
+        const hasBusiness = await businessExists(user.id);
+
+        if (hasBusiness) {
+          // Both intents behave identically here: sign in, provision nothing.
+          return response;
+        }
+
+        if (intent === 'login') {
+          // Signing in never creates a business, a Stripe customer, a
+          // subscription, or a trial. They have to go through signup.
+          return abandon('setup_required');
+        }
+
         const provisioned = await ensureBusiness(user.id, user.email ?? undefined);
         if (!provisioned) {
           // The Google identity is the person's own account, so it is always
           // preserved. Signing out stops a half-provisioned user from staying
           // active, and /signup lets them retry: ensureBusiness provisions
           // again on the next attempt because no business row exists yet.
-          try {
-            await supabase.auth.signOut();
-          } catch (signOutError) {
-            console.error(
-              '[auth/callback] sign out after failed provisioning failed:',
-              signOutError instanceof Error ? signOutError.message : signOutError
-            );
-          }
-
-          const failure = NextResponse.redirect(`${origin}/signup?error=setup_failed`);
-          // signOut clears the session cookies onto `response`; carry them
-          // across or the browser keeps the old access token.
-          response.cookies.getAll().forEach((cookie) => {
-            const { name, value, ...options } = cookie;
-            failure.cookies.set(name, value, options);
-          });
-          return failure;
+          return abandon('setup_failed');
         }
       }
+
+      response.cookies.delete(OAUTH_INTENT_COOKIE);
       return response;
     }
   }
 
   return NextResponse.redirect(`${origin}/login?error=reset_failed`);
+}
+
+async function businessExists(userId: string): Promise<boolean> {
+  const { data, error } = await supabaseAdmin
+    .from('tpe_businesses')
+    .select('id')
+    .eq('owner_user_id', userId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[auth/callback] business lookup failed:', error.message);
+    return false;
+  }
+
+  return Boolean(data);
 }
 
 // Returns true if the user already has (or now has) a business row + trial.

@@ -83,7 +83,72 @@ Owner-authorised historical-data cleanup of every `tpe_businesses` row whose `ow
 
 **Before and after.** Businesses 31 to **7**, estimates 35 to **19**, Auth users 7 to **7** (unchanged), ownerless businesses 24 to **0**, Clearwater Plumbing rows 1 to **0**. Zero orphaned estimates and zero orphaned photos remain. The only surviving claim is a pre-existing expired `generation` claim on a surviving Auth-backed business. All seven remaining businesses are Auth-backed and were not touched. Stripe was not modified by this cleanup and still shows 0 live customers, all 434 subscriptions `canceled`, none trialing, active, or past-due, and all three Prices intact.
 
-### Explicitly deferred to Release 2 (access control), not started
+## Release 2: no-business access closure and Google intent split (2026-08-24, uncommitted)
+
+**Status:** implemented on `main` in the working tree, verified locally, **not committed and not deployed**. Release 1 (`1a9b4a6`) is live; `origin/main` is at `a7e5471`.
+
+**Read-only production preflight:** **0 Auth users with no `tpe_businesses` row** (8 Auth users, 8 businesses). Nobody is currently in the state this release closes, so it is behaviourally inert for existing users. No Stripe, Supabase, Auth, or production data was mutated.
+
+### 1. `/onboarding` is no longer a business-creation path
+
+`getOrCreateBusiness()` and its `.insert()` are gone. The page now only looks a business up, and never writes `plan`, `subscription_status`, `trial_ends_at`, or any Stripe resource. Previously it minted a `starter` / `trial` row with no Stripe customer or subscription behind it, and `proxy.ts` honoured that as a valid 14-day trial, so any authenticated identity without a business could grant itself unbilled access.
+
+The route is kept so stale links stay safe: a signed-out visitor goes to `/signup`, a no-business identity goes to `/signup?error=setup_required`, and a real business is redirected to `next` (path-validated) or `/estimates`.
+
+### 2. `proxy.ts` no longer redirects to `/onboarding`
+
+The `!business` branch now clears the Supabase session cookies on the redirect response and sends the person to `/signup?error=setup_required`. The old `/onboarding` exemption is removed with it. `/signup` is in `PUBLIC_PATHS`, so `isPublic()` short-circuits before the business lookup ever runs again and the redirect cannot loop.
+
+The session must be cleared on a real response. `createSupabaseServerClient()`'s `setAll` swallows the write during a server-component render, so `signOut()` there looks successful and leaves the session intact. `lib/auth-session.ts` identifies the `sb-<ref>-auth-token` cookies, including the chunked `.0` / `.1` variants.
+
+### 3. Google OAuth intent is bound, not trusted
+
+`lib/oauth-intent.ts` holds a two-value allowlist (`login`, `signup`). `/auth/google` validates the requested intent, generates a nonce, writes `tp_oauth_intent` as `intent.nonce.issuedAt` in an **HttpOnly, SameSite=Lax, 10 minute** cookie, and puts **only the nonce** into `redirectTo`. The intent never appears in any URL.
+
+`/auth/callback` reads the intent from that cookie and trusts it only when the value is on the allowlist, has not expired, was not issued in the future, and its nonce matches the one returned with the redirect. Missing, malformed, unknown, expired, or mismatched all resolve to `null`, and the callback then signs out and redirects to `/signup?error=signin_expired`. The cookie is cleared on every exit path. An unrecognised intent at the start route falls back to `login`, which never creates anything.
+
+### 4. Callback branches
+
+- **Business already exists:** both intents sign in normally. No provisioning, for either.
+- **`login`, no business:** no business row, Stripe customer, subscription, or trial is created. Sign out, redirect `/signup?error=setup_required`.
+- **`signup`, no business:** the Release 1 compensated helper runs (`deleteAuthUserOnFailure: false`). On failure it cleans partial database and Stripe resources, **preserves the Auth identity**, signs out, and redirects `/signup?error=setup_failed`. No timing heuristic, and no Google Auth user is ever deleted.
+
+Email/password signup, paid/trial logic, webhook mapping, and Stripe Price-ID logic are untouched.
+
+### Verification actually run (2026-08-24)
+
+- `git diff --check`: passed, only the pre-existing benign CRLF notices.
+- `npx.cmd tsc --noEmit`: passed.
+- Focused new tests (`oauth-intent`, `no-business-access`): **23 passed**.
+- Full safe unit suite: **263 passed**, 0 failed (was 240; +23 new).
+- `npx.cmd next build`: passed, only the three known `metadataBase` notices.
+- Targeted ESLint on all changed and new files: one `react-hooks/set-state-in-effect` error in `app/signup/page.tsx`, **confirmed pre-existing** by linting the HEAD version of that file in isolation. It is one of the 8 baseline errors and is unrelated to the one-line change made there.
+
+### Authorised cleanup of the smoke-test burst, and test-harness hardening (2026-08-24)
+
+**Cause.** A full Playwright smoke run was executed against Production between 19:05:16 and 19:07:52 PT, creating 20 live Stripe Customers with CAD 2900 Starter trials. Nineteen leaked: `cleanupTestAccount()` deleted the Stripe Customer inside a bare `catch {}`, then deleted the database and Auth rows anyway, so the Customers survived with nothing left pointing at them. The twentieth was never cleaned up at all and was the record behind the 7 to 8 count change between 18:57 and 19:17 PT. Both counts had been correct; the record was created between them.
+
+**Preflight (read-only, all guards passed).** 20 live Customers, all inside the burst window, none outside it. All live-mode, all with `metadata.user_id`, none already deleted, each with a trialing CAD 2900 Starter subscription. Account-wide: 0 charges, 0 succeeded PaymentIntents, 0 invoices with `amount_paid > 0`. Database cross-check: 19 with neither Auth user nor business row, 1 Auth-backed with the exact fresh-test signature (47-character plus-alias, provider `email`, matching Stripe references, 0 estimates).
+
+**Cleanup.** The 19 orphans were deleted directly: 19 deleted, 0 already gone, 0 failures, all 19 subscriptions cancelled. The Auth-backed account went through the established `deleteAuthenticatedAccount()` procedure with the route's own dependency implementations, and its Stripe Customer was deleted only after that procedure succeeded and the business row was confirmed gone, so no dangling reference could be created.
+
+**Before and after.** Live Stripe Customers 20 to **0**. Trialing, active, or past-due subscriptions 20 to **0** (all 454 now `canceled`). Auth users 8 to **7**, businesses 8 to **7**, estimates 19 to **19** (the test account had none). Auth users without a business: **0**. Ownerless businesses: **0**. Orphaned estimates: **0**. All three Stripe Prices intact. The seven pre-existing Auth-backed businesses were untouched.
+
+### Rule: fresh-account smoke tests must not run against Production
+
+`tests/smoke/helpers.ts` `signUpFreshAccount()` now **refuses by default** and throws before any network call unless `ALLOW_PRODUCTION_SIGNUP_SMOKE=true` is set for that single run. Refusal is loud, never a silent skip, because a silent skip is how a green run can hide accounts that were never exercised. Anything that is not clearly a local stack counts as Production, and a live-mode Stripe key alone is decisive.
+
+`cleanupTestAccount()` no longer swallows Stripe failures. Stripe cleanup runs first and now **throws** before any database or Auth deletion, so a failure can never again strip away the only record tying a Customer to a user. Only an already-missing Customer is tolerated; only genuinely transient failures (rate limit, lock timeout, `api_error`, 429, 5xx) are retried, bounded at 3 attempts; anything else fails immediately with the Customer id and manual-cleanup instructions. The logic lives in `tests/smoke/smoke-safety.ts` as pure functions, covered by 17 non-network tests in `tests/smoke/smoke-safety.spec.ts`.
+
+**No full smoke suite was run in this session.** Only `playwright.unit.config.ts`, whose `testMatch` allowlist contains pure unit specs with no network access. No account was created.
+
+### Still deferred after this release
+
+All CAD/USD currency work: the `currency` columns on `tpe_businesses` and `tpe_estimates`, the estimate-currency snapshot and formatters, the Profile `Estimate currency` control, the AI prompt spelling rule, and Stripe `currency_options` (USD 1900 Starter / 3900 Pro) on the existing Price IDs. That work is fully designed and needs Production migration authorization plus confirmation that `STRIPE_PRO_PRICE_ID` is set in Vercel Production. Also still open: a business whose owner Auth user is removed first still cannot be deleted through the normal account-deletion procedure, because the deletion claim has a foreign key to `auth.users`.
+
+**Exact next step:** review the uncommitted Release 2 diff, then commit and deploy if approved. Nothing has been committed, pushed, or deployed.
+
+### Superseded: Release 2 (access control) as originally scoped
 
 `proxy.ts` still redirects an authenticated user with no business row to `/onboarding`, and `app/onboarding/page.tsx` still creates a business row with `plan: 'starter'`, `subscription_status: 'trial'` and **no Stripe customer or subscription**, which `proxy.ts` then honours as a valid trial. That unbilled-trial path is untouched by this release. Release 2 removes the `/onboarding` insert, repoints the proxy redirect to `/signup`, and repoints `safeNextPath()`. The diagnostic above shows 0 accounts currently in that state, so Release 2 is behaviourally inert for existing users. Also deferred: Google `intent` login/signup split, all currency work, Stripe Price `currency_options`, and any migration.
 

@@ -175,7 +175,7 @@ export default function SignupPage() {
           )}
         </div>
 
-        <GoogleAuth />
+        <GoogleAuth intent="signup" />
 
         <p className="text-sm text-zinc-500">
           Already have an account?{" "}

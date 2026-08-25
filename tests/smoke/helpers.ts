@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import Stripe from "stripe";
 import crypto from "crypto";
+import { assertFreshAccountSignupAllowed, deleteStripeCustomerForTest } from "./smoke-safety";
 
 export async function loginAs(page: Page, email: string, password: string): Promise<void> {
   await page.goto("/login");
@@ -54,6 +55,14 @@ async function deleteUserByEmailIfExists(email: string): Promise<void> {
 // real contractor goes through. Password is generated per call, never stored,
 // since the account is deleted at the end of the test regardless of outcome.
 export async function signUpFreshAccount(page: Page): Promise<TestAccount> {
+  // Refuses by default against Production. This creates a real Auth user,
+  // business row, Stripe Customer, and trial Subscription.
+  assertFreshAccountSignupAllowed({
+    stripeKey: process.env.STRIPE_SECRET_KEY,
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    override: process.env.ALLOW_PRODUCTION_SIGNUP_SMOKE,
+  });
+
   const email = `gchansen+audit-${Date.now()}-${crypto.randomBytes(4).toString("hex")}@gmail.com`;
   const password = crypto.randomBytes(12).toString("hex");
 
@@ -121,8 +130,9 @@ async function runDelete(
 // references it (estimates and their line items / photos / changes, payment
 // reminders, price book items), and the Supabase auth user. Children are
 // removed before parents so a FK constraint can't block — and silently leak —
-// the tpe_businesses delete. Safe to call even if signup partially failed;
-// best-effort throughout (failures are logged, not thrown).
+// the tpe_businesses delete. Safe to call even if signup partially failed.
+// Database steps stay best-effort (failures are logged), but a Stripe
+// cleanup failure THROWS before any database or Auth row is deleted.
 export async function cleanupTestAccount(userId: string): Promise<void> {
   const supabaseAdmin = adminClient();
 
@@ -133,11 +143,16 @@ export async function cleanupTestAccount(userId: string): Promise<void> {
     .maybeSingle();
 
   if (business?.stripe_customer_id) {
-    try {
-      await stripeClient().customers.del(business.stripe_customer_id);
-    } catch {
-      // Already deleted or never fully created — nothing more to clean up on the Stripe side.
-    }
+    // Deliberately not swallowed. If the customer cannot be removed, this
+    // throws before the database and Auth rows below are deleted: those rows
+    // are the only record tying the customer to a user, so removing them
+    // first is exactly how 19 unattributable live customers were leaked.
+    // Only an already-missing customer is tolerated; only transient Stripe
+    // failures are retried.
+    await deleteStripeCustomerForTest(
+      (customerId) => stripeClient().customers.del(customerId),
+      business.stripe_customer_id
+    );
   }
 
   if (business?.id) {

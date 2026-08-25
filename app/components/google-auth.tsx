@@ -25,7 +25,16 @@ function GoogleIcon({ className }: { className?: string }) {
   );
 }
 
-export function GoogleAuth({ defaultNext = "/new" }: { defaultNext?: string } = {}) {
+/**
+ * `intent` decides whether the callback may provision a new account. Only
+ * /signup passes "signup". It is a hint here, not a trust boundary: the
+ * server re-validates it against an allowlist and binds it to an HttpOnly
+ * cookie, so tampering with this value cannot reach the provisioning branch.
+ */
+export function GoogleAuth({
+  defaultNext = "/new",
+  intent = "login",
+}: { defaultNext?: string; intent?: "login" | "signup" } = {}) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -37,7 +46,7 @@ export function GoogleAuth({ defaultNext = "/new" }: { defaultNext?: string } = 
       const nextParam = params.get("next");
       const next = nextParam && nextParam.startsWith("/") ? nextParam : defaultNext;
 
-      window.location.href = `/auth/google?next=${encodeURIComponent(next)}`;
+      window.location.href = `/auth/google?next=${encodeURIComponent(next)}&intent=${intent}`;
       // On success the browser redirects to Google, so nothing else runs here.
     } catch {
       setError("Could not start Google sign in. Try again.");
