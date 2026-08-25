@@ -1,5 +1,7 @@
 "use client";
 
+import { DEFAULT_CURRENCY, type Currency } from "@/lib/currency";
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { EditableEstimateBody } from "./editable-estimate-body";
@@ -15,9 +17,12 @@ export function EstimatePricingEditor({
   structuredPricing,
   canEditMode,
   pricingError,
+  currency = DEFAULT_CURRENCY,
 }: {
   estimateId: string;
   summary: string;
+  /** The estimate's persisted snapshot, not the business setting. */
+  currency?: Currency;
   detailedSummary: string;
   groupedSummary: string;
   initialMode: CustomerPricingMode;
@@ -105,6 +110,7 @@ export function EstimatePricingEditor({
           summary={structuredPricing ? detailedSummary : summary}
           estimateId={estimateId}
           lineItemsReadOnly={structuredPricing}
+          currency={currency}
         />
       ) : (
         <EstimateMarkdown content={detailedSummary} />

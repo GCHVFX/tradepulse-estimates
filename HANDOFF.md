@@ -142,6 +142,93 @@ Email/password signup, paid/trial logic, webhook mapping, and Stripe Price-ID lo
 
 **No full smoke suite was run in this session.** Only `playwright.unit.config.ts`, whose `testMatch` allowlist contains pure unit specs with no network access. No account was created.
 
+## USD/CAD multi-currency (2026-08-24, uncommitted, NOT migrated, NOT deployed)
+
+**Status:** implemented in the working tree. The migration file exists but **has not been applied to Production**, and no live Stripe object was modified.
+
+### Migration created but not applied
+
+`supabase/migrations/20260825000000_add_currency_columns.sql`. Additive only, no RLS change, no `SECURITY DEFINER`:
+
+- `tpe_businesses.estimate_currency text not null default 'cad'`, checked `in ('cad','usd')`
+- `tpe_estimates.currency text not null default 'cad'`, checked `in ('cad','usd')`
+
+The `not null default 'cad'` backfills every existing row in the same statement, so all 7 businesses and 19 estimates stay CAD with no separate UPDATE. Rollback is `drop column` on both.
+
+**Type-generation blocker.** `lib/database.types.ts` is generated from the live schema, which does not have these columns yet. Regenerating now would reproduce the old schema and hand-editing would fake schema state, so both new columns are read and written **only** through `lib/currency-db.ts`, which carries the narrow casts and the explanation. After the migration is applied, regenerate the types with the Supabase MCP and delete the casts. That is a one-file change.
+
+### Currency model
+
+Billing currency and estimate currency are deliberately separate and never conflated. **Billing currency is not stored**: Stripe locks it to the Customer on the first subscription and is the only authority, so a second copy would drift the moment a contractor changed their estimate currency. **Estimate currency** is a per-business setting, snapshotted onto each estimate at creation so historical estimates never move.
+
+Prices are separate price points, never conversions: Starter CA$29 / US$19, Pro CA$59 / US$39. Amounts always render `CA$` or `US$`; a bare `$` is never emitted.
+
+### Stripe preflight verified read-only (2026-08-24)
+
+| Price | Active | Currency | Amount | Product | currency_options |
+|---|---|---|---|---|---|
+| `price_1U166oQ45KFNqa8x40e7T41u` | yes, livemode | cad | 2900 | `prod_Uzw4COlgTWZnhc` TradePulse Starter | **cad only** |
+| `price_1TzwECQ45KFNqa8xsjncgiHQ` | yes, livemode | cad | 5900 | `prod_Uzw6WQ8HsaqblQ` TradePulse Pro | **cad only** |
+
+Account `acct_1TzvK3Q45KFNqa8x`, country CA, default currency cad, `tax_behavior: unspecified` on both. Archived CAD 3900 Starter remains archived. **No Stripe object was modified.** Note that 5 live customers with trialing subscriptions existed at preflight time, created after the earlier cleanup.
+
+### Verification actually run
+
+- `git diff --check`: passed.
+- `npx.cmd tsc --noEmit`: passed.
+- Focused new tests (`currency.spec.ts`): **23 passed**.
+- Full safe unit suite: **304 passed**, 0 failed (was 280).
+- `npx.cmd next build`: passed, only the three known `metadataBase` notices. `/signup` is now dynamic, as expected from reading a request header.
+- Full ESLint: **8 errors and 18 warnings, identical to the documented baseline**. The one `set-state-in-effect` error moved verbatim from `app/signup/page.tsx` to `app/signup/signup-form.tsx` with the code.
+
+Five pre-existing tests asserted the old bare-`$` output and the old signup file layout; their expectations were updated to `CA$` and to `signup-form.tsx`, not weakened.
+
+### Estimate rendering coverage now complete
+
+Every customer-facing estimate surface renders the estimate's own persisted `currency` snapshot, never the business setting, so changing `Estimate currency` moves new estimates only:
+
+- **Serializer** (`lib/estimate-summary.ts`): line items, the quantity/rate description, the preamble total, and the whole pricing block. A gap was found and closed here by the new tests: the Line Items table was still emitting `CA$` inside a USD estimate because only the pricing block had been threaded.
+- **Editor** (`editable-estimate-body.tsx`): every total, tax, deposit, balance, and per-line amount, plus the inline formatter. Saving re-serializes with the same snapshot, so a save cannot silently rewrite an estimate to CAD. Forwarded from `estimate-pricing-editor.tsx` and the estimate detail page.
+- **Reminders** (`lib/payment-reminder-message.ts`): SMS and email HTML both quote the snapshot. The email prose carries no amount. All three callers pass it: the cron (one batched lookup, not one query per estimate), the manual send route, and the Profile preview.
+- **Share page and PDF**: the `All amounts in CAD/USD` label, deliberately below the pricing table and outside any cell, because a currency code inside an amount cell would break `parseCost()` on a later edit.
+
+An estimate with no snapshot defaults to CAD, so all 19 existing estimates are unchanged.
+
+**Old-price search.** No stale plan pricing remains on any product surface. The only `$39`/`$69` matches are the deliberately labelled *Superseded* decision record in `DECISIONS.md` (kept as history), unrelated estimate line-item amounts in test fixtures, and the current US$39 Pro price. Nothing was removed from `DECISIONS.md`: superseding is recorded there, not overwritten.
+
+### Five live trialling subscriptions: read-only investigation
+
+All five were created in an eight-second burst, two seconds apart, on the same evening, each with a distinct `metadata.user_id`. Every one is a CAD 2900 Starter trial on the existing Starter Price. **Zero charges, zero succeeded PaymentIntents, and zero invoices with `amount_paid > 0` account-wide.** All five Auth users and business rows are already absent, so no live account is affected. Classification: **all five confirmed test records.**
+
+**Root cause, and it is not the gate failing.** The addresses match `tests/smoke/signup-rate-limit.spec.ts` exactly, whose generated address is ten characters longer than `signUpFreshAccount`'s. That spec creates accounts by POSTing straight to `/api/auth/signup` and **never calls `signUpFreshAccount`**, so the `ALLOW_PRODUCTION_SIGNUP_SMOKE` gate does not apply to it. It deliberately creates exactly five accounts to exhaust the five-per-hour limit, which is precisely what was observed. The gate was already on disk eleven minutes before the burst, so timing is not the explanation: the spec simply is not covered by it.
+
+**Both follow-ups are now closed. See the rule below.**
+
+### Cleanup of the five, and the complete production-smoke rule (2026-08-24)
+
+**Cleanup.** All guards passed before mutation: exactly five customers in the burst window, no live customer outside that set, all CAD 2900 Starter trials, all with no Auth user and no business row, and zero charges, succeeded PaymentIntents, or invoices with `amount_paid > 0` account-wide. Result: **5 deleted, 0 failures.** Verified after: **0 live Stripe customers, 0 trialling/active/past-due subscriptions** (all 459 now `canceled`), all three Prices intact. The database was not touched: 7 businesses, 7 Auth users, 19 estimates, and `max(tpe_businesses.updated_at)` still 2026-08-18, well before this session.
+
+**The rule, now enforced rather than documented.**
+
+Every test-driven POST to `/api/auth/signup` goes through one wrapper, `postSignupApi()` in `tests/smoke/smoke-safety.ts`. It applies the Production gate **before** issuing any request, so a refused run creates nothing, and it accepts only the exact one-run override `ALLOW_PRODUCTION_SIGNUP_SMOKE=true`. `signup-rate-limit.spec.ts`, the spec that bypassed the old gate and created the five, now calls it. A static source test scans every file in `tests/smoke/`, with comments stripped so a comment can neither satisfy nor fail it, and fails if any spec outside the two approved wrapper files posts to that endpoint directly.
+
+**Teardown is now deterministic even with no business row.** `cleanupTestAccount()` resolves the Stripe customer from the business row when present and otherwise from `metadata['user_id']`, so a missing `tpe_businesses` row can never silently skip Stripe again. That silent skip is exactly what let the five survive a teardown that had already removed their database and Auth records. Stripe is resolved and deleted **before** any database or Auth deletion. Only an explicitly already-missing customer is tolerated; only transient failures retry, bounded at three attempts. A failed or ambiguous resolution throws with the user id and the candidate customer ids, and leaves every record needed for recovery in place.
+
+### Exact Production cutover sequence still required
+
+1. Apply `20260825000000_add_currency_columns.sql` to Production (authorisation still outstanding).
+2. Verify all businesses and estimates read `cad`.
+3. Regenerate `lib/database.types.ts` and delete the casts in `lib/currency-db.ts`.
+4. Confirm `STRIPE_PRO_PRICE_ID` is set in Vercel Production.
+5. **Add the two USD currency options in live Stripe**, keeping the existing Price IDs:
+   - `price_1U166oQ45KFNqa8x40e7T41u` → `currency_options[usd][unit_amount] = 1900`
+   - `price_1TzwECQ45KFNqa8xsjncgiHQ` → `currency_options[usd][unit_amount] = 3900`
+   - Set `currency_options[usd][tax_behavior] = unspecified` to match CAD.
+6. Re-read both Prices and confirm the IDs, CAD amounts, and Products are unchanged.
+7. Deploy, then verify one CAD and one USD signup on a controlled account and clean both up.
+
+Step 5 must land before any USD signup reaches Stripe. Until then a USD subscription create would fail, and it fails loudly rather than silently billing CAD.
+
 ### Still deferred after this release
 
 All CAD/USD currency work: the `currency` columns on `tpe_businesses` and `tpe_estimates`, the estimate-currency snapshot and formatters, the Profile `Estimate currency` control, the AI prompt spelling rule, and Stripe `currency_options` (USD 1900 Starter / 3900 Pro) on the existing Price IDs. That work is fully designed and needs Production migration authorization plus confirmation that `STRIPE_PRO_PRICE_ID` is set in Vercel Production. Also still open: a business whose owner Auth user is removed first still cannot be deleted through the normal account-deletion procedure, because the deletion claim has a foreign key to `auth.users`.

@@ -2,7 +2,11 @@ import type { Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import Stripe from "stripe";
 import crypto from "crypto";
-import { assertFreshAccountSignupAllowed, deleteStripeCustomerForTest } from "./smoke-safety";
+import {
+  assertFreshAccountSignupAllowed,
+  deleteStripeCustomerForTest,
+  resolveTestStripeCustomerId,
+} from "./smoke-safety";
 
 export async function loginAs(page: Page, email: string, password: string): Promise<void> {
   await page.goto("/login");
@@ -142,16 +146,32 @@ export async function cleanupTestAccount(userId: string): Promise<void> {
     .eq("owner_user_id", userId)
     .maybeSingle();
 
-  if (business?.stripe_customer_id) {
-    // Deliberately not swallowed. If the customer cannot be removed, this
-    // throws before the database and Auth rows below are deleted: those rows
-    // are the only record tying the customer to a user, so removing them
-    // first is exactly how 19 unattributable live customers were leaked.
-    // Only an already-missing customer is tolerated; only transient Stripe
-    // failures are retried.
+  // Stripe first, always, and never conditional on the business row existing.
+  // Reading the customer id only off tpe_businesses meant a missing row
+  // skipped Stripe silently, which is how five live customers survived a
+  // teardown that had already removed their database and Auth records. When
+  // the row is gone the customer is resolved from metadata.user_id instead.
+  //
+  // Deliberately not swallowed: only an already-missing customer is tolerated,
+  // and only transient Stripe failures are retried. Anything else throws
+  // before the records below are deleted.
+  const resolution = await resolveTestStripeCustomerId(
+    { userId, businessCustomerId: business?.stripe_customer_id },
+    {
+      async searchByUserId(id) {
+        const found = await stripeClient().customers.search({
+          query: `metadata['user_id']:'${id}'`,
+          limit: 10,
+        });
+        return found.data.filter((c) => !c.deleted).map((c) => c.id);
+      },
+    }
+  );
+
+  if (resolution.kind === "found") {
     await deleteStripeCustomerForTest(
       (customerId) => stripeClient().customers.del(customerId),
-      business.stripe_customer_id
+      resolution.customerId
     );
   }
 

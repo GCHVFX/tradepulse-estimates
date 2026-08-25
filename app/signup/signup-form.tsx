@@ -1,0 +1,240 @@
+"use client";
+
+import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { Logo } from "@/app/components/logo";
+import { GoogleAuth } from "@/app/components/google-auth";
+import { formatMonthlyPlanPrice, trialCopy, CURRENCIES, type Currency } from "@/lib/currency";
+
+const inputClass =
+  "w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3.5 text-white placeholder-zinc-600 text-base focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]";
+
+export function SignupForm({ initialCurrency }: { initialCurrency: Currency }) {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [signupSource, setSignupSource] = useState("");
+  const [plan, setPlan] = useState("starter");
+  const [currency, setCurrency] = useState<Currency>(initialCurrency);
+  const [showCurrency, setShowCurrency] = useState(false);
+  // Guards against double-submit. `loading` state only stops the button on the
+  // next render, so an Enter keypress can fire handleSignUp again before that.
+  // A ref flips synchronously and covers both the click and Enter paths.
+  const submittingRef = useRef(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get("ref");
+    const utm = params.get("utm_source");
+    if (ref) setSignupSource(ref);
+    else if (utm) setSignupSource(utm);
+    if (params.get("plan") === "pro") setPlan("pro");
+  }, []);
+
+  async function handleSignUp() {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setError("");
+    setLoading(true);
+
+    try {
+      const apiUrl = signupSource
+        ? `/api/auth/signup?ref=${encodeURIComponent(signupSource)}`
+        : "/api/auth/signup";
+      const res = await fetch(apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, plan, currency }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error ?? "Something went wrong. Try again.");
+        setLoading(false);
+        submittingRef.current = false;
+        return;
+      }
+    } catch {
+      setError("Something went wrong. Try again.");
+      setLoading(false);
+      submittingRef.current = false;
+      return;
+    }
+
+    if (plan === "pro") {
+      const form = document.createElement("form");
+      form.method = "POST";
+      form.action = "/api/billing/checkout?plan=pro";
+      document.body.appendChild(form);
+      form.submit();
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const next = params.get("next");
+    const destination = next && next.startsWith("/") ? next : "/new";
+
+    router.push(destination);
+    router.refresh();
+  }
+
+  return (
+    <div className="min-h-dvh bg-zinc-950 text-white flex flex-col">
+      <header className="px-5 pt-10 pb-6 shrink-0">
+        <Logo />
+      </header>
+
+      <main className="flex-1 px-5 flex flex-col gap-6 pt-4">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Create account</h1>
+          <p className="text-zinc-500 text-sm mt-1">
+            {plan === "pro" ? `Pro is ${formatMonthlyPlanPrice("pro", currency)}, billed right away.` : trialCopy("starter", currency)}
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="email" className="text-sm font-medium text-zinc-400">Email</label>
+            <input
+              id="email"
+              type="email"
+              className={inputClass}
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoFocus
+              autoComplete="email"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="password" className="text-sm font-medium text-zinc-400">Password</label>
+            <div className="relative">
+              <input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                className={inputClass + " pr-11"}
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
+                onKeyDown={(e) => e.key === "Enter" && handleSignUp()}
+              />
+              <button
+                type="button"
+                tabIndex={-1}
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors p-1"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? (
+                  <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5" aria-hidden="true">
+                    <path
+                      d="M2.5 2.5l15 15"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                    <path
+                      d="M6.37 6.43A7.5 7.5 0 001.5 10s3.5 7 8.5 7a7.6 7.6 0 004.15-1.23M8.59 4.1A7.4 7.4 0 0110 4c5 0 8.5 6 8.5 6a9.2 9.2 0 01-2.15 2.72"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M7.76 7.84a2.5 2.5 0 003.38 3.43"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5" aria-hidden="true">
+                    <path
+                      d="M1.5 10S5 3.5 10 3.5 18.5 10 18.5 10 15 16.5 10 16.5 1.5 10 1.5 10z"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <circle cx="10" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.5" />
+                  </svg>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {error && (
+            <div className="bg-red-950 border border-red-800 rounded-xl px-4 py-3.5 text-red-300 text-sm">
+              {error}
+            </div>
+          )}
+        </div>
+
+        <GoogleAuth intent="signup" currency={currency} />
+
+        <p className="text-sm text-zinc-500">
+          Already have an account?{" "}
+          <Link href="/login" className="text-amber-500 hover:text-amber-400 transition-colors">
+            Sign in
+          </Link>
+        </p>
+
+        <p className="text-xs text-zinc-600 text-center mt-4">
+          By continuing you agree to our{" "}
+          <a href="/terms" className="underline hover:text-zinc-400">Terms of Service</a>
+          {" "}and{" "}
+          <a href="/privacy" className="underline hover:text-zinc-400">Privacy Policy</a>.
+        </p>
+      </main>
+
+      <div className="fixed bottom-0 left-0 right-0 px-5 pb-10 pt-4 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent">
+        <div className="mb-3 flex flex-col items-center gap-1.5">
+          <p className="text-zinc-500 text-xs text-center">
+            {plan === "pro" ? trialCopy("pro", currency) : trialCopy("starter", currency)}
+          </p>
+          {showCurrency ? (
+            <div className="flex items-center gap-2" role="group" aria-label="Estimate currency">
+              {CURRENCIES.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => { setCurrency(c); setShowCurrency(false); }}
+                  className={`min-h-[44px] rounded-lg border px-4 text-sm font-medium transition-colors ${
+                    currency === c
+                      ? "border-amber-500 bg-amber-500/10 text-amber-400"
+                      : "border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
+                  }`}
+                >
+                  {c.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowCurrency(true)}
+              className="text-xs text-zinc-500 underline hover:text-zinc-300 transition-colors py-1"
+            >
+              Change currency
+            </button>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={handleSignUp}
+          disabled={!email.trim() || !password.trim() || loading}
+          className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+        >
+          {loading ? "Creating account..." : "Create Account"}
+        </button>
+      </div>
+    </div>
+  );
+}

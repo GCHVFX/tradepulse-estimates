@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import QRCode from "qrcode";
 import { formatPhoneInput } from "@/lib/format-phone";
+import { CURRENCIES, currencyOrDefault, type Currency } from "@/lib/currency";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { formatMonthlyPlanPrice } from "@/lib/plan-pricing";
 import { buildPaymentReminderSms } from "@/lib/payment-reminder-message";
@@ -54,6 +55,9 @@ export function ProfileForm({
   const [email, setEmail] = useState(profile.email);
   const [preparedBy, setPreparedBy] = useState(profile.prepared_by);
   const [googleReviewLink, setGoogleReviewLink] = useState(profile.google_review_link);
+  const [estimateCurrency, setEstimateCurrency] = useState<Currency>(
+    currencyOrDefault((profile as { estimate_currency?: unknown }).estimate_currency)
+  );
   const [paymentLink, setPaymentLink] = useState(profile.payment_link);
   const [logoUrl, setLogoUrl] = useState(profile.logo_url);
   const [uploading, setUploading] = useState(false);
@@ -171,7 +175,7 @@ export function ProfileForm({
     return () => {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     };
-  }, [name, phone, email, preparedBy, googleReviewLink, paymentLink]);
+  }, [name, phone, email, preparedBy, googleReviewLink, paymentLink, estimateCurrency]);
 
   async function handleCopy() {
     await navigator.clipboard.writeText(referralUrl);
@@ -261,7 +265,7 @@ export function ProfileForm({
       const res = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phone, email, logo_url: url, prepared_by: preparedBy, google_review_link: googleReviewLink, payment_link: paymentLink }),
+        body: JSON.stringify({ name, phone, email, logo_url: url, prepared_by: preparedBy, google_review_link: googleReviewLink, payment_link: paymentLink, estimate_currency: estimateCurrency }),
       });
 
       if (!res.ok) throw new Error("Failed to save logo.");
@@ -288,7 +292,7 @@ export function ProfileForm({
       const res = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phone, email, logo_url: "", prepared_by: preparedBy, google_review_link: googleReviewLink, payment_link: paymentLink }),
+        body: JSON.stringify({ name, phone, email, logo_url: "", prepared_by: preparedBy, google_review_link: googleReviewLink, payment_link: paymentLink, estimate_currency: estimateCurrency }),
       });
 
       if (!res.ok) throw new Error("Failed to remove logo.");
@@ -474,6 +478,30 @@ export function ProfileForm({
             {!logoUrl && (
               <p className="max-w-32 text-center text-xs leading-tight text-zinc-400">PNG or JPG from Photos, Files, or Drive. Max 2MB.</p>
             )}
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-zinc-400">Estimate currency</label>
+            <div className="flex items-center gap-2" role="group" aria-label="Estimate currency">
+              {CURRENCIES.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setEstimateCurrency(c)}
+                  className={`min-h-[44px] flex-1 rounded-xl border px-4 text-sm font-medium transition-colors ${
+                    estimateCurrency === c
+                      ? "border-amber-500 bg-amber-500/10 text-amber-400"
+                      : "border-zinc-700 bg-zinc-900 text-zinc-300"
+                  }`}
+                >
+                  {c.toUpperCase()}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-zinc-500">
+              Applies to new estimates only. Estimates you have already created keep the
+              currency they were saved with. This does not change your subscription billing.
+            </p>
           </div>
 
           <div className="flex w-full flex-1 flex-col gap-1.5">
@@ -681,6 +709,7 @@ export function ProfileForm({
               <div className="flex flex-col gap-2 border-t border-zinc-800 px-4 py-3">
                 <p className="text-sm text-zinc-200 leading-relaxed break-words">
                   {buildPaymentReminderSms("overdue_1", {
+                    currency: estimateCurrency,
                     invoiceRef: PREVIEW_ESTIMATE_REF,
                     amount: PREVIEW_AMOUNT,
                     businessName: name.trim() || "Clearwater Plumbing",
@@ -796,7 +825,7 @@ export function ProfileForm({
               )}
             </div>
             <p className="text-xs text-zinc-400">TradePulse Estimates</p>
-            <p className="text-xs text-zinc-400">{formatMonthlyPlanPrice("starter")} after your trial ends</p>
+            <p className="text-xs text-zinc-400">{formatMonthlyPlanPrice("starter", "cad")} after your trial ends</p>
             {trialEndFormatted && (
               <p className="text-xs text-zinc-400 mt-0.5">Your trial ends on {trialEndFormatted}.</p>
             )}
@@ -812,7 +841,7 @@ export function ProfileForm({
                 onClick={handleUpgrade}
                 className="mt-2 w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-bold text-sm rounded-xl py-3 transition-colors min-h-[44px] flex items-center justify-center gap-2"
               >
-                {upgrading ? "Upgrading..." : `Upgrade to Pro, ${formatMonthlyPlanPrice("pro")}`}
+                {upgrading ? "Upgrading..." : `Upgrade to Pro, ${formatMonthlyPlanPrice("pro", "cad")}`}
               </button>
             )}
             {upgraded && (
@@ -842,7 +871,7 @@ export function ProfileForm({
                     Upgrading...
                   </>
                 ) : (
-                  `Upgrade to Pro, ${formatMonthlyPlanPrice("pro")}`
+                  `Upgrade to Pro, ${formatMonthlyPlanPrice("pro", "cad")}`
                 )}
               </button>
             )}

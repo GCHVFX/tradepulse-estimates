@@ -55,9 +55,12 @@ export function createAccountProvisioningDependencies(
       });
     },
 
-    async createTrialSubscription({ customerId }) {
+    async createTrialSubscription({ customerId, currency }) {
       const subscription = await stripe.subscriptions.create({
         customer: customerId,
+        // Explicit, so the multi-currency Price resolves deterministically.
+        // Stripe locks this to the Customer and it can never change later.
+        currency,
         items: [{ price: process.env.STRIPE_PRICE_ID! }],
         trial_period_days: 14,
         payment_settings: {

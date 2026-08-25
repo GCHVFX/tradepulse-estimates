@@ -3,6 +3,8 @@ import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
 import { stripe } from "@/lib/stripe";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { isDeletedStripeObject } from "@/lib/stripe-object-state";
+import { currencyOrDefault, type Currency } from "@/lib/currency";
+import { readBusinessEstimateCurrency } from "@/lib/currency-db";
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const { supabase, applyTo } = createApiClient(request);
@@ -76,6 +78,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         .eq("owner_user_id", user.id);
     }
 
+    // Billing currency. A current non-cancelled subscription is the authority:
+    // Stripe locked it to the Customer and it can never be changed. Only when
+    // nothing locks it do we fall back to the business estimate currency.
+    let billingCurrency: Currency | null = null;
     let previousSubscriptionId: string | undefined;
 
     // If the user has a trial subscription in Stripe, cancel it only after
@@ -84,6 +90,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (business.stripe_subscription_id) {
       try {
         const existing = await stripe.subscriptions.retrieve(business.stripe_subscription_id);
+        if (existing.status !== "canceled" && existing.status !== "incomplete_expired") {
+          billingCurrency = currencyOrDefault(existing.currency);
+        }
         if (existing.status === "trialing") {
           previousSubscriptionId = business.stripe_subscription_id;
         }
@@ -109,10 +118,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return applyTo(NextResponse.json({ error: "Billing not configured" }, { status: 500 }));
     }
 
+    const resolvedCurrency: Currency =
+      billingCurrency ?? (await readBusinessEstimateCurrency(supabaseAdmin, business.id));
+
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: "subscription",
       payment_method_types: ["card"],
+      // Explicit currency, so the multi-currency Price resolves deterministically.
+      currency: resolvedCurrency,
+      // Never let Stripe convert on our behalf: TradePulse sells in CAD and USD
+      // only, at deliberate price points, not exchange-rate derived ones.
+      adaptive_pricing: { enabled: false },
       line_items: [
         {
           price: priceId,

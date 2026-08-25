@@ -100,7 +100,7 @@ test("preview message with a configured payment link matches the required struct
     paymentLink: "paypal.me/clearwaterplumbing",
   });
   expect(message).toBe(
-    "Clearwater Plumbing: Invoice #1042 for $350 was due August 4, 2026. Pay here: paypal.me/clearwaterplumbing. Reply STOP to stop text reminders."
+    "Clearwater Plumbing: Invoice #1042 for CA$350 was due August 4, 2026. Pay here: paypal.me/clearwaterplumbing. Reply STOP to stop text reminders."
   );
 });
 
@@ -113,7 +113,7 @@ test("preview message with no payment link falls back to the generic ask", () =>
     paymentLink: null,
   });
   expect(message).toBe(
-    "Clearwater Plumbing: Invoice #1042 for $350 was due August 4, 2026. Please arrange payment at your earliest convenience. Reply STOP to stop text reminders."
+    "Clearwater Plumbing: Invoice #1042 for CA$350 was due August 4, 2026. Please arrange payment at your earliest convenience. Reply STOP to stop text reminders."
   );
   expect(message).not.toContain("Pay here:");
 });

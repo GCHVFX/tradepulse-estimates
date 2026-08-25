@@ -8,6 +8,7 @@ import {
   parseOAuthIntent,
   serializeOAuthIntentCookie,
 } from "@/lib/oauth-intent";
+import { parseCurrency } from "@/lib/currency";
 
 type PendingCookie = { name: string; value: string; options: Record<string, unknown> };
 
@@ -24,6 +25,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // Only /signup may start a provisioning flow. An unrecognised or absent
   // value falls back to "login", which never creates anything.
   const intent = parseOAuthIntent(searchParams.get("intent")) ?? "login";
+  // Only a signup may carry a currency, and only an allowlisted one.
+  const currency = intent === "signup" ? parseCurrency(searchParams.get("currency")) : null;
   const nonce = createOAuthNonce();
 
   const pendingCookies: PendingCookie[] = [];
@@ -66,7 +69,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   // HttpOnly so no script or crafted callback URL can choose the intent.
   // Lax survives the provider's top-level GET redirect back to us.
-  response.cookies.set(OAUTH_INTENT_COOKIE, serializeOAuthIntentCookie(intent, nonce), {
+  response.cookies.set(OAUTH_INTENT_COOKIE, serializeOAuthIntentCookie(intent, nonce, Date.now(), currency), {
     httpOnly: true,
     secure: origin.startsWith("https://"),
     sameSite: "lax",

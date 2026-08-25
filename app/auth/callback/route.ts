@@ -3,7 +3,14 @@ import { createServerClient } from '@supabase/ssr';
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { provisionNewAccount } from '@/lib/account-provisioning';
 import { createAccountProvisioningDependencies } from '@/lib/account-provisioning-server';
-import { OAUTH_INTENT_COOKIE, OAUTH_NONCE_PARAM, resolveOAuthIntent } from '@/lib/oauth-intent';
+import {
+  OAUTH_INTENT_COOKIE,
+  OAUTH_NONCE_PARAM,
+  resolveOAuthIntent,
+  resolveOAuthSignupCurrency,
+} from '@/lib/oauth-intent';
+import { DEFAULT_CURRENCY, type Currency } from '@/lib/currency';
+import { businessEstimateCurrencyPatch } from '@/lib/currency-db';
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
@@ -79,7 +86,14 @@ export async function GET(request: NextRequest) {
           return abandon('setup_required');
         }
 
-        const provisioned = await ensureBusiness(user.id, user.email ?? undefined);
+        // Only a resolved signup intent can carry a currency; login gets null.
+        const signupCurrency =
+          resolveOAuthSignupCurrency(
+            request.cookies.get(OAUTH_INTENT_COOKIE)?.value,
+            searchParams.get(OAUTH_NONCE_PARAM)
+          ) ?? DEFAULT_CURRENCY;
+
+        const provisioned = await ensureBusiness(user.id, user.email ?? undefined, signupCurrency);
         if (!provisioned) {
           // The Google identity is the person's own account, so it is always
           // preserved. Signing out stops a half-provisioned user from staying
@@ -113,7 +127,7 @@ async function businessExists(userId: string): Promise<boolean> {
 }
 
 // Returns true if the user already has (or now has) a business row + trial.
-async function ensureBusiness(userId: string, email?: string): Promise<boolean> {
+async function ensureBusiness(userId: string, email?: string, currency: Currency = DEFAULT_CURRENCY): Promise<boolean> {
   const { data: existing } = await supabaseAdmin
     .from('tpe_businesses')
     .select('id')
@@ -141,13 +155,14 @@ async function ensureBusiness(userId: string, email?: string): Promise<boolean> 
             stripe_subscription_id: record.subscriptionId,
             signup_source: 'google',
             email: email ?? '',
+            ...businessEstimateCurrencyPatch(currency),
           },
           { onConflict: 'owner_user_id' }
         );
 
       if (dbError) throw new Error(dbError.message);
     }),
-    { userId, email, plan: 'starter', deleteAuthUserOnFailure: false }
+    { userId, email, plan: 'starter', currency, deleteAuthUserOnFailure: false }
   );
 
   if (!provisioned.ok) {

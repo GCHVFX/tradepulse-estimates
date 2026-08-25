@@ -45,7 +45,7 @@ export function PlanPicker({
     [availablePlans]
   );
   const action = submitAction ?? checkoutPathForPlan(selected);
-  const label = submitLabel ?? `Subscribe, ${formatMonthlyPlanPrice(selected)}`;
+  const label = submitLabel ?? `Subscribe, ${formatMonthlyPlanPrice(selected, "cad")}`;
 
   return (
     <>

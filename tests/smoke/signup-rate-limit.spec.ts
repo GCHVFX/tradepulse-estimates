@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import crypto from "crypto";
 import { cleanupTestAccount, resetSignupRateLimit } from "./helpers";
+import { postSignupApi } from "./smoke-safety";
 
 // Must match the limit passed to checkRateLimit(...) in app/api/auth/signup/route.ts.
 const SIGNUP_LIMIT = 5;
@@ -18,9 +19,9 @@ test("rapid repeated signups from the same source are rejected after the thresho
       const email = `gchansen+audit-ratelimit-${Date.now()}-${crypto.randomBytes(4).toString("hex")}@gmail.com`;
       const password = crypto.randomBytes(12).toString("hex");
 
-      const response = await request.post("/api/auth/signup", {
-        data: { email, password },
-      });
+      // Through the shared wrapper: it applies the Production gate before
+      // any request, so this spec can no longer bypass it.
+      const response = await postSignupApi(request, { email, password });
 
       if (response.status() === 429) {
         sawRejection = true;

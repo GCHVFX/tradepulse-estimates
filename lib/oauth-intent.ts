@@ -1,3 +1,5 @@
+import { parseCurrency, type Currency } from "./currency";
+
 /**
  * Binds a Google OAuth round trip to the action the person actually started.
  *
@@ -21,6 +23,13 @@ export const OAUTH_INTENT_MAX_AGE_SECONDS = 600;
 /** Query parameter carrying the nonce back from the provider. */
 export const OAUTH_NONCE_PARAM = "s";
 
+/**
+ * Signup currency rides inside the same HttpOnly cookie as the intent, so it
+ * is allowlisted, short-lived, and nonce-bound exactly like the intent is. A
+ * login intent can never carry one: resolveOAuthSignupCurrency() returns null
+ * for anything that is not a resolved signup.
+ */
+
 /** Strict allowlist. Never widen this to accept arbitrary caller input. */
 export function parseOAuthIntent(value: unknown): OAuthIntent | null {
   if (typeof value !== "string") return null;
@@ -31,8 +40,15 @@ export function createOAuthNonce(): string {
   return globalThis.crypto.randomUUID().replace(/-/g, "");
 }
 
-export function serializeOAuthIntentCookie(intent: OAuthIntent, nonce: string, now = Date.now()): string {
-  return `${intent}.${nonce}.${now}`;
+export function serializeOAuthIntentCookie(
+  intent: OAuthIntent,
+  nonce: string,
+  now = Date.now(),
+  currency?: Currency | null
+): string {
+  // Currency is only meaningful for signup; login never provisions.
+  const suffix = intent === "signup" && currency ? `.${currency}` : "";
+  return `${intent}.${nonce}.${now}${suffix}`;
 }
 
 /**
@@ -47,7 +63,7 @@ export function resolveOAuthIntent(
   if (typeof cookieValue !== "string" || !cookieValue) return null;
 
   const parts = cookieValue.split(".");
-  if (parts.length !== 3) return null;
+  if (parts.length !== 3 && parts.length !== 4) return null;
 
   const [rawIntent, cookieNonce, rawIssuedAt] = parts;
 
@@ -65,4 +81,23 @@ export function resolveOAuthIntent(
   if (now - issuedAt > OAUTH_INTENT_MAX_AGE_SECONDS * 1000) return null;
 
   return intent;
+}
+
+/**
+ * The signup currency bound to this OAuth round trip, or null.
+ *
+ * Returns null for a login intent, for a missing or unparseable currency, and
+ * for anything resolveOAuthIntent() already rejected. Callers treat null as
+ * "no explicit choice" and fall back to the CAD default.
+ */
+export function resolveOAuthSignupCurrency(
+  cookieValue: string | undefined | null,
+  nonceFromCallback: string | undefined | null,
+  now = Date.now()
+): Currency | null {
+  if (resolveOAuthIntent(cookieValue, nonceFromCallback, now) !== "signup") return null;
+
+  const parts = (cookieValue ?? "").split(".");
+  if (parts.length !== 4) return null;
+  return parseCurrency(parts[3]);
 }

@@ -14,6 +14,7 @@ import {
   buildPaymentReminderEmailHtml,
   type PaymentReminderEmailContext,
 } from "@/lib/payment-reminder-message";
+import { readEstimateCurrency } from "@/lib/currency-db";
 import { selectManualReminderStage, formatDueDateText } from "@/lib/payment-reminder-stage";
 import { claimDelivery, markDeliverySent } from "@/lib/delivery-claims";
 
@@ -96,6 +97,7 @@ export async function POST(
     customerName: estimate.customer_name?.trim() || "there",
     invoiceRef: estimate.id.slice(0, 8),
     amount: estimate.invoice_amount.toFixed(2),
+    currency: await readEstimateCurrency(supabaseAdmin, estimate.id),
     businessName,
     dueDateText: formatDueDateText(estimate.due_date),
     paymentLink,

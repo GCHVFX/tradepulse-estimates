@@ -106,7 +106,7 @@ export default async function SubscribePage({ searchParams }: { searchParams: Pr
                 defaultPlan={showProOnly ? "pro" : business?.plan === "pro" && proBillingReady ? "pro" : "starter"}
                 availablePlans={availablePlans}
                 submitAction={showProOnly ? "/api/billing/upgrade" : undefined}
-                submitLabel={showProOnly ? `Upgrade to Pro, ${formatMonthlyPlanPrice("pro")}` : undefined}
+                submitLabel={showProOnly ? `Upgrade to Pro, ${formatMonthlyPlanPrice("pro", "cad")}` : undefined}
                 disabled={isPreview}
               />
             </>

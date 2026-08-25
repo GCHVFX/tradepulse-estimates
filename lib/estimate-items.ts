@@ -155,7 +155,7 @@ export class EstimateConversionError extends Error {
 // These mirror lib/estimate-summary.ts exactly. This slice preserves the
 // current monetary model, it does not introduce a new one. In particular:
 //
-//   - money text is read by parseCost(): strips $ , and *, then parseFloat,
+//   - money text is read by parseCost(): strips CA$/US$/$ , and *, then parseFloat,
 //     falling back to 0. So "$1,234.50" is 1234.5.
 //   - quantity text is read by parseQuantity(): strips everything except
 //     digits, dot, and minus, then parseFloat, falling back to 0.
@@ -175,7 +175,7 @@ export class EstimateConversionError extends Error {
 
 /** Whether money text is something parseCost can read without silently yielding 0. */
 function isParseableMoney(text: string): boolean {
-  const cleaned = text.replace(/[$,*]/g, "").trim();
+  const cleaned = text.replace(/(?:CA|US)?\$/g, "").replace(/[,*]/g, "").trim();
   if (cleaned === "") return false;
   return /^-?\d*\.?\d+$/.test(cleaned);
 }

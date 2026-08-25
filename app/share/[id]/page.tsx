@@ -4,6 +4,8 @@ import { DownloadPdfButton } from "@/app/components/download-pdf-button";
 import { CompanyEstimateHeader } from "@/app/components/company-estimate-header";
 import { loadCustomerPricingView } from "@/lib/estimate-pricing-server";
 import { supabaseAdmin } from "@/lib/supabase-server";
+import { allAmountsInLabel } from "@/lib/currency";
+import { readEstimateCurrency } from "@/lib/currency-db";
 
 export default async function ShareEstimatePage({
   params,
@@ -53,6 +55,7 @@ export default async function ShareEstimatePage({
       .eq("estimate_id", id),
   ]);
 
+  const estimateCurrency = await readEstimateCurrency(supabaseAdmin, id);
   const businessName = business?.name ?? "";
   const logoUrl = business?.logo_url ?? null;
 
@@ -118,6 +121,10 @@ export default async function ShareEstimatePage({
           </div>
 
           <EstimateMarkdown content={pricing.selected.summary} />
+
+          {/* Outside the pricing table on purpose: a currency code inside an
+              amount cell would break parseCost() on a later edit. */}
+          <p className="mt-4 text-xs text-slate-500">{allAmountsInLabel(estimateCurrency)}</p>
 
           {estimate.include_photos && photoUrls.length > 0 && (
             <div className="mt-6">

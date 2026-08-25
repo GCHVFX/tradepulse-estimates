@@ -7,6 +7,7 @@ import { EstimatePricingEditor } from "@/app/components/estimate-pricing-editor"
 import { EstimatePhotos } from "@/app/components/estimate-photos";
 import { BottomNav } from "@/app/components/bottom-nav";
 import { loadCustomerPricingView } from "@/lib/estimate-pricing-server";
+import { readEstimateCurrency } from "@/lib/currency-db";
 import { supabaseAdmin, createSupabaseServerClient } from "@/lib/supabase-server";
 import { normalizePhoneE164 } from "@/lib/sms-suppression";
 
@@ -49,12 +50,15 @@ export default async function EstimatePage({
 
   // Pricing rows and photo records are independent once the estimate is
   // owned, so load them together rather than adding another server waterfall.
-  const [pricing, { data: photoRecords }] = await Promise.all([
+  const [pricing, { data: photoRecords }, estimateCurrency] = await Promise.all([
     loadCustomerPricingView(estimate),
     supabaseAdmin
       .from("tpe_estimate_photos")
       .select("storage_path")
       .eq("estimate_id", id),
+    // The estimate's own snapshot, never the business setting: changing that
+    // must not move an estimate that is already saved.
+    readEstimateCurrency(supabaseAdmin, id),
   ]);
 
   // Each photo carries both its signed URL (short-lived, for display only)
@@ -222,6 +226,7 @@ export default async function EstimatePage({
               />
 
               <EstimatePricingEditor
+                currency={estimateCurrency}
                 key={estimate.id}
                 estimateId={estimate.id}
                 summary={estimate.summary ?? ""}

@@ -46,8 +46,8 @@ function createDeps(events: string[], reported: ProvisioningCleanupFailure[], ov
   return { ...base, ...overrides };
 }
 
-const emailSignup = { userId: "user-1", email: "a@b.com", plan: "starter" as const, deleteAuthUserOnFailure: true };
-const googleSignup = { userId: "user-1", email: "a@b.com", plan: "starter" as const, deleteAuthUserOnFailure: false };
+const emailSignup = { userId: "user-1", email: "a@b.com", plan: "starter" as const, currency: "cad" as const, deleteAuthUserOnFailure: true };
+const googleSignup = { userId: "user-1", email: "a@b.com", plan: "starter" as const, currency: "cad" as const, deleteAuthUserOnFailure: false };
 
 // ── Success path ──────────────────────────────────────────────────────────────
 

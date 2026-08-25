@@ -87,7 +87,7 @@ test("clearing a quantity field to retype it does not erase the edit UI", async 
     await page.getByRole("button", { name: /^done$/i }).click();
 
     // Cost recalculated from the new quantity, not frozen at a stale value.
-    await expect(page.getByText("$390.00")).toBeVisible();
+    await expect(page.getByText("CA$390.00")).toBeVisible();
     // Collapsed summary and edit affordance are still there afterward.
     await expect(page.getByText("6 hrs @ $65.00")).toBeVisible();
   } finally {

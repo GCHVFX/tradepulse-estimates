@@ -14,6 +14,8 @@ import {
   buildPaymentReminderEmailHtml,
   type PaymentReminderEmailContext,
 } from "@/lib/payment-reminder-message";
+import { readEstimateCurrencies } from "@/lib/currency-db";
+import { DEFAULT_CURRENCY } from "@/lib/currency";
 import { computeNextReminderStage, formatDueDateText } from "@/lib/payment-reminder-stage";
 import { claimDelivery, markDeliverySent } from "@/lib/delivery-claims";
 
@@ -39,6 +41,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (!estimates || estimates.length === 0) {
     return NextResponse.json({ sent: 0 });
   }
+
+  // One batch query, not one per estimate. Each reminder quotes the amount in
+  // the estimate's own snapshot currency, never the business's current setting.
+  const estimateCurrencies = await readEstimateCurrencies(
+    supabaseAdmin,
+    estimates.map((e) => e.id)
+  );
 
   const businessIds = [...new Set(estimates.map((e) => e.business_id).filter((id): id is string => Boolean(id)))];
   const { data: businesses } = await supabaseAdmin
@@ -98,6 +107,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       customerName: estimate.customer_name?.trim() || "there",
       invoiceRef: estimate.id.slice(0, 8),
       amount: estimate.invoice_amount.toFixed(2),
+      currency: estimateCurrencies.get(estimate.id) ?? DEFAULT_CURRENCY,
       businessName,
       dueDateText: formatDueDateText(estimate.due_date),
       paymentLink,

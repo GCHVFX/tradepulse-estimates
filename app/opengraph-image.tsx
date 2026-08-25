@@ -30,7 +30,7 @@ export default function Image() {
             Professional quotes in seconds.
           </div>
           <div style={{ color: "#f59e0b", fontSize: 24 }}>
-            {`Built for Canadian contractors. $${STARTER_MONTHLY_PRICE_CAD}/month.`}
+            {`Built for Canadian contractors. CA$${STARTER_MONTHLY_PRICE_CAD}/month.`}
           </div>
         </div>
 

@@ -20,6 +20,8 @@ export default defineConfig({
     "oauth-intent.spec.ts",
     "no-business-access.spec.ts",
     "smoke-safety.spec.ts",
+    "currency.spec.ts",
+    "currency-rendering.spec.ts",
     "account-deletion.spec.ts",
     "bottom-nav.spec.ts",
     "twilio-inbound-webhook.spec.ts",

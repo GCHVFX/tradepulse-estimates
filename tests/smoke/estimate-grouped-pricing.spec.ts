@@ -257,7 +257,7 @@ test("the plain-text grouped renderer produces leader-dot lines", () => {
   const text = renderGroupedPlainText(drafts);
 
   for (const line of text.split("\n")) {
-    expect(line, line).toMatch(/^.+ \.{1,} \$[\d,]+$/);
+    expect(line, line).toMatch(/^.+ \.{1,} (?:CA|US)\$[\d,-]+$/);
   }
   expect(text).toContain("Demolition and disposal");
 });

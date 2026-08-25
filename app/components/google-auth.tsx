@@ -34,7 +34,8 @@ function GoogleIcon({ className }: { className?: string }) {
 export function GoogleAuth({
   defaultNext = "/new",
   intent = "login",
-}: { defaultNext?: string; intent?: "login" | "signup" } = {}) {
+  currency,
+}: { defaultNext?: string; intent?: "login" | "signup"; currency?: "cad" | "usd" } = {}) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -46,7 +47,8 @@ export function GoogleAuth({
       const nextParam = params.get("next");
       const next = nextParam && nextParam.startsWith("/") ? nextParam : defaultNext;
 
-      window.location.href = `/auth/google?next=${encodeURIComponent(next)}&intent=${intent}`;
+      const currencyParam = intent === "signup" && currency ? `&currency=${currency}` : "";
+      window.location.href = `/auth/google?next=${encodeURIComponent(next)}&intent=${intent}${currencyParam}`;
       // On success the browser redirects to Google, so nothing else runs here.
     } catch {
       setError("Could not start Google sign in. Try again.");

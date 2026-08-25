@@ -130,3 +130,88 @@ export async function deleteStripeCustomerForTest(
     ].join("\n")
   );
 }
+
+// ── Signup API gate ──────────────────────────────────────────────────────────
+
+/**
+ * The single permitted wrapper for a test-driven POST to /api/auth/signup.
+ *
+ * The gate used to live only inside signUpFreshAccount(), so
+ * signup-rate-limit.spec.ts, which posts to the endpoint directly, sailed
+ * straight past it and created five live Stripe customers on Production. Any
+ * spec that wants to hit that endpoint now has to come through here.
+ */
+export interface SignupApiRequestContext {
+  post(url: string, options: { data: unknown }): Promise<{ status(): number; ok(): boolean; json(): Promise<unknown> }>;
+}
+
+export async function postSignupApi(
+  request: SignupApiRequestContext,
+  body: { email: string; password: string; plan?: string; currency?: string },
+  env: SmokeTargetEnv = {
+    stripeKey: process.env.STRIPE_SECRET_KEY,
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    override: process.env[PRODUCTION_SIGNUP_OVERRIDE_ENV],
+  }
+) {
+  // Before the request, never after: a refused run must create nothing.
+  assertFreshAccountSignupAllowed(env);
+  return request.post("/api/auth/signup", { data: body });
+}
+
+// ── Deterministic Stripe customer resolution for teardown ───────────────────
+
+export type TestCustomerResolution =
+  | { kind: "found"; customerId: string }
+  | { kind: "none" };
+
+/**
+ * Finds the Stripe customer a test created, even when its tpe_businesses row
+ * is already gone.
+ *
+ * Cleanup used to read the customer id off the business row and skip Stripe
+ * entirely when that row was missing, with no error. That is exactly how five
+ * customers survived a teardown that had already deleted their database and
+ * Auth records. Falling back to a metadata.user_id lookup means the absence of
+ * a business row can never silently skip Stripe again.
+ *
+ * `{ kind: "none" }` is only returned on a positive confirmation that no
+ * customer exists. Ambiguity and lookup failure both throw.
+ */
+export async function resolveTestStripeCustomerId(
+  input: { userId: string; businessCustomerId?: string | null },
+  deps: { searchByUserId(userId: string): Promise<string[]> }
+): Promise<TestCustomerResolution> {
+  if (input.businessCustomerId) {
+    return { kind: "found", customerId: input.businessCustomerId };
+  }
+
+  let matches: string[];
+  try {
+    matches = await deps.searchByUserId(input.userId);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      [
+        `Could not look up the Stripe customer for user ${input.userId}: ${detail}`,
+        "",
+        "Teardown stopped before deleting any record. Resolve the customer by",
+        `searching Stripe for metadata['user_id']:'${input.userId}', delete it,`,
+        "then re-run.",
+      ].join("\n")
+    );
+  }
+
+  if (matches.length === 0) return { kind: "none" };
+  if (matches.length === 1) return { kind: "found", customerId: matches[0] };
+
+  throw new Error(
+    [
+      `Ambiguous Stripe cleanup for user ${input.userId}: ${matches.length} customers match.`,
+      `Candidates: ${matches.join(", ")}`,
+      "",
+      "Teardown stopped rather than guessing. Delete the correct customers by",
+      "hand, then re-run.",
+    ].join("\n")
+  );
+}

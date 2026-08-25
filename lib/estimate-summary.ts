@@ -1,3 +1,5 @@
+import { DEFAULT_CURRENCY, formatCurrency, type Currency } from './currency';
+
 // Shared parse/serialize logic for estimate summary markdown.
 // Used by the in-app editable estimate body and by display surfaces
 // (share page, PDF) so section order and totals match everywhere.
@@ -53,12 +55,16 @@ export interface ParsedSummary {
 
 export const newId = () => Math.random().toString(36).slice(2, 9);
 
+// Strips an optional CA$ / US$ / $ prefix plus grouping commas and the bold
+// asterisks the pricing table uses. The currency prefix has to come off here:
+// once formatDollars() emits "CA$1,234", a parser that only removed "$" would
+// leave "CA1234" and parseFloat would yield NaN, silently zeroing the amount.
 export function parseCost(cost: string): number {
-  return parseFloat(cost.replace(/[$,*]/g, '')) || 0;
+  return parseFloat(cost.replace(/(?:CA|US)?\$/g, '').replace(/[,*]/g, '')) || 0;
 }
 
-export function formatDollars(amount: number): string {
-  return '$' + Math.round(amount).toLocaleString('en-CA');
+export function formatDollars(amount: number, currency: Currency = DEFAULT_CURRENCY): string {
+  return formatCurrency(amount, currency, { decimals: 0 });
 }
 
 export function parseQuantity(raw: string | undefined): number {
@@ -90,8 +96,8 @@ export function isQuantityItem(item: LineItem): boolean {
   return item.quantityBased === true;
 }
 
-export function formatMoney(amount: number): string {
-  return '$' + amount.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+export function formatMoney(amount: number, currency: Currency = DEFAULT_CURRENCY): string {
+  return formatCurrency(amount, currency, { decimals: 2 });
 }
 
 // Cost for a quantity-based item is always quantity x unit rate, never the
@@ -103,9 +109,9 @@ export function lineItemCost(item: LineItem): number {
   return parseCost(item.cost);
 }
 
-export function withComputedCost(item: LineItem): LineItem {
+export function withComputedCost(item: LineItem, currency: Currency = DEFAULT_CURRENCY): LineItem {
   if (!isQuantityItem(item)) return item;
-  return { ...item, cost: formatMoney(lineItemCost(item)) };
+  return { ...item, cost: formatMoney(lineItemCost(item), currency) };
 }
 
 // "hrs" reads as "/hr", "gal" stays "/gal". Units are freeform text the model
@@ -118,11 +124,11 @@ function perUnit(unit: string): string {
 // How a quantity-based item reads to the contractor and the customer:
 // "Labour (8 hrs @ $65.00/hr)". The quantity lives in the description, the
 // arithmetic stays in code.
-export function lineItemDisplayLabel(item: LineItem): string {
+export function lineItemDisplayLabel(item: LineItem, currency: Currency = DEFAULT_CURRENCY): string {
   if (!isQuantityItem(item)) return item.label;
   const quantity = (item.quantity ?? '').trim();
   const unit = (item.unit ?? '').trim();
-  const rate = formatMoney(parseCost(item.rate ?? ''));
+  const rate = formatMoney(parseCost(item.rate ?? ''), currency);
   const detail = unit ? `${quantity} ${unit} @ ${rate}/${perUnit(unit)}` : `${quantity} @ ${rate}`;
   return `${item.label} (${detail})`;
 }
@@ -137,12 +143,12 @@ export function computeTotals(lineItems: LineItem[], taxRate = 5): {
   return { subtotal, tax, total: subtotal + tax };
 }
 
-function syncPreambleTotal(preamble: string, lineItems: LineItem[], taxRate = 5): string {
+function syncPreambleTotal(preamble: string, lineItems: LineItem[], taxRate = 5, currency: Currency = DEFAULT_CURRENCY): string {
   if (!preamble) return preamble;
   const { total } = computeTotals(lineItems, taxRate);
   return preamble.replace(
     /(^|\n)(?:Estimated total|Total):[^\n]*(\s*)$/i,
-    (_match, before: string, after: string) => `${before}Estimated total: ${formatDollars(total)}${after}`,
+    (_match, before: string, after: string) => `${before}Estimated total: ${formatDollars(total, currency)}${after}`,
   );
 }
 
@@ -273,11 +279,11 @@ function scopeBlock(scopeItems: ScopeItem[]): string {
 // phone, and nobody needs to see the arithmetic broken out. The stored form
 // keeps the parts separate so the app can do the multiplying (see
 // lineItemsBlock).
-function displayLineItemsBlock(lineItems: LineItem[]): string {
+function displayLineItemsBlock(lineItems: LineItem[], currency: Currency = DEFAULT_CURRENCY): string {
   const table = [
     '| Item | Cost |',
     '|------|------|',
-    ...lineItems.map(i => `| ${lineItemDisplayLabel(i)} | ${formatMoney(lineItemCost(i))} |`),
+    ...lineItems.map(i => `| ${lineItemDisplayLabel(i, currency)} | ${formatMoney(lineItemCost(i), currency)} |`),
   ].join('\n');
   return `## Line Items\n${table}`;
 }
@@ -285,7 +291,7 @@ function displayLineItemsBlock(lineItems: LineItem[]): string {
 // Exported so lib/estimate-items.ts can compare its structured round trip
 // against the one authoritative serializer instead of reimplementing it.
 // Export only: the body and behaviour are unchanged.
-export function lineItemsBlock(lineItems: LineItem[]): string {
+export function lineItemsBlock(lineItems: LineItem[], currency: Currency = DEFAULT_CURRENCY): string {
   // Storage form. Only estimates that actually have quantity-based items get
   // the wider table; older estimates keep the exact two-column layout they were
   // saved in. Keeping quantity, unit, and rate as separate columns here is what
@@ -297,7 +303,7 @@ export function lineItemsBlock(lineItems: LineItem[]): string {
         '|------|-----|------|------|------|',
         ...lineItems.map(i =>
           isQuantityItem(i)
-            ? `| ${i.label} | ${i.quantity} | ${i.unit ?? ''} | ${i.rate} | ${formatMoney(lineItemCost(i))} |`
+            ? `| ${i.label} | ${i.quantity} | ${i.unit ?? ''} | ${i.rate} | ${formatMoney(lineItemCost(i), currency)} |`
             : `| ${i.label} |  |  |  | ${i.cost} |`,
         ),
       ].join('\n')
@@ -315,7 +321,7 @@ function beforeBlock(s: BeforeSection): string {
   return `## ${s.heading}\n${sectionContent}`;
 }
 
-function pricingBlock(lineItems: LineItem[], depositPercent: number, taxLabel = 'GST', taxRate = 5): string {
+function pricingBlock(lineItems: LineItem[], depositPercent: number, taxLabel = 'GST', taxRate = 5, currency: Currency = DEFAULT_CURRENCY): string {
   const { subtotal, tax, total } = computeTotals(lineItems, taxRate);
   const deposit = Math.round((total * depositPercent) / 100);
   const balance = total - deposit;
@@ -323,13 +329,13 @@ function pricingBlock(lineItems: LineItem[], depositPercent: number, taxLabel = 
   const table = [
     '| | |',
     '|---|---|',
-    `| Subtotal | ${formatDollars(subtotal)} |`,
-    `| Tax (${taxLabel} ${parseFloat(taxRate.toFixed(2))}%) | ${formatDollars(tax)} |`,
-    `| **Total** | **${formatDollars(total)}** |`,
+    `| Subtotal | ${formatDollars(subtotal, currency)} |`,
+    `| Tax (${taxLabel} ${parseFloat(taxRate.toFixed(2))}%) | ${formatDollars(tax, currency)} |`,
+    `| **Total** | **${formatDollars(total, currency)}** |`,
     depositPercent === 0
       ? '| No deposit required | |'
-      : `| Deposit required (${depositPercent}%) | ${formatDollars(deposit)} |`,
-    `| Balance on completion | ${depositPercent === 0 ? formatDollars(total) : formatDollars(balance)} |`,
+      : `| Deposit required (${depositPercent}%) | ${formatDollars(deposit, currency)} |`,
+    `| Balance on completion | ${depositPercent === 0 ? formatDollars(total, currency) : formatDollars(balance, currency)} |`,
   ].join('\n');
   return `## Pricing Summary\n${table}`;
 }
@@ -345,13 +351,14 @@ export function serializeSummary(
   afterPricingSections: AfterSection[],
   taxLabel = 'GST',
   taxRate = 5,
+  currency: Currency = DEFAULT_CURRENCY,
 ): string {
   const parts: string[] = [];
-  if (preamble) parts.push(syncPreambleTotal(preamble, lineItems, taxRate));
+  if (preamble) parts.push(syncPreambleTotal(preamble, lineItems, taxRate, currency));
   parts.push(scopeBlock(scopeItems));
-  parts.push(lineItemsBlock(lineItems));
+  parts.push(lineItemsBlock(lineItems, currency));
   for (const s of beforePricingSections) parts.push(beforeBlock(s));
-  parts.push(pricingBlock(lineItems, depositPercent, taxLabel, taxRate));
+  parts.push(pricingBlock(lineItems, depositPercent, taxLabel, taxRate, currency));
   for (const s of afterPricingSections) parts.push(`## ${s.heading}\n${s.content}`);
   return parts.join('\n\n');
 }
@@ -397,14 +404,15 @@ export function formatEstimateForDisplayWithPricing(
 function formatParsedEstimateForDisplay(
   p: ParsedSummary,
   lineItems: LineItem[],
-  lineItemsDisplayBlock?: string
+  lineItemsDisplayBlock?: string,
+  currency: Currency = DEFAULT_CURRENCY
 ): string {
   const parts: string[] = [];
-  if (p.preamble) parts.push(syncPreambleTotal(p.preamble, lineItems, p.taxRate));
+  if (p.preamble) parts.push(syncPreambleTotal(p.preamble, lineItems, p.taxRate, currency));
   parts.push(scopeBlock(p.scopeItems));
-  parts.push(lineItemsDisplayBlock ?? displayLineItemsBlock(lineItems));
+  parts.push(lineItemsDisplayBlock ?? displayLineItemsBlock(lineItems, currency));
   for (const s of p.beforePricingSections) parts.push(beforeBlock(s));
-  parts.push(pricingBlock(lineItems, p.depositPercent, p.taxLabel, p.taxRate));
+  parts.push(pricingBlock(lineItems, p.depositPercent, p.taxLabel, p.taxRate, currency));
   for (const s of p.afterPricingSections) parts.push(`## ${s.heading}\n${s.content}`);
   return parts.join('\n\n');
 }

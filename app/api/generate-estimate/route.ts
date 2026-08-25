@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
 import { convertEstimateToStructuredItems } from "@/lib/estimate-item-migration";
 import { notifyInternalError } from "@/lib/notify-error";
+import { estimateCurrencyPatch, readBusinessEstimateCurrency } from "@/lib/currency-db";
 import {
   claimEstimateGeneration,
   releaseEstimateGenerationClaim,
@@ -274,6 +275,11 @@ export async function POST(request: NextRequest) {
                 urgency: "flexible",
                 prepared_by: safePreparedBy,
                 deposit_amount: null,
+                // Immutable snapshot. Changing the business estimate currency
+                // later must never move an estimate that is already saved.
+                ...estimateCurrencyPatch(
+                  await readBusinessEstimateCurrency(supabaseAdmin, business.id)
+                ),
               })
               .select();
 

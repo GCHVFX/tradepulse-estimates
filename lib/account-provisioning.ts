@@ -15,6 +15,7 @@
  */
 
 import { isMissingStripeObject } from "./stripe-object-state";
+import type { Currency } from "./currency";
 
 export type ProvisioningPlan = "starter" | "pro";
 
@@ -48,7 +49,7 @@ export interface ProvisioningCleanupFailure {
 
 export interface AccountProvisioningDependencies {
   createCustomer(input: { userId: string; email?: string }): Promise<{ id: string }>;
-  createTrialSubscription(input: { customerId: string }): Promise<ProvisionedSubscription>;
+  createTrialSubscription(input: { customerId: string; currency: Currency }): Promise<ProvisionedSubscription>;
   /** Caller owns the row shape; this module owns the sequence. */
   writeBusiness(record: BusinessProvisioningRecord): Promise<void>;
   deleteBusinessRow(userId: string): Promise<void>;
@@ -63,6 +64,8 @@ export interface ProvisionNewAccountInput {
   userId: string;
   email?: string;
   plan: ProvisioningPlan;
+  /** Billing currency for the trial subscription. Stripe locks it here. */
+  currency: Currency;
   /**
    * False for Google OAuth, where the Auth identity is the person's own
    * Google account and must survive a failed attempt so they can retry.
@@ -177,7 +180,7 @@ export async function provisionNewAccount(
   input: ProvisionNewAccountInput
 ): Promise<ProvisionNewAccountResult> {
   const nowMs = deps.now?.() ?? Date.now();
-  const { userId, email, plan, deleteAuthUserOnFailure } = input;
+  const { userId, email, plan, currency, deleteAuthUserOnFailure } = input;
 
   let customerId: string | null = null;
   let subscriptionId: string | null = null;
@@ -206,7 +209,7 @@ export async function provisionNewAccount(
 
   if (plan === "starter") {
     try {
-      const subscription = await deps.createTrialSubscription({ customerId });
+      const subscription = await deps.createTrialSubscription({ customerId, currency });
       subscriptionId = subscription.id;
       trialEndsAt = trialEndsAtIso(subscription.trialEnd, nowMs);
     } catch (error) {

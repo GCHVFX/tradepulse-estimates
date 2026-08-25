@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
+import { parseCurrency } from "@/lib/currency";
+import { businessEstimateCurrencyPatch, readBusinessEstimateCurrency } from "@/lib/currency-db";
 import { STARTER_MONTHLY_PHOTO_LIMIT } from "@/lib/rate-limit";
 
 interface ProfileBody {
@@ -51,7 +53,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   return applyTo(
     NextResponse.json({
-      profile: data ? { ...data, ai_photo_estimates_remaining: aiPhotoEstimatesRemaining } : null,
+      profile: data
+        ? {
+            ...data,
+            ai_photo_estimates_remaining: aiPhotoEstimatesRemaining,
+            estimate_currency: await readBusinessEstimateCurrency(supabaseAdmin, data.id),
+          }
+        : null,
     })
   );
 }
@@ -76,6 +84,8 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     ? body.payment_link.trim() || null
     : null;
 
+  const estimateCurrency = parseCurrency((body as { estimate_currency?: unknown }).estimate_currency);
+
   const { error } = await supabaseAdmin
     .from("tpe_businesses")
     .update({
@@ -86,6 +96,10 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         prepared_by: typeof body.prepared_by === "string" ? body.prepared_by.trim() : "",
         google_review_link: googleReviewLink,
         payment_link: paymentLink,
+        // Only written when a valid value is supplied. Defaulting on omission
+        // would silently reset a USD business back to CAD on any partial save.
+        // This never calls Stripe and never touches a subscription.
+        ...(estimateCurrency ? businessEstimateCurrencyPatch(estimateCurrency) : {}),
       })
     .eq("owner_user_id", user.id);
 

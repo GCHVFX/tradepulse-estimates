@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useMemo, useEffect } from 'react';
+import { DEFAULT_CURRENCY, formatCurrency, type Currency } from '@/lib/currency';
 import {
   newId,
   parseCost,
@@ -86,10 +87,16 @@ export function EditableEstimateBody({
   summary,
   estimateId,
   lineItemsReadOnly = false,
+  currency = DEFAULT_CURRENCY,
 }: {
   summary: string;
   estimateId: string;
   lineItemsReadOnly?: boolean;
+  /**
+   * The estimate's own persisted snapshot. Never the business setting:
+   * changing that must not move an estimate that is already saved.
+   */
+  currency?: Currency;
 }) {
   const parsed = useMemo(() => parseSummary(summary), [summary]);
   const { depositPercent } = parsed;
@@ -189,6 +196,7 @@ export function EditableEstimateBody({
         nextAfter,
         nextTaxLabel ?? taxLabel,
         nextTaxRate ?? taxRate,
+        currency,
       );
       setSaveStatus('saving');
       try {
@@ -260,15 +268,15 @@ export function EditableEstimateBody({
 
   function formatLineCost(raw: string): string {
     const n = parseCost(raw);
-    if (n > 0) return '$' + n.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    if (/\d/.test(raw)) return '$0.00';
+    if (n > 0) return formatCurrency(n, currency, { decimals: 2 });
+    if (/\d/.test(raw)) return formatCurrency(0, currency, { decimals: 2 });
     return '—';
   }
 
   // A rate must stay a number the cost can be calculated from, so an empty or
   // junk entry falls back to $0.00 rather than a dash.
   function formatRate(raw: string): string {
-    return formatMoney(parseCost(raw));
+    return formatMoney(parseCost(raw), currency);
   }
 
   // Collapsed-state summary shown under the description, e.g. "8 hrs @
@@ -276,7 +284,7 @@ export function EditableEstimateBody({
   function quantityDetail(item: LineItem): string {
     const quantity = (item.quantity ?? '').trim();
     const unit = (item.unit ?? '').trim();
-    const rate = formatMoney(parseCost(item.rate ?? ''));
+    const rate = formatMoney(parseCost(item.rate ?? ''), currency);
     return unit ? `${quantity} ${unit} @ ${rate}` : `${quantity} @ ${rate}`;
   }
 
@@ -447,7 +455,7 @@ export function EditableEstimateBody({
       {preambleTotalLine && (
         <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-center justify-between">
           <span className="text-sm font-medium text-zinc-600">Estimated total</span>
-          <span className="text-xl font-bold text-zinc-900">{formatDollars(total)}</span>
+          <span className="text-xl font-bold text-zinc-900">{formatDollars(total, currency)}</span>
         </div>
       )}
 
@@ -594,7 +602,7 @@ export function EditableEstimateBody({
                 <td className="border-t border-zinc-200 align-top">
                   {isQuantityItem(item) ? (
                     <span className="block px-3 py-2.5 text-sm text-zinc-700">
-                      {formatMoney(lineItemCost(item))}
+                      {formatMoney(lineItemCost(item), currency)}
                     </span>
                   ) : (
                     <input
@@ -763,7 +771,7 @@ export function EditableEstimateBody({
           <tbody>
             <tr>
               <td className="px-3 py-2.5 border-t border-zinc-200 text-zinc-700">Subtotal</td>
-              <td className="px-3 py-2.5 border-t border-zinc-200 text-right text-zinc-700">{formatDollars(subtotal)}</td>
+              <td className="px-3 py-2.5 border-t border-zinc-200 text-right text-zinc-700">{formatDollars(subtotal, currency)}</td>
             </tr>
             <tr>
               <td className="px-3 py-2.5 border-t border-zinc-200 text-zinc-700">
@@ -787,24 +795,24 @@ export function EditableEstimateBody({
                   /><span>%)</span>
                 </span>
               </td>
-              <td className="px-3 py-2.5 border-t border-zinc-200 text-right text-zinc-700">{formatDollars(tax)}</td>
+              <td className="px-3 py-2.5 border-t border-zinc-200 text-right text-zinc-700">{formatDollars(tax, currency)}</td>
             </tr>
             <tr>
               <td className="px-3 py-2.5 border-t border-zinc-200 font-semibold text-zinc-900">Total</td>
-              <td className="px-3 py-2.5 border-t border-zinc-200 text-right font-semibold text-zinc-900">{formatDollars(total)}</td>
+              <td className="px-3 py-2.5 border-t border-zinc-200 text-right font-semibold text-zinc-900">{formatDollars(total, currency)}</td>
             </tr>
             <tr>
               <td className="px-3 py-2.5 border-t border-zinc-200 text-zinc-700">
                 {depositPercent === 0 ? 'No deposit required' : `Deposit required (${depositPercent}%)`}
               </td>
               <td className="px-3 py-2.5 border-t border-zinc-200 text-right text-zinc-700">
-                {depositPercent === 0 ? '' : formatDollars(deposit)}
+                {depositPercent === 0 ? '' : formatDollars(deposit, currency)}
               </td>
             </tr>
             <tr>
               <td className="px-3 py-2.5 border-t border-zinc-200 text-zinc-700">Balance on completion</td>
               <td className="px-3 py-2.5 border-t border-zinc-200 text-right text-zinc-700">
-                {depositPercent === 0 ? formatDollars(total) : formatDollars(balance)}
+                {depositPercent === 0 ? formatDollars(total, currency) : formatDollars(balance, currency)}
               </td>
             </tr>
           </tbody>

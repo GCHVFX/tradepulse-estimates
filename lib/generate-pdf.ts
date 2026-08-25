@@ -1,9 +1,12 @@
 import jsPDF from "jspdf";
+import { allAmountsInLabel, DEFAULT_CURRENCY, type Currency } from "@/lib/currency";
 
 interface GenerateEstimatePdfOptions {
   businessName?: string;
   logoUrl?: string | null;
   photoUrls?: string[];
+  /** Snapshot currency of the estimate. Defaults to CAD for older estimates. */
+  currency?: Currency;
 }
 
 function stripInline(text: string): string {
@@ -301,6 +304,19 @@ export async function generateEstimatePDF(
   }
 
   if (tableRows.length > 0) flushTable();
+
+  // --- Currency ---
+  // Below the pricing table on purpose: a currency code inside an amount cell
+  // would break parseCost() if the estimate were edited afterwards.
+  const currencyLabel = allAmountsInLabel(options.currency ?? DEFAULT_CURRENCY);
+  checkBreak(8);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(120, 120, 120);
+  doc.text(currencyLabel, ml, y);
+  y += 6;
+  doc.setFontSize(10);
+  doc.setTextColor(25, 25, 25);
 
   // --- Photos ---
   const photoUrls = options.photoUrls ?? [];

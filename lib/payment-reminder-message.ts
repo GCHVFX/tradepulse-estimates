@@ -3,6 +3,8 @@
 // route) specifically so a future contractor-facing message preview can
 // import the exact same function instead of re-deriving the format.
 
+import { DEFAULT_CURRENCY, currencyPrefix, type Currency } from "./currency";
+
 export type PaymentReminderStage = "pre_due" | "overdue_1" | "overdue_2" | "overdue_ongoing";
 
 export interface PaymentReminderMessageContext {
@@ -16,12 +18,18 @@ export interface PaymentReminderMessageContext {
   dueDateText: string;
   /** tpe_businesses.payment_link, trimmed, or null when not configured. */
   paymentLink: string | null;
+  /**
+   * The estimate's own currency snapshot. Amounts a customer receives must
+   * never be an ambiguous bare "$". Defaults to CAD for estimates saved
+   * before the currency columns existed.
+   */
+  currency?: Currency;
 }
 
 /**
  * Builds the outgoing SMS for one payment-reminder stage.
  *
- * Structure: "{Business}: Invoice #{ref} for ${amount} {stage lead-in
+ * Structure: "{Business}: Invoice #{ref} for CA$/US${amount} {stage lead-in
  * with date}. {payment CTA}. Reply STOP to stop text reminders."
  *
  * The payment CTA is one or the other, never both: "Pay here: {link}." when
@@ -35,6 +43,7 @@ export function buildPaymentReminderSms(
   ctx: PaymentReminderMessageContext
 ): string {
   const { invoiceRef, amount, businessName, dueDateText, paymentLink } = ctx;
+  const money = `${currencyPrefix(ctx.currency ?? DEFAULT_CURRENCY)}${amount}`;
   const who = businessName ? `${businessName}: ` : "";
   const cta = paymentLink
     ? `Pay here: ${paymentLink}.`
@@ -53,7 +62,7 @@ export function buildPaymentReminderSms(
     }
   })();
 
-  return `${who}Invoice #${invoiceRef} for $${amount} ${leadIn} ${cta} Reply STOP to stop text reminders.`;
+  return `${who}Invoice #${invoiceRef} for ${money} ${leadIn} ${cta} Reply STOP to stop text reminders.`;
 }
 
 export interface PaymentReminderEmailContext extends PaymentReminderMessageContext {
@@ -91,6 +100,7 @@ export function buildPaymentReminderEmailHtml(
   ctx: PaymentReminderEmailContext
 ): string {
   const { invoiceRef, amount, businessName, dueDateText, paymentLink } = ctx;
+  const money = `${currencyPrefix(ctx.currency ?? DEFAULT_CURRENCY)}${amount}`;
   const isUrl = paymentLink ? /^https?:\/\//i.test(paymentLink) : false;
   const paymentBlock = paymentLink
     ? isUrl
@@ -104,7 +114,7 @@ export function buildPaymentReminderEmailHtml(
       <p style="font-size: 16px; margin: 0 0 16px;">${buildPaymentReminderEmailBody(stage, ctx)}</p>
       <div style="background: #f4f4f5; border-radius: 10px; padding: 16px 20px; margin: 0 0 16px;">
         <p style="font-size: 14px; margin: 0 0 6px;"><strong>Invoice #:</strong> ${invoiceRef}</p>
-        <p style="font-size: 14px; margin: 0 0 6px;"><strong>Amount:</strong> $${amount}</p>
+        <p style="font-size: 14px; margin: 0 0 6px;"><strong>Amount:</strong> ${money}</p>
         <p style="font-size: 14px; margin: 0 0 6px;"><strong>Due date:</strong> ${dueDateText}</p>
         <p style="font-size: 14px; margin: 0;"><strong>From:</strong> ${businessName}</p>
       </div>

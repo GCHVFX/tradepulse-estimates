@@ -54,6 +54,14 @@ test("a well formed cookie resolves only when its nonce matches the callback", (
   expect(resolveOAuthIntent(cookie, "x".repeat(nonce.length), NOW)).toBeNull();
 });
 
+test("a fourth segment is the signup currency, so it does not invalidate the intent", () => {
+  const nonce = createOAuthNonce();
+  // An unparseable currency degrades to "no explicit choice" (CAD) rather
+  // than throwing the whole signup away.
+  expect(resolveOAuthIntent(`signup.${nonce}.${NOW}.extra`, nonce, NOW)).toBe("signup");
+  expect(resolveOAuthIntent(`signup.${nonce}.${NOW}.usd`, nonce, NOW)).toBe("signup");
+});
+
 test("a missing or malformed cookie never resolves", () => {
   const nonce = createOAuthNonce();
   for (const bad of [
@@ -62,7 +70,7 @@ test("a missing or malformed cookie never resolves", () => {
     "",
     "signup",
     `signup.${nonce}`,
-    `signup.${nonce}.${NOW}.extra`,
+    `signup.${nonce}.${NOW}.extra.more`,
     `.${nonce}.${NOW}`,
     `signup..${NOW}`,
     `signup.${nonce}.not-a-number`,
@@ -135,5 +143,6 @@ test("the callback reads the intent from the cookie and never from the query str
 
 test("both entry points declare an explicit intent", () => {
   expect(readFileSync("app/login/page.tsx", "utf8")).toContain('<GoogleAuth intent="login" />');
-  expect(readFileSync("app/signup/page.tsx", "utf8")).toContain('<GoogleAuth intent="signup" />');
+  // The signup page is now a server wrapper; the button lives in the form.
+  expect(readFileSync("app/signup/signup-form.tsx", "utf8")).toContain('<GoogleAuth intent="signup"');
 });

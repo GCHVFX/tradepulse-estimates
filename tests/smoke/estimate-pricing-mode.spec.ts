@@ -35,11 +35,11 @@ const SUMMARY = [
   "## Pricing Summary",
   "| | |",
   "|---|---|",
-  "| Subtotal | $300 |",
+  "| Subtotal | CA$300 |",
   "| Tax (GST 5%) | $15 |",
-  "| **Total** | **$315** |",
-  "| Deposit required (20%) | $63 |",
-  "| Balance on completion | $252 |",
+  "| **Total** | **CA$315** |",
+  "| Deposit required (20%) | CA$63 |",
+  "| Balance on completion | CA$252 |",
   "",
   "## Payment Terms",
   "Payment is due on completion.",
@@ -162,11 +162,11 @@ test("a quantity row with one unit and a blank unit label keeps its detailed des
     "## Pricing Summary",
     "| | |",
     "|---|---|",
-    "| Subtotal | $40 |",
+    "| Subtotal | CA$40 |",
     "| Tax (GST 5%) | $2 |",
-    "| **Total** | **$42** |",
+    "| **Total** | **CA$42** |",
     "| No deposit required | |",
-    "| Balance on completion | $42 |",
+    "| Balance on completion | CA$42 |",
   ].join("\n");
   const view = buildCustomerPricingView({
     estimate: { ...DRAFT, summary },
@@ -197,7 +197,7 @@ test("a quantity row with one unit and a blank unit label keeps its detailed des
 
   expect(view.ok).toBe(true);
   expect(view.summary).toBe(formatEstimateForDisplay(summary));
-  expect(view.summary).toContain("Service allowance (1 @ $40.00)");
+  expect(view.summary).toContain("Service allowance (1 @ CA$40.00)");
   expect(view.summary.match(/Service allowance/g)).toHaveLength(1);
 });
 
@@ -217,12 +217,12 @@ test("grouped pricing combines work packages in first-appearance order without i
   ]);
   expect(view.groupedSubtotal).toBe(300);
   expect(view.summary).toContain("| Work package | Price |");
-  expect(view.summary).toContain("| Plumbing | $250 |");
-  expect(view.summary).toContain("| Permits and fees | $-25 |");
+  expect(view.summary).toContain("| Plumbing | CA$250 |");
+  expect(view.summary).toContain("| Permits and fees | CA$-25 |");
   expect(view.summary).not.toContain("Plumbing labour");
   expect(view.summary).not.toContain("Copper fittings");
-  expect(view.summary).toContain("| **Total** | **$315** |");
-  expect(view.summary).toContain("| Deposit required (20%) | $63 |");
+  expect(view.summary).toContain("| **Total** | **CA$315** |");
+  expect(view.summary).toContain("| Deposit required (20%) | CA$63 |");
   expect(view.summary).toContain("Existing services are usable.");
   expect(view.summary).toContain("Payment is due on completion.");
   expect(view.summary).toContain("Permit timing depends on the authority having jurisdiction.");

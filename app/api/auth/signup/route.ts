@@ -4,11 +4,13 @@ import { supabaseAdmin } from "@/lib/supabase-server";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { provisionNewAccount } from "@/lib/account-provisioning";
 import { createAccountProvisioningDependencies } from "@/lib/account-provisioning-server";
+import { currencyOrDefault } from "@/lib/currency";
+import { businessEstimateCurrencyPatch } from "@/lib/currency-db";
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
 
-  let body: { email?: unknown; password?: unknown; signup_source?: unknown; plan?: unknown };
+  let body: { email?: unknown; password?: unknown; signup_source?: unknown; plan?: unknown; currency?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -17,6 +19,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const { email, password, signup_source } = body;
   const plan = body.plan === "pro" ? "pro" : "starter";
+  // Allowlisted server-side. Anything unrecognised, tampered, or missing
+  // falls back to CAD rather than failing the signup.
+  const currency = currencyOrDefault(body.currency);
   const url = new URL(request.url);
   const refParam = url.searchParams.get("ref")?.trim() || undefined;
   const signupSource =
@@ -84,6 +89,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             stripe_customer_id: record.customerId,
             stripe_subscription_id: record.subscriptionId,
             email,
+            ...businessEstimateCurrencyPatch(currency),
             ...(signupSource ? { signup_source: signupSource } : {}),
           },
           { onConflict: "owner_user_id" }
@@ -91,7 +97,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
       if (dbError) throw new Error(dbError.message);
     }),
-    { userId, email, plan, deleteAuthUserOnFailure: true }
+    { userId, email, plan, currency, deleteAuthUserOnFailure: true }
   );
 
   if (!provisioned.ok) {

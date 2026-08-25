@@ -79,7 +79,7 @@ test("matches the exact preferred structure with a payment link", () => {
     paymentLink: "https://pay.example.com/abc",
   });
   expect(message).toBe(
-    "Clearwater Plumbing: Invoice #a1b2c3d4 for $585.50 was due August 12, 2026. Pay here: https://pay.example.com/abc. Reply STOP to stop text reminders."
+    "Clearwater Plumbing: Invoice #a1b2c3d4 for CA$585.50 was due August 12, 2026. Pay here: https://pay.example.com/abc. Reply STOP to stop text reminders."
   );
 });
 
@@ -92,7 +92,7 @@ test("matches the exact fallback structure with no payment link", () => {
     paymentLink: null,
   });
   expect(message).toBe(
-    "Clearwater Plumbing: Invoice #a1b2c3d4 for $585.50 was due August 12, 2026. Please arrange payment at your earliest convenience. Reply STOP to stop text reminders."
+    "Clearwater Plumbing: Invoice #a1b2c3d4 for CA$585.50 was due August 12, 2026. Please arrange payment at your earliest convenience. Reply STOP to stop text reminders."
   );
 });
 
