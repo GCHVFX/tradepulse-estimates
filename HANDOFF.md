@@ -1,6 +1,6 @@
 # TradePulse handoff
 
-Updated: 2026-08-24 21:51 PT (USD rendering defect fixed in the working tree; Production is rolled back to `1bdc011`; not committed, not deployed)
+Updated: 2026-08-25 07:21 PT (signup currency-control layout fixed and its remaining initial-paint overlap closed, in the working tree; USD rendering hotfix `df16aaa` is pushed but Production still serves the `1bdc011` rollback; not committed, not deployed)
 
 ## Release 1: account-provisioning integrity (2026-08-24, uncommitted)
 
@@ -242,6 +242,99 @@ Root cause, four call sites, none of which pass the estimate's currency into the
 4. `app/new/page.tsx` renders `EditableEstimateBody` without the `currency` prop.
 
 CAD is unaffected because CAD is the fallback. **USD must not be offered to a real contractor until this is fixed.** The signup currency control is live in Production today, so a US contractor could select USD and be billed correctly at US$19 while their customer-facing estimates show CA$.
+
+## Signup currency-control layout FIXED (2026-08-24 22:39 PT, closed out 2026-08-25 07:21 PT, uncommitted)
+
+**Status:** fixed in the working tree on `main`, verified locally in a real browser, **not committed, not pushed, not deployed**.
+
+### Deployment state at the time of this work
+
+`df16aaa` (the USD rendering hotfix) is on `origin/main`, but **Production is still serving `1bdc011`**, the rollback. Verified by fetching `https://www.trytradepulse.com/signup`: it renders `14-day free trial. No card required.`, the exact literal from `1bdc011:app/signup/page.tsx` lines 94 and 197, with zero occurrences of `Change currency`, `CA$29`, `US$19`, or `Estimate currency`. `lib/currency.ts` does not exist at `1bdc011` at all. Vercel Instant Rollback pins Production until a deployment is promoted, so pushing `main` did not move it.
+
+Because of that, the separately requested single-account Production USD verification **was not run and no account was created**. Production has no USD control to select, and `/api/auth/signup` at `1bdc011` accepts no `currency`, so the only account it could have made was a CAD one. `ALLOW_PRODUCTION_SIGNUP_SMOKE` was never set.
+
+### The defect
+
+At phone width the signup screen rendered the trial-price line **twice**: once under the "Create account" heading, and again inside the fixed bottom bar, stacked above the CTA together with the `Change currency` control. That bar measured roughly 190px tall, while `<main>` reserved no bottom space at all, so the bar sat on top of the Terms of Service text.
+
+### The fix, `app/signup/signup-form.tsx` only
+
+- **One price line.** The duplicate in the fixed bar is gone. The surviving line is the one under the heading. It also fixes a copy contradiction: the removed line used `trialCopy("pro", …)` ("14-day free trial, then CA$59/month") while the surviving one says "Pro is CA$59/month, billed right away", which is what the Pro flow actually does, since Pro goes straight to Checkout.
+- **The currency control moved up**, directly under the price line and above the email field. It is the same control, unchanged in behaviour: collapsed `Change currency` trigger, expanding to 44px CAD and USD buttons.
+- **The fixed bar now holds the CTA and nothing else**, which makes its height fixed and predictable at 112px: `pt-4` (16) + the button's `min-h-[56px]` + `pb-10` (40).
+- **`<main>` reserves `pb-40`** (160px) below the Terms, clearing the 112px bar by 48px when scrolled to the bottom.
+- **Dropped a redundant `mt-4` on the Terms paragraph.** `<main>` already spaces its children with `gap-6`, so that margin pushed the Terms 40px down instead of 24px. On a 1280x720 desktop viewport that was enough to slide the last line 5px under the fixed bar before the page had been scrolled. This was found by measuring, not by reading.
+- **Reclaimed 32px above the Terms** in the second pass: header `pt-10 pb-6` to `pt-8 pb-4` (16px) and `<main>` `gap-6` to `gap-5` (4px across four gaps, 16px). See the closure section below for why this, and not the reserve, is what fixes initial paint.
+
+Nothing else changed: no pricing, no country detection, no OAuth, no Stripe, no estimate currency, no other feature.
+
+### Measured in a real browser, local dev server
+
+Geometry read from `getBoundingClientRect()`, not eyeballed. "Gap to bar" is the distance from the bottom of the Terms text to the top of the fixed bar; "gap to CTA" is to the button itself.
+
+| State | Viewport | Price lines | Gap to bar (initial paint / scrolled to bottom) | Gap to CTA |
+|---|---|---|---|---|
+| CAD, collapsed | 375x812 | 1 | **119 / 119** | 135 |
+| USD, collapsed | 375x812 | 1 | **119 / 119** | 135 |
+| Selector expanded | 375x812 | 1 | **100 / 100** | 116 |
+| CAD, collapsed | 1280x720 | 1 | **43 / 48** | 59 / 64 |
+| USD, collapsed | 1280x720 | 1 | **43 / 48** | 59 / 64 |
+| Selector expanded | 1280x720 | 1 | **24 / 48** | 40 / 64 |
+
+Every required state clears the bar by at least 16px at initial paint, worst case 24px. The first-pass numbers this replaces were 87 / 87, 87 / 87, 68 / 68, 11 / 16, 11 / 16, and -8 / 16.
+
+Every state renders exactly one price line and one `Change currency` control, with the control below the price line and above the email field, and no horizontal scroll. Selecting USD switches the single line to `14-day free trial, then US$19/month` with zero `CA$` anywhere on the page, and CAD back to `CA$29/month` with zero `US$`.
+
+Rendered reading order, from the page text: Create account, the price line, Change currency, Email, Password, Google, Sign in, Terms.
+
+### Closing the remaining 8px (2026-08-25 07:21 PT)
+
+The first pass left one state failing: 1280x720 with the selector expanded, where the Terms overlapped the fixed bar by 8px at initial paint and only became clear after scrolling. That was not good enough.
+
+**The obvious remedy does not work, and measuring is what showed it.** Raising the main-content bottom reserve from `pb-32` to `pb-40` moved the scrolled-to-bottom clearance from 16px to 48px and left the initial-paint gap at **exactly its previous value**, -8px. The reason is structural: that padding sits *below* the Terms, so it makes the page taller and scrollable further, but it cannot move the Terms. Initial-paint clearance is decided entirely by the height of everything *above* them.
+
+The measured stack above the Terms at 1280x720 expanded was 616px against a bar starting at 608px: header 102px, `main` padding-top 16px, then children of 112 + 176 + 78 + 20 + 16 with four 24px gaps. Clearing by 16px needed that 616 down to 592, so 24px had to come out. 32px was taken, for margin:
+
+- header `pt-10 pb-6` to `pt-8 pb-4`, 64px of chrome for a logo down to 48px
+- `main` `gap-6` to `gap-5`, 4px off each of four gaps
+
+`pb-40` was kept. It is not what fixes initial paint, but it is harmless and it triples the scrolled-to-bottom clearance.
+
+**Where the margin ends.** Initial-paint clearance depends on viewport height, so it is worth stating the boundary instead of implying the fix is universal. Measured at 1280x700: collapsed 23px, expanded **4px**, so still no overlap but under the 16px floor. Derived threshold for the expanded state is about 712px of viewport height, and about 693px collapsed. Below that the page still scrolls and scrolled-to-bottom clearance stays at 48px, but initial paint dips under 16px. Guaranteeing 16px at every viewport height is not achievable with static spacing, because a short enough viewport cannot hold the content and the CTA at once, and the CTA has to stay pinned per the project's UI rules.
+
+### Tests
+
+`tests/smoke/signup-currency-layout.spec.ts`, 8 tests, registered in the `playwright.unit.config.ts` allowlist. Source-level assertions, matching the `bottom-nav.spec.ts` precedent, with comments stripped so a comment can neither satisfy nor fail an assertion:
+
+- exactly one `trialCopy(` and one `formatMonthlyPlanPrice(` call site
+- exactly one `Change currency`, one `CURRENCIES.map`, one `setShowCurrency(true)`
+- source order: price line, then currency control, then the email field
+- the fixed bar contains the CTA and none of the moved elements
+- Terms live inside `<main>`, and `main`'s reserved padding is **derived from the Tailwind classes** and asserted to be at least the bar's `pt` + `min-h` + `pb`, so growing the bar fails the test until the reserve grows with it. Its comment now records that this guards the scrolled case only.
+- **the space above the Terms stays tight enough**: header `pt` + `pb` at most 48px, and `main`'s gap at most 20px, read from the classes. This is the guard for initial paint, the half the reserve cannot cover.
+- **the expanded selector stays at exactly 44px**, a floor and a ceiling at once: smaller breaks the minimum tap target, larger spends the initial-paint clearance, since expanding is the binding case.
+- both CAD and USD produce one line, via the shared `currency` state
+
+Reverting `signup-form.tsx` to the pre-fix version fails 4 of the 8. Putting the header and gap spacing back fails the initial-paint guard. Growing the expanded selector to 56px fails the tap-target guard. Each was checked by making the change, running the suite, and restoring.
+
+**No committed mobile-viewport visual check.** The existing setup cannot support one: `playwright.unit.config.ts` declares no browser project and runs in plain Node, and `playwright.config.ts` does have chromium but its `baseURL` defaults to `https://trytradepulse.com` with a `globalSetup` that resets a Production rate-limit bucket, so adding a rendered check there would mean running against Production. The mobile and desktop measurements above were taken live instead, through the local dev server. A screenshot could not be captured because the browser pane was not displayed; the geometry numbers are the evidence.
+
+### Verification actually run (2026-08-25 07:21 PT, second pass)
+
+- `git diff --check` — clean.
+- `npx tsc --noEmit` — clean.
+- Focused tests, `tests/smoke/signup-currency-layout.spec.ts` — **8 passed**.
+- `npx playwright test --config=playwright.unit.config.ts` — **346 passed** (338 before this work, plus the 8 new).
+- `npx next build` — compiled successfully in 28.9s, 55/55 static pages.
+- Live browser measurement at 375x812, 1280x720, and 1280x700, CAD and USD, collapsed and expanded, at both scroll positions, against the local dev server. No account created, nothing submitted.
+
+### Files changed
+
+`app/signup/signup-form.tsx`, `tests/smoke/signup-currency-layout.spec.ts` (new), `playwright.unit.config.ts` (allowlist entry), `HANDOFF.md`.
+
+### Observation, not changed
+
+The expanded selector carries `aria-label="Estimate currency"`, but at signup this control sets the **billing** currency as well as the initial estimate currency. The label is arguably narrow. Left alone as a copy change outside this layout fix.
 
 ## USD rendering defect FIXED (2026-08-24 21:51 PT, uncommitted)
 

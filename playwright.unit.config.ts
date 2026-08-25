@@ -24,6 +24,7 @@ export default defineConfig({
     "currency-rendering.spec.ts",
     "account-deletion.spec.ts",
     "bottom-nav.spec.ts",
+    "signup-currency-layout.spec.ts",
     "twilio-inbound-webhook.spec.ts",
     "sms-suppression-guard.spec.ts",
     "payment-reminder-copy.spec.ts",

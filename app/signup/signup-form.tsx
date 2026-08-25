@@ -85,16 +85,65 @@ export function SignupForm({ initialCurrency }: { initialCurrency: Currency }) {
 
   return (
     <div className="min-h-dvh bg-zinc-950 text-white flex flex-col">
-      <header className="px-5 pt-10 pb-6 shrink-0">
+      <header className="px-5 pt-8 pb-4 shrink-0">
         <Logo />
       </header>
 
-      <main className="flex-1 px-5 flex flex-col gap-6 pt-4">
+      {/*
+        Two separate things keep the Terms clear of the fixed CTA bar, which
+        measures 112px: pt-4 (16) + the button's min-h-[56px] + pb-10 (40).
+
+        pb-40 (160px) is the reserve BELOW the Terms. It only governs the
+        scrolled-to-bottom case, where it leaves 48px of clearance.
+
+        Initial paint is a different problem and the reserve cannot fix it:
+        padding under the Terms does not move the Terms. There, clearance is
+        decided by everything ABOVE them. On a 1280x720 viewport with the
+        currency selector expanded, that stack measured 616px against a bar
+        starting at 608px. The header's pt-8/pb-4 and this gap-5 reclaim 32px
+        of it, which is what buys the clearance at scroll position zero.
+      */}
+      <main className="flex-1 px-5 flex flex-col gap-5 pt-4 pb-40">
         <div>
           <h1 className="text-2xl font-bold text-white">Create account</h1>
           <p className="text-zinc-500 text-sm mt-1">
             {plan === "pro" ? `Pro is ${formatMonthlyPlanPrice("pro", currency)}, billed right away.` : trialCopy("starter", currency)}
           </p>
+
+          {/*
+            One price line on this screen, and the currency control sits
+            directly under it, above the email field. Both used to be repeated
+            inside the fixed bottom bar as well. At phone width that stack grew
+            tall enough to cover the Terms text underneath it.
+          */}
+          <div className="mt-3">
+            {showCurrency ? (
+              <div className="flex items-center gap-2" role="group" aria-label="Estimate currency">
+                {CURRENCIES.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => { setCurrency(c); setShowCurrency(false); }}
+                    className={`min-h-[44px] rounded-lg border px-4 text-sm font-medium transition-colors ${
+                      currency === c
+                        ? "border-amber-500 bg-amber-500/10 text-amber-400"
+                        : "border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
+                    }`}
+                  >
+                    {c.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowCurrency(true)}
+                className="text-xs text-zinc-500 underline hover:text-zinc-300 transition-colors py-1"
+              >
+                Change currency
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="flex flex-col gap-4">
@@ -186,7 +235,13 @@ export function SignupForm({ initialCurrency }: { initialCurrency: Currency }) {
           </Link>
         </p>
 
-        <p className="text-xs text-zinc-600 text-center mt-4">
+        {/*
+          No mt-4 here. main already spaces its children with gap-5, so the
+          extra margin pushed the Terms a further 16px down. On a short
+          desktop viewport (1280x720) that was enough to slide the last line
+          under the fixed bar before the page had been scrolled.
+        */}
+        <p className="text-xs text-zinc-600 text-center">
           By continuing you agree to our{" "}
           <a href="/terms" className="underline hover:text-zinc-400">Terms of Service</a>
           {" "}and{" "}
@@ -194,38 +249,12 @@ export function SignupForm({ initialCurrency }: { initialCurrency: Currency }) {
         </p>
       </main>
 
+      {/*
+        The CTA and nothing else. The price line and currency control moved up
+        under the heading, so this bar's height is now fixed and predictable,
+        which is what lets main's pb-40 clear it when scrolled to the bottom.
+      */}
       <div className="fixed bottom-0 left-0 right-0 px-5 pb-10 pt-4 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent">
-        <div className="mb-3 flex flex-col items-center gap-1.5">
-          <p className="text-zinc-500 text-xs text-center">
-            {plan === "pro" ? trialCopy("pro", currency) : trialCopy("starter", currency)}
-          </p>
-          {showCurrency ? (
-            <div className="flex items-center gap-2" role="group" aria-label="Estimate currency">
-              {CURRENCIES.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => { setCurrency(c); setShowCurrency(false); }}
-                  className={`min-h-[44px] rounded-lg border px-4 text-sm font-medium transition-colors ${
-                    currency === c
-                      ? "border-amber-500 bg-amber-500/10 text-amber-400"
-                      : "border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
-                  }`}
-                >
-                  {c.toUpperCase()}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowCurrency(true)}
-              className="text-xs text-zinc-500 underline hover:text-zinc-300 transition-colors py-1"
-            >
-              Change currency
-            </button>
-          )}
-        </div>
         <button
           type="button"
           onClick={handleSignUp}
