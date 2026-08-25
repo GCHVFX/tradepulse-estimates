@@ -1,12 +1,16 @@
 import jsPDF from "jspdf";
-import { allAmountsInLabel, DEFAULT_CURRENCY, type Currency } from "@/lib/currency";
+import { allAmountsInLabel, type Currency } from "@/lib/currency";
 
 interface GenerateEstimatePdfOptions {
   businessName?: string;
   logoUrl?: string | null;
   photoUrls?: string[];
-  /** Snapshot currency of the estimate. Defaults to CAD for older estimates. */
-  currency?: Currency;
+  /**
+   * Snapshot currency of the estimate. Required: the label under the pricing
+   * table used to read "All amounts in CAD" on a USD estimate because no
+   * caller ever passed this.
+   */
+  currency: Currency;
 }
 
 function stripInline(text: string): string {
@@ -100,7 +104,7 @@ function orderPdfSections(lines: string[]): string[] {
 export async function generateEstimatePDF(
   title: string,
   summary: string,
-  options: GenerateEstimatePdfOptions = {}
+  options: GenerateEstimatePdfOptions
 ): Promise<void> {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
 
@@ -308,7 +312,7 @@ export async function generateEstimatePDF(
   // --- Currency ---
   // Below the pricing table on purpose: a currency code inside an amount cell
   // would break parseCost() if the estimate were edited afterwards.
-  const currencyLabel = allAmountsInLabel(options.currency ?? DEFAULT_CURRENCY);
+  const currencyLabel = allAmountsInLabel(options.currency);
   checkBreak(8);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);

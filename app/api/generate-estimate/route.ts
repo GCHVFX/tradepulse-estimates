@@ -227,6 +227,12 @@ export async function POST(request: NextRequest) {
   const safeJobAddress = typeof jobAddress === "string" ? jobAddress.trim() : "";
   const safePreparedBy = business?.prepared_by ?? "";
 
+  // Read the snapshot currency once, before the stream opens, so the value
+  // written to the row and the value the client renders with are the same
+  // read. /new has no estimate row to query, so the response header is how
+  // it learns the snapshot instead of guessing from the business setting.
+  const estimateCurrency = await readBusinessEstimateCurrency(supabaseAdmin, business.id);
+
   const readable = new ReadableStream({
     async start(controller) {
       await runWithEstimateGenerationClaim({
@@ -277,9 +283,7 @@ export async function POST(request: NextRequest) {
                 deposit_amount: null,
                 // Immutable snapshot. Changing the business estimate currency
                 // later must never move an estimate that is already saved.
-                ...estimateCurrencyPatch(
-                  await readBusinessEstimateCurrency(supabaseAdmin, business.id)
-                ),
+                ...estimateCurrencyPatch(estimateCurrency),
               })
               .select();
 
@@ -356,6 +360,12 @@ export async function POST(request: NextRequest) {
   });
 
   return applyTo(new NextResponse(readable, {
-    headers: { "Content-Type": "text/plain; charset=utf-8" },
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      // The snapshot the row was saved with. A header rather than a body
+      // marker so the existing __ID__ / __ERROR__ stream protocol is
+      // untouched and an older client simply ignores it.
+      "X-Estimate-Currency": estimateCurrency,
+    },
   }));
 }

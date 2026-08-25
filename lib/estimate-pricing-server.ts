@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { Database } from "./database.types";
+import { estimateCurrencyOf } from "./currency-db";
 import { isGroupedPricingEnabled } from "./estimate-groups";
 import {
   buildCustomerPricingView,
@@ -25,6 +26,7 @@ type EstimatePricingInput = Pick<
   | "invoice_amount"
   | "review_requested_at"
   | "summary"
+  | "currency"
 >;
 
 type StructuredItemRow = Pick<
@@ -53,6 +55,11 @@ export function toEstimatePricingRecord(estimate: EstimatePricingInput): Estimat
     invoiceAmount: estimate.invoice_amount,
     reviewRequestedAt: estimate.review_requested_at,
     summary: estimate.summary ?? "",
+    // The database boundary, and the only place a CAD fallback belongs. The
+    // column is `not null default 'cad'`, so this only fires for a row that
+    // predates the column or arrives unreadable. Every layer above this one
+    // takes the currency as a required argument.
+    currency: estimateCurrencyOf(estimate),
   };
 }
 

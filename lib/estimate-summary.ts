@@ -1,4 +1,7 @@
-import { DEFAULT_CURRENCY, formatCurrency, type Currency } from './currency';
+// No DEFAULT_CURRENCY import on purpose. Every money-emitting function in this
+// module takes an explicit currency, so the module has no way to fall back to
+// CAD. That is enforced by the compiler, not by convention.
+import { formatCurrency, type Currency } from './currency';
 
 // Shared parse/serialize logic for estimate summary markdown.
 // Used by the in-app editable estimate body and by display surfaces
@@ -63,7 +66,7 @@ export function parseCost(cost: string): number {
   return parseFloat(cost.replace(/(?:CA|US)?\$/g, '').replace(/[,*]/g, '')) || 0;
 }
 
-export function formatDollars(amount: number, currency: Currency = DEFAULT_CURRENCY): string {
+export function formatDollars(amount: number, currency: Currency): string {
   return formatCurrency(amount, currency, { decimals: 0 });
 }
 
@@ -96,7 +99,7 @@ export function isQuantityItem(item: LineItem): boolean {
   return item.quantityBased === true;
 }
 
-export function formatMoney(amount: number, currency: Currency = DEFAULT_CURRENCY): string {
+export function formatMoney(amount: number, currency: Currency): string {
   return formatCurrency(amount, currency, { decimals: 2 });
 }
 
@@ -109,7 +112,7 @@ export function lineItemCost(item: LineItem): number {
   return parseCost(item.cost);
 }
 
-export function withComputedCost(item: LineItem, currency: Currency = DEFAULT_CURRENCY): LineItem {
+export function withComputedCost(item: LineItem, currency: Currency): LineItem {
   if (!isQuantityItem(item)) return item;
   return { ...item, cost: formatMoney(lineItemCost(item), currency) };
 }
@@ -124,7 +127,7 @@ function perUnit(unit: string): string {
 // How a quantity-based item reads to the contractor and the customer:
 // "Labour (8 hrs @ $65.00/hr)". The quantity lives in the description, the
 // arithmetic stays in code.
-export function lineItemDisplayLabel(item: LineItem, currency: Currency = DEFAULT_CURRENCY): string {
+export function lineItemDisplayLabel(item: LineItem, currency: Currency): string {
   if (!isQuantityItem(item)) return item.label;
   const quantity = (item.quantity ?? '').trim();
   const unit = (item.unit ?? '').trim();
@@ -143,7 +146,7 @@ export function computeTotals(lineItems: LineItem[], taxRate = 5): {
   return { subtotal, tax, total: subtotal + tax };
 }
 
-function syncPreambleTotal(preamble: string, lineItems: LineItem[], taxRate = 5, currency: Currency = DEFAULT_CURRENCY): string {
+function syncPreambleTotal(preamble: string, lineItems: LineItem[], taxRate: number, currency: Currency): string {
   if (!preamble) return preamble;
   const { total } = computeTotals(lineItems, taxRate);
   return preamble.replace(
@@ -222,7 +225,13 @@ export function parseSummary(rawSummary: string): ParsedSummary {
               cost: cells[4],
               quantityBased,
             };
-            return quantityBased ? withComputedCost(item) : item;
+            // Keep the stored cost cell verbatim. It used to be recomputed
+            // and re-formatted here, which forced the parser to pick a
+            // currency it has no way to know. The value is dead either way:
+            // lineItemCost() recomputes quantity x rate for every quantity
+            // row, and both serializers re-format from that, so nothing
+            // displays or stores this field for a quantity item.
+            return item;
           }
           return { id: newId(), label: cells[0], cost: cells[1] };
         });
@@ -279,7 +288,7 @@ function scopeBlock(scopeItems: ScopeItem[]): string {
 // phone, and nobody needs to see the arithmetic broken out. The stored form
 // keeps the parts separate so the app can do the multiplying (see
 // lineItemsBlock).
-function displayLineItemsBlock(lineItems: LineItem[], currency: Currency = DEFAULT_CURRENCY): string {
+function displayLineItemsBlock(lineItems: LineItem[], currency: Currency): string {
   const table = [
     '| Item | Cost |',
     '|------|------|',
@@ -291,7 +300,7 @@ function displayLineItemsBlock(lineItems: LineItem[], currency: Currency = DEFAU
 // Exported so lib/estimate-items.ts can compare its structured round trip
 // against the one authoritative serializer instead of reimplementing it.
 // Export only: the body and behaviour are unchanged.
-export function lineItemsBlock(lineItems: LineItem[], currency: Currency = DEFAULT_CURRENCY): string {
+export function lineItemsBlock(lineItems: LineItem[], currency: Currency): string {
   // Storage form. Only estimates that actually have quantity-based items get
   // the wider table; older estimates keep the exact two-column layout they were
   // saved in. Keeping quantity, unit, and rate as separate columns here is what
@@ -321,7 +330,7 @@ function beforeBlock(s: BeforeSection): string {
   return `## ${s.heading}\n${sectionContent}`;
 }
 
-function pricingBlock(lineItems: LineItem[], depositPercent: number, taxLabel = 'GST', taxRate = 5, currency: Currency = DEFAULT_CURRENCY): string {
+function pricingBlock(lineItems: LineItem[], depositPercent: number, taxLabel: string, taxRate: number, currency: Currency): string {
   const { subtotal, tax, total } = computeTotals(lineItems, taxRate);
   const deposit = Math.round((total * depositPercent) / 100);
   const balance = total - deposit;
@@ -351,7 +360,7 @@ export function serializeSummary(
   afterPricingSections: AfterSection[],
   taxLabel = 'GST',
   taxRate = 5,
-  currency: Currency = DEFAULT_CURRENCY,
+  currency: Currency,
 ): string {
   const parts: string[] = [];
   if (preamble) parts.push(syncPreambleTotal(preamble, lineItems, taxRate, currency));
@@ -377,9 +386,14 @@ export function calculateEstimateTotal(summary: string): number {
 // items and rounded to whole dollars. Line items collapse to two columns here,
 // which is what the share page and the PDF render.
 
-export function formatEstimateForDisplay(summary: string): string {
+// `currency` is required, not defaulted. A USD estimate rendered CA$ on the
+// share page, in the PDF, and on /new because this function quietly fell back
+// to CAD whenever a caller forgot to pass the snapshot. Every caller here has
+// an estimate in hand, so every caller can supply its currency, and the
+// compiler now says so.
+export function formatEstimateForDisplay(summary: string, currency: Currency): string {
   const p = parseSummary(summary);
-  return formatParsedEstimateForDisplay(p, p.lineItems);
+  return formatParsedEstimateForDisplay(p, p.lineItems, currency);
 }
 
 /**
@@ -392,20 +406,25 @@ export function formatEstimateForDisplay(summary: string): string {
 export function formatEstimateForDisplayWithPricing(
   summary: string,
   lineItems: LineItem[],
+  currency: Currency,
   lineItemsDisplayBlock?: string
 ): string {
   return formatParsedEstimateForDisplay(
     parseSummary(summary),
     lineItems,
+    currency,
     lineItemsDisplayBlock
   );
 }
 
+// Currency sits ahead of the optional display block on purpose. It was last in
+// the list and defaulted, which is how a caller that only wanted to override
+// the Line Items block silently reset the currency to CAD at the same time.
 function formatParsedEstimateForDisplay(
   p: ParsedSummary,
   lineItems: LineItem[],
-  lineItemsDisplayBlock?: string,
-  currency: Currency = DEFAULT_CURRENCY
+  currency: Currency,
+  lineItemsDisplayBlock?: string
 ): string {
   const parts: string[] = [];
   if (p.preamble) parts.push(syncPreambleTotal(p.preamble, lineItems, p.taxRate, currency));

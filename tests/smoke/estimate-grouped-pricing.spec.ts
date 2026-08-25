@@ -214,8 +214,8 @@ test("the detailed renderer is untouched by this slice", () => {
   // formatEstimateForDisplay is what the share page and PDF render. Structured
   // generation preserves the markdown summary, so this output cannot move.
   for (const fixture of validFixtures) {
-    const before = formatEstimateForDisplay(fixture.summary);
-    const after = formatEstimateForDisplay(fixture.summary);
+    const before = formatEstimateForDisplay(fixture.summary, "cad");
+    const after = formatEstimateForDisplay(fixture.summary, "cad");
     expect(after, `${fixture.name}`).toBe(before);
     expect(before).toContain("## Line Items");
   }
@@ -226,7 +226,7 @@ test("the grouped renderer emits a work-package table, not line items", () => {
     ...d,
     groupLabel: assignGroupLabel(d.source.description),
   }));
-  const block = renderGroupedLineItemsBlock(drafts);
+  const block = renderGroupedLineItemsBlock(drafts, "cad");
 
   expect(block.startsWith("## Line Items\n")).toBe(true);
   expect(block).toContain("| Work package | Price |");
@@ -254,7 +254,7 @@ test("the plain-text grouped renderer produces leader-dot lines", () => {
     ...d,
     groupLabel: assignGroupLabel(d.source.description),
   }));
-  const text = renderGroupedPlainText(drafts);
+  const text = renderGroupedPlainText(drafts, "cad");
 
   for (const line of text.split("\n")) {
     expect(line, line).toMatch(/^.+ \.{1,} (?:CA|US)\$[\d,-]+$/);
@@ -273,7 +273,7 @@ test("unsupported estimates are refused, so they stay markdown-authoritative", (
     if (fixture.expectBlocking === false) continue;
 
     const parsed = parseSummary(fixture.summary);
-    const validation = validateConversionTotals(parsed);
+    const validation = validateConversionTotals(parsed, "cad");
     const multi = detectsMultiOptionStructure(fixture.summary);
 
     const wouldConvert = validation.ok && !multi;
@@ -286,7 +286,7 @@ test("a negative-amount estimate does convert, and its grouped total still match
   expect(fixture, "the corpus has a non-blocking fixture").toBeTruthy();
 
   const parsed = parseSummary(fixture!.summary);
-  const validation = validateConversionTotals(parsed);
+  const validation = validateConversionTotals(parsed, "cad");
   expect(validation.ok, "non-blocking, so conversion is allowed").toBe(true);
 
   const drafts = parsedToItems(parsed).map((d) => ({
@@ -313,12 +313,12 @@ test("a multi-option estimate is refused even at generation time", () => {
   ].join("\n");
 
   expect(detectsMultiOptionStructure(multi)).toBe(true);
-  expect(validateConversionTotals(parseSummary(multi)).ok).toBe(false);
+  expect(validateConversionTotals(parseSummary(multi), "cad").ok).toBe(false);
 });
 
 test("a valid new estimate would convert, with totals preserved", () => {
   const parsed = parseSummary(BATHROOM);
-  const validation = validateConversionTotals(parsed);
+  const validation = validateConversionTotals(parsed, "cad");
 
   expect(detectsMultiOptionStructure(BATHROOM)).toBe(false);
   expect(validation.ok, validation.abortReasons.join("; ")).toBe(true);

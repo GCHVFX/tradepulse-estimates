@@ -5,6 +5,7 @@ import {
   parseSummary,
   type LineItem,
 } from "./estimate-summary";
+import type { Currency } from "./currency";
 import {
   groupItemsForDisplay,
   renderGroupedLineItemsBlock,
@@ -37,6 +38,9 @@ export interface EstimatePricingRecord {
   invoiceAmount: number | null;
   reviewRequestedAt: string | null;
   summary: string;
+  // The estimate's immutable snapshot. Part of the record, not an option, so
+  // no pricing view can be built without one.
+  currency: Currency;
 }
 
 export type CustomerPricingError =
@@ -144,7 +148,7 @@ function fallbackView(
     error,
     requestedMode: estimate.customerPricingMode,
     renderedMode: "detailed",
-    summary: formatEstimateForDisplay(estimate.summary),
+    summary: formatEstimateForDisplay(estimate.summary, estimate.currency),
     detailedSubtotal,
     groupedSubtotal: null,
     tax,
@@ -283,7 +287,10 @@ export function buildCustomerPricingView({
   const summary = formatEstimateForDisplayWithPricing(
     estimate.summary,
     detailedLineItems,
-    renderedMode === "grouped" ? renderGroupedLineItemsBlock(groupable) : undefined
+    estimate.currency,
+    renderedMode === "grouped"
+      ? renderGroupedLineItemsBlock(groupable, estimate.currency)
+      : undefined
   );
 
   return {

@@ -7,6 +7,7 @@ import { EditableEstimateBody } from "@/app/components/editable-estimate-body";
 import { CompanyEstimateHeader } from "@/app/components/company-estimate-header";
 import { EstimateMarkdown } from "@/app/components/estimate-markdown";
 import { formatEstimateForDisplay } from "@/lib/estimate-summary";
+import { DEFAULT_CURRENCY, parseCurrency, type Currency } from "@/lib/currency";
 import { STARTER_MONTHLY_PHOTO_LIMIT } from "@/lib/rate-limit";
 import { formatPhoneInput } from "@/lib/format-phone";
 import { Logo } from "@/app/components/logo";
@@ -142,6 +143,9 @@ interface EstimateViewProps {
   error: string;
   saved: boolean;
   savedEstimateId: string | null;
+  // Snapshot currency of the estimate being shown, from the generate
+  // response header. Required, so this screen cannot fall back to CAD.
+  estimateCurrency: Currency;
   needsProfileSetup: boolean;
   logoUrl: string | null;
   businessName: string;
@@ -196,6 +200,7 @@ function EstimateView({
   error,
   saved,
   savedEstimateId,
+  estimateCurrency,
   needsProfileSetup,
   logoUrl,
   businessName,
@@ -300,6 +305,7 @@ function EstimateView({
                   key={savedEstimateId ?? "default"}
                   summary={estimate}
                   estimateId={savedEstimateId}
+                  currency={estimateCurrency}
                 />
               ) : (
                 // Before the estimate is saved (still streaming, no ID yet),
@@ -309,7 +315,9 @@ function EstimateView({
                 // the wide table, even for the few seconds before the swap.
                 // formatEstimateForDisplay strips the H1 line itself and
                 // never throws on a mid-stream, partially-written string.
-                <EstimateMarkdown content={formatEstimateForDisplay(estimate)} />
+                <EstimateMarkdown
+                  content={formatEstimateForDisplay(estimate, estimateCurrency)}
+                />
               )}
               {saved && !generating && !error && (
                 <p className="mt-4 text-xs text-zinc-400 flex items-center gap-1.5">
@@ -913,6 +921,9 @@ function NewPageInner() {
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [savedEstimateId, setSavedEstimateId] = useState<string | null>(null);
+  // Set from the generate response header, which carries the exact value
+  // snapshotted onto the row. CAD until then, when no estimate exists yet.
+  const [estimateCurrency, setEstimateCurrency] = useState<Currency>(DEFAULT_CURRENCY);
   const [showSendSheet, setShowSendSheet] = useState(false);
   const [customerDetailsSaved, setCustomerDetailsSaved] = useState(false);
   const { logoUrl, businessName, businessEmail, preparedBy, isPro, aiPhotoEstimatesRemaining, isLoading: profileLoading } = useBusinessProfile();
@@ -1052,6 +1063,10 @@ function NewPageInner() {
         throw new Error("No response body returned from server");
       }
 
+      // parseCurrency refuses anything it does not recognise, so a missing
+      // or malformed header reads as CAD rather than rendering the wrong one.
+      setEstimateCurrency(parseCurrency(res.headers.get("X-Estimate-Currency")) ?? DEFAULT_CURRENCY);
+
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -1160,6 +1175,7 @@ function NewPageInner() {
         error={error}
         saved={saved}
         savedEstimateId={savedEstimateId}
+        estimateCurrency={estimateCurrency}
         needsProfileSetup={needsProfileSetup}
         logoUrl={logoUrl}
         businessName={businessName}

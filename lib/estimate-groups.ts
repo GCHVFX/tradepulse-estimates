@@ -19,6 +19,7 @@
 
 import type { EstimateItemDraft } from "./estimate-items";
 import { formatDollars } from "./estimate-summary";
+import type { Currency } from "./currency";
 
 // ── Feature flag ──────────────────────────────────────────────────────────────
 
@@ -133,13 +134,14 @@ export function groupItemsForDisplay(
  * the contractor page, share page, and PDF all consume that same result.
  */
 export function renderGroupedLineItemsBlock(
-  items: Array<Pick<EstimateItemDraft, "total" | "groupLabel">>
+  items: Array<Pick<EstimateItemDraft, "total" | "groupLabel">>,
+  currency: Currency
 ): string {
   const groups = groupItemsForDisplay(items);
   const table = [
     "| Work package | Price |",
     "|------|------|",
-    ...groups.map((g) => `| ${g.group} | ${formatDollars(g.total)} |`),
+    ...groups.map((g) => `| ${g.group} | ${formatDollars(g.total, currency)} |`),
   ].join("\n");
   return `## Line Items\n${table}`;
 }
@@ -154,12 +156,13 @@ export function renderGroupedLineItemsBlock(
  */
 export function renderGroupedPlainText(
   items: Array<Pick<EstimateItemDraft, "total" | "groupLabel">>,
+  currency: Currency,
   width = 46
 ): string {
   const groups = groupItemsForDisplay(items);
   return groups
     .map((g) => {
-      const price = formatDollars(g.total);
+      const price = formatDollars(g.total, currency);
       const dots = Math.max(1, width - g.group.length - price.length);
       return `${g.group} ${".".repeat(dots)} ${price}`;
     })

@@ -41,8 +41,8 @@ import {
  *
  * COMPARISON KINDS, stated explicitly because the two are not interchangeable:
  *
- *   BYTE-IDENTICAL: `itemsToLineItemsBlock(parsedToItems(parsed))` must equal
- *   `lineItemsBlock(parsed.lineItems)` exactly, character for character. The
+ *   BYTE-IDENTICAL: `itemsToLineItemsBlock(parsedToItems(parsed), "cad")` must equal
+ *   `lineItemsBlock(parsed.lineItems, "cad")` exactly, character for character. The
  *   architecture document requires the round trip to stay compatible with the
  *   current authoritative formatter, so this one is strict.
  *
@@ -126,7 +126,7 @@ test("legacy two-column rows convert as flat fees", () => {
 
 test("itemsToLineItemsBlock emits the current five-column table unchanged", () => {
   const parsed = parseSummary(validFixtures[0].summary);
-  const block = itemsToLineItemsBlock(parsedToItems(parsed));
+  const block = itemsToLineItemsBlock(parsedToItems(parsed), "cad");
 
   expect(block.startsWith("## Line Items\n")).toBe(true);
   expect(block).toContain("| Item | Qty | Unit | Rate | Cost |");
@@ -136,7 +136,7 @@ test("itemsToLineItemsBlock emits the current five-column table unchanged", () =
 test("rendered block adds no totals rows and no metadata", () => {
   for (const fixture of validFixtures) {
     const parsed = parseSummary(fixture.summary);
-    const block = itemsToLineItemsBlock(parsedToItems(parsed));
+    const block = itemsToLineItemsBlock(parsedToItems(parsed), "cad");
     const body = block.split("\n").slice(1).join("\n");
 
     expect(body, `${fixture.name}: no subtotal row`).not.toMatch(/^\|\s*\**\s*Subtotal/im);
@@ -153,7 +153,7 @@ test("rendered block adds no totals rows and no metadata", () => {
 
 test("a table of only flat fees renders as the legacy two-column form", () => {
   const fixture = validFixtures.find((f) => f.name === "03-materials-only")!;
-  const block = itemsToLineItemsBlock(parsedToItems(parseSummary(fixture.summary)));
+  const block = itemsToLineItemsBlock(parsedToItems(parseSummary(fixture.summary)), "cad");
 
   expect(block).toContain("| Item | Cost |");
   expect(block).not.toContain("| Qty |");
@@ -164,8 +164,8 @@ test("a table of only flat fees renders as the legacy two-column form", () => {
 test("BYTE-IDENTICAL: every valid fixture re-renders to the authoritative block", () => {
   for (const fixture of validFixtures) {
     const parsed = parseSummary(fixture.summary);
-    const expected = lineItemsBlock(parsed.lineItems);
-    const actual = itemsToLineItemsBlock(parsedToItems(parsed));
+    const expected = lineItemsBlock(parsed.lineItems, "cad");
+    const actual = itemsToLineItemsBlock(parsedToItems(parsed), "cad");
 
     expect(actual, `${fixture.name}: block must be byte-identical`).toBe(expected);
   }
@@ -176,7 +176,7 @@ test("draftToLineItem is the exact inverse of lineItemToDraft for rendering", ()
     const parsed = parseSummary(fixture.summary);
     const rebuilt = parsedToItems(parsed).map(draftToLineItem);
 
-    expect(lineItemsBlock(rebuilt), `${fixture.name}`).toBe(lineItemsBlock(parsed.lineItems));
+    expect(lineItemsBlock(rebuilt, "cad"), `${fixture.name}`).toBe(lineItemsBlock(parsed.lineItems, "cad"));
   }
 });
 
@@ -185,7 +185,7 @@ test("draftToLineItem is the exact inverse of lineItemToDraft for rendering", ()
 test("SEMANTIC: reparsing the rendered block preserves rows, descriptions, and amounts", () => {
   for (const fixture of validFixtures) {
     const parsed = parseSummary(fixture.summary);
-    const block = itemsToLineItemsBlock(parsedToItems(parsed));
+    const block = itemsToLineItemsBlock(parsedToItems(parsed), "cad");
     const reparsed = parseSummary(block);
 
     expect(reparsed.lineItems, `${fixture.name}: row count`).toHaveLength(parsed.lineItems.length);
@@ -203,7 +203,7 @@ test("SEMANTIC: reparsing the rendered block preserves rows, descriptions, and a
 
 test("TOTALS INVARIANT: subtotal, tax, grand total, and deposit are preserved", () => {
   for (const fixture of validFixtures) {
-    const v = validateConversionTotals(parseSummary(fixture.summary));
+    const v = validateConversionTotals(parseSummary(fixture.summary), "cad");
 
     expect(v.subtotalDifference, `${fixture.name}: subtotal`).toBe(0);
     expect(v.taxDifference, `${fixture.name}: tax`).toBe(0);
@@ -218,7 +218,7 @@ test("TOTALS INVARIANT: subtotal, tax, grand total, and deposit are preserved", 
 test("declared per-fixture totals match", () => {
   for (const fixture of validFixtures) {
     if (!fixture.expect) continue;
-    const v = validateConversionTotals(parseSummary(fixture.summary));
+    const v = validateConversionTotals(parseSummary(fixture.summary), "cad");
     if (fixture.expect.itemCount !== undefined) expect(v.itemCount, fixture.name).toBe(fixture.expect.itemCount);
     if (fixture.expect.subtotal !== undefined) expect(v.originalSubtotal, fixture.name).toBe(fixture.expect.subtotal);
     if (fixture.expect.tax !== undefined) expect(v.originalTax, fixture.name).toBe(fixture.expect.tax);
@@ -240,7 +240,7 @@ test("calculateItemsSubtotal matches the shipped computeTotals subtotal", () => 
 test("validation reports tax and deposit from the surrounding summary, not from items alone", () => {
   const fixture = validFixtures.find((f) => f.name === "10-deposit-percentage")!;
   const parsed = parseSummary(fixture.summary);
-  const v = validateConversionTotals(parsed);
+  const v = validateConversionTotals(parsed, "cad");
 
   expect(parsed.depositPercent, "deposit percent comes from the Pricing Summary section").toBe(30);
   expect(v.originalDepositAmount).toBeGreaterThan(0);
@@ -254,7 +254,7 @@ test("a fixed-amount deposit is not modelled by the current format", () => {
   const parsed = parseSummary(fixture.summary);
 
   expect(parsed.depositPercent).toBe(0);
-  expect(validateConversionTotals(parsed).ok).toBe(true);
+  expect(validateConversionTotals(parsed, "cad").ok).toBe(true);
 });
 
 // ── Numeric handling ──────────────────────────────────────────────────────────
@@ -280,13 +280,13 @@ test("a quantity row's explicit total is discarded in favour of quantity times r
   const [item] = parsedToItems(parsed);
 
   expect(item.total, "3 x 95, not the stated 999.99").toBe(285);
-  expect(validateConversionTotals(parsed).ok).toBe(true);
+  expect(validateConversionTotals(parsed, "cad").ok).toBe(true);
 });
 
 test("tax rounds once on the whole subtotal, not per row", () => {
   const fixture = validFixtures.find((f) => f.name === "21-rounding-sensitive")!;
   const parsed = parseSummary(fixture.summary);
-  const v = validateConversionTotals(parsed);
+  const v = validateConversionTotals(parsed, "cad");
 
   expect(v.originalTax).toBe(Math.round(v.originalSubtotal * (parsed.taxRate / 100)));
   expect(v.taxDifference).toBe(0);
@@ -294,7 +294,7 @@ test("tax rounds once on the whole subtotal, not per row", () => {
 
 test("a zero-value line item is permitted and preserved", () => {
   const fixture = validFixtures.find((f) => f.name === "20-zero-value-line-item")!;
-  const v = validateConversionTotals(parseSummary(fixture.summary));
+  const v = validateConversionTotals(parseSummary(fixture.summary), "cad");
 
   expect(v.ok).toBe(true);
   expect(v.itemCount).toBe(3);
@@ -317,10 +317,10 @@ test("DEFECT 1: a stray Subtotal row is rejected, not absorbed as a priced item"
   expect(computeTotals(parsed.lineItems, 0).subtotal, "existing parser double counts").toBe(570);
 
   // The conversion layer refuses it.
-  const v = validateConversionTotals(parsed);
+  const v = validateConversionTotals(parsed, "cad");
   expect(v.ok).toBe(false);
   expect(v.malformedRows.some((r) => r.reason === "reserved-total-row" && r.blocking)).toBe(true);
-  expect(() => assertConversionSafe(parsed)).toThrow(EstimateConversionError);
+  expect(() => assertConversionSafe(parsed, "cad")).toThrow(EstimateConversionError);
 });
 
 test("DEFECT 1: reserved totals labels are recognised in their common spellings", () => {
@@ -340,11 +340,11 @@ test("DEFECT 2: the round trip does not claim full-document byte preservation", 
   expect(fixture.summary, "fixture has an H1").toContain("# Kitchen Tap Replacement");
 
   const parsed = parseSummary(fixture.summary);
-  const block = itemsToLineItemsBlock(parsedToItems(parsed));
+  const block = itemsToLineItemsBlock(parsedToItems(parsed), "cad");
 
   expect(block, "the block carries no title").not.toContain("# Kitchen Tap Replacement");
   expect(block, "and IS byte-identical to the authoritative block").toBe(
-    lineItemsBlock(parsed.lineItems)
+    lineItemsBlock(parsed.lineItems, "cad")
   );
 });
 
@@ -352,7 +352,7 @@ test("DEFECT 2: the round trip does not claim full-document byte preservation", 
 
 test("every negative fixture produces its expected explicit finding", () => {
   for (const fixture of negativeFixtures) {
-    const v = validateConversionTotals(parseSummary(fixture.summary));
+    const v = validateConversionTotals(parseSummary(fixture.summary), "cad");
     const findings = [
       ...v.abortReasons,
       ...v.malformedRows.map((r) => `${r.reason} ${r.detail}`),
@@ -368,7 +368,7 @@ test("every negative fixture produces its expected explicit finding", () => {
     const shouldBlock = fixture.expectBlocking !== false;
     expect(v.ok, `${fixture.name}: blocking expectation`).toBe(!shouldBlock);
     if (shouldBlock) {
-      expect(() => assertConversionSafe(parseSummary(fixture.summary))).toThrow(
+      expect(() => assertConversionSafe(parseSummary(fixture.summary), "cad")).toThrow(
         EstimateConversionError
       );
     }
@@ -376,7 +376,7 @@ test("every negative fixture produces its expected explicit finding", () => {
 });
 
 test("an empty estimate is refused rather than migrated as a no-op", () => {
-  const v = validateConversionTotals(parseSummary("## Line Items\n\n## Pricing Summary\n"));
+  const v = validateConversionTotals(parseSummary("## Line Items\n\n## Pricing Summary\n"), "cad");
   expect(v.ok).toBe(false);
   expect(v.unsupportedStructures.join(" ")).toContain("no priced line items");
 });
@@ -397,7 +397,7 @@ test("the error carries the full validation for inspection", () => {
     ["## Line Items", "| Item | Qty | Unit | Rate | Cost |", "|---|---|---|---|---|", "| Subtotal |  |  |  | $10.00 |"].join("\n")
   );
   try {
-    assertConversionSafe(parsed);
+    assertConversionSafe(parsed, "cad");
     throw new Error("should have thrown");
   } catch (err) {
     expect(err).toBeInstanceOf(EstimateConversionError);
@@ -425,7 +425,7 @@ test("PRODUCTION: every expected-pass fixture preserves all totals", () => {
   expect(productionValidFixtures.length, "corpus is present").toBeGreaterThan(0);
 
   for (const fixture of productionValidFixtures) {
-    const v = validateConversionTotals(parseSummary(fixture.summary));
+    const v = validateConversionTotals(parseSummary(fixture.summary), "cad");
 
     expect(v.subtotalDifference, `${fixture.name}: subtotal`).toBe(0);
     expect(v.taxDifference, `${fixture.name}: tax`).toBe(0);
@@ -438,7 +438,7 @@ test("PRODUCTION: every expected-pass fixture preserves all totals", () => {
 
 test("PRODUCTION: every expected-failure fixture fails for its recorded reason", () => {
   for (const fixture of productionNegativeFixtures) {
-    const v = validateConversionTotals(parseSummary(fixture.summary));
+    const v = validateConversionTotals(parseSummary(fixture.summary), "cad");
     const findings = [
       ...v.abortReasons,
       ...v.malformedRows.map((r) => r.reason),
@@ -466,8 +466,8 @@ test("PRODUCTION: multi-option estimates are refused, not silently migrated", ()
   for (const fixture of multi) {
     const parsed = parseSummary(fixture.summary);
     expect(parsed.lineItems, `${fixture.name}: parser finds no priced rows`).toHaveLength(0);
-    expect(validateConversionTotals(parsed).ok).toBe(false);
-    expect(() => assertConversionSafe(parsed)).toThrow(EstimateConversionError);
+    expect(validateConversionTotals(parsed, "cad").ok).toBe(false);
+    expect(() => assertConversionSafe(parsed, "cad")).toThrow(EstimateConversionError);
   }
 });
 

@@ -45,7 +45,7 @@ export async function PATCH(
       const { data, error } = await supabaseAdmin
         .from("tpe_estimates")
         .select(
-          "id, business_id, pricing_source, customer_pricing_mode, status, sent_at, copied_at, completed_at, payment_status, invoice_amount, review_requested_at, summary"
+          "id, business_id, pricing_source, customer_pricing_mode, status, sent_at, copied_at, completed_at, payment_status, invoice_amount, review_requested_at, summary, currency"
         )
         .eq("id", estimateId)
         .eq("business_id", businessId)

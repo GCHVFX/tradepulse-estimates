@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useMemo, useEffect } from 'react';
-import { DEFAULT_CURRENCY, formatCurrency, type Currency } from '@/lib/currency';
+import { formatCurrency, type Currency } from '@/lib/currency';
 import {
   newId,
   parseCost,
@@ -87,7 +87,7 @@ export function EditableEstimateBody({
   summary,
   estimateId,
   lineItemsReadOnly = false,
-  currency = DEFAULT_CURRENCY,
+  currency,
 }: {
   summary: string;
   estimateId: string;
@@ -95,8 +95,11 @@ export function EditableEstimateBody({
   /**
    * The estimate's own persisted snapshot. Never the business setting:
    * changing that must not move an estimate that is already saved.
+   *
+   * Required. It was optional with a CAD default, and /new simply did not
+   * pass it, so every USD estimate rendered CA$ on the screen that creates it.
    */
-  currency?: Currency;
+  currency: Currency;
 }) {
   const parsed = useMemo(() => parseSummary(summary), [summary]);
   const { depositPercent } = parsed;
@@ -294,7 +297,7 @@ export function EditableEstimateBody({
     value: string,
   ) {
     const nextLine = lineItems.map(i =>
-      i.id === id ? withComputedCost({ ...i, [field]: value }) : i,
+      i.id === id ? withComputedCost({ ...i, [field]: value }, currency) : i,
     );
     setLineItems(nextLine);
     startCommitTimer(scopeItems, nextLine, beforeSections, afterSections, preambleText);

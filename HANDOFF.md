@@ -1,6 +1,6 @@
 # TradePulse handoff
 
-Updated: 2026-08-24 (Release 1 account-provisioning integrity implemented and verified locally; not committed, not deployed)
+Updated: 2026-08-24 21:51 PT (USD rendering defect fixed in the working tree; Production is rolled back to `1bdc011`; not committed, not deployed)
 
 ## Release 1: account-provisioning integrity (2026-08-24, uncommitted)
 
@@ -213,6 +213,146 @@ All five were created in an eight-second burst, two seconds apart, on the same e
 Every test-driven POST to `/api/auth/signup` goes through one wrapper, `postSignupApi()` in `tests/smoke/smoke-safety.ts`. It applies the Production gate **before** issuing any request, so a refused run creates nothing, and it accepts only the exact one-run override `ALLOW_PRODUCTION_SIGNUP_SMOKE=true`. `signup-rate-limit.spec.ts`, the spec that bypassed the old gate and created the five, now calls it. A static source test scans every file in `tests/smoke/`, with comments stripped so a comment can neither satisfy nor fail it, and fails if any spec outside the two approved wrapper files posts to that endpoint directly.
 
 **Teardown is now deterministic even with no business row.** `cleanupTestAccount()` resolves the Stripe customer from the business row when present and otherwise from `metadata['user_id']`, so a missing `tpe_businesses` row can never silently skip Stripe again. That silent skip is exactly what let the five survive a teardown that had already removed their database and Auth records. Stripe is resolved and deleted **before** any database or Auth deletion. Only an explicitly already-missing customer is tolerated; only transient failures retry, bounded at three attempts. A failed or ambiguous resolution throws with the user id and the candidate customer ids, and leaves every record needed for recovery in place.
+
+## Controlled Production verification of the currency cutover (2026-08-24)
+
+Two synthetic trial accounts were created through the real deployed signup flow, one CAD and one USD, and both were removed afterwards. No payment method was entered and no payment succeeded.
+
+### What passed
+
+**Billing is correct in both currencies.** Both subscriptions used the same existing Starter Price ID, with no new Price and no USD-specific price. The CAD account produced a `cad` trialing subscription whose upcoming invoice totals **2900 cad**; the USD account produced a `usd` trialing subscription whose upcoming invoice totals **1900 usd**. Neither had a default payment method, the only invoices were the $0 trial invoices, and the account has **0 charges and 0 succeeded PaymentIntents**.
+
+Note for future readers: `price.unit_amount` and the legacy `plan.amount` both report the Price object's CAD default (2900) even on a USD subscription. The authoritative billed figure is the upcoming invoice, which is where 1900 usd was confirmed.
+
+**Signup copy is correct.** The deployed page renders `14-day free trial, then CA$29/month` by default with the `Change currency` control collapsed. Opening it and choosing USD switches both copy locations to `14-day free trial, then US$19/month`. The Profile `Estimate currency` control is live with CAD and USD options.
+
+**Persistence is correct.** The CAD business stored `estimate_currency = 'cad'` and its estimate snapshotted `currency = 'cad'`; the USD business stored `'usd'` and its estimate snapshotted `'usd'`. The snapshot is written from the business setting at creation, as designed.
+
+**CAD rendering is correct end to end.** The CAD estimate rendered `CA$` throughout the editor and its public share page, with zero `US$` and zero bare `$`, under an `All amounts in CAD` label.
+
+### RELEASE BLOCKER, FIXED 2026-08-24 21:51 PT: USD estimates render CA$
+
+A USD estimate displays **`CA$` amounts under an `All amounts in USD` label** on the public share page, and `CA$` in the `/new` editor. The stored snapshot is correct; only the rendering is wrong. This is customer-facing and wrong in the worst way, since the label and the amounts contradict each other.
+
+Root cause, four call sites, none of which pass the estimate's currency into the already currency-aware serializer:
+
+1. `lib/estimate-summary.ts` `formatEstimateForDisplay(summary)` does not accept or forward a currency, so `formatParsedEstimateForDisplay` falls back to CAD.
+2. `lib/estimate-summary.ts` `formatEstimateForDisplayWithPricing(summary, lineItems, block)` has the same gap.
+3. `lib/estimate-pricing-mode.ts` `buildCustomerPricingView` calls both of the above without a currency, which is what the share page and the PDF render.
+4. `app/new/page.tsx` renders `EditableEstimateBody` without the `currency` prop.
+
+CAD is unaffected because CAD is the fallback. **USD must not be offered to a real contractor until this is fixed.** The signup currency control is live in Production today, so a US contractor could select USD and be billed correctly at US$19 while their customer-facing estimates show CA$.
+
+## USD rendering defect FIXED (2026-08-24 21:51 PT, uncommitted)
+
+**Status:** fixed in the working tree on `main`, fully verified locally, **not committed, not pushed, not deployed**. Production remains rolled back to `1bdc011`.
+
+### The rollback
+
+Production was rolled back to `1bdc011` because the currency release shipped a customer-facing defect: a USD estimate rendered `CA$` amounts under an `All amounts in USD` label. Billing, persistence, and the currency snapshot were all correct. Only the rendering was wrong.
+
+### Root cause
+
+One shape, repeated. A formatter declared `currency: Currency = DEFAULT_CURRENCY`, and a caller that had the snapshot in hand did not pass it. The default then silently produced CAD. Because CAD was the fallback, every CAD estimate looked right and the bug stayed invisible until a real USD estimate existed.
+
+Six call sites, not the four originally recorded. The two extra ones were found by the compiler once the defaults were removed:
+
+1. `lib/estimate-summary.ts` `formatEstimateForDisplay(summary)` took no currency.
+2. `lib/estimate-summary.ts` `formatEstimateForDisplayWithPricing(summary, lineItems, block)` had the same gap.
+3. `lib/estimate-pricing-mode.ts` `buildCustomerPricingView` called both without a currency. That is what the share page, the contractor page, and the PDF render.
+4. `app/new/page.tsx` rendered `EditableEstimateBody` and the streaming preview with no currency at all.
+5. `lib/estimate-groups.ts` `renderGroupedLineItemsBlock` and `renderGroupedPlainText` hardcoded CAD through `formatDollars(g.total)`. Grouped customer pricing could never render USD.
+6. `lib/generate-pdf.ts` used `options.currency ?? DEFAULT_CURRENCY` and **no caller ever passed `currency`**, so every PDF printed `All amounts in CAD` regardless of the estimate.
+
+A seventh, smaller one: `app/components/editable-estimate-body.tsx` called `withComputedCost({...})` with no currency, so editing a quantity field in a USD estimate rewrote that cost cell as `CA$`.
+
+### The fix
+
+Snapshot currency is now a **required parameter** on every money-emitting function. `lib/estimate-summary.ts` no longer imports `DEFAULT_CURRENCY` at all, so the serializer has no CAD value in scope to fall back to. That is enforced by the compiler, not by convention, and pinned by a test asserting the import is absent.
+
+- `formatEstimateForDisplay(summary, currency)` and `formatEstimateForDisplayWithPricing(summary, lineItems, currency, block?)` both take a required currency. Currency was deliberately moved **ahead** of the optional display block, because a caller overriding only that block used to reset the currency to CAD as a side effect.
+- `formatDollars`, `formatMoney`, `withComputedCost`, `lineItemDisplayLabel`, `lineItemsBlock`, `displayLineItemsBlock`, `pricingBlock`, `syncPreambleTotal`, and `serializeSummary` all lost their defaults.
+- `EstimatePricingRecord` now carries `currency` as a field, so no pricing view can be built without one.
+- `renderGroupedLineItemsBlock`, `renderGroupedPlainText`, `itemsToLineItemsBlock`, `validateConversionTotals`, and `assertConversionSafe` all take a required currency.
+- `GenerateEstimatePdfOptions.currency` is required and the `options = {}` default is gone. `DownloadPdfButton` takes it and the share page passes its snapshot.
+- `EditableEstimateBody` and `EstimatePricingEditor` take `currency` as a **required** prop.
+
+`parseSummary()` no longer formats. It used to call `withComputedCost(item)`, which forced the parser to pick a currency it has no way to know. The value was dead either way: `lineItemCost()` recomputes quantity times rate for every quantity row and both serializers re-format from that, so nothing displays or stores that field for a quantity item. The stored cost cell is now kept verbatim.
+
+### How /new learns the snapshot
+
+`/new` has no estimate row to query, and reading the business setting separately would be a second read that can drift. Instead `/api/generate-estimate` reads the currency **once**, before the stream opens, uses that same value for the row insert, and returns it as an `X-Estimate-Currency` response header. The client parses it with `parseCurrency` and threads it into both the editor and the streaming preview. A header rather than a body marker, so the existing `__ID__` and `__ERROR__` stream protocol is untouched and a stale client bundle simply ignores it.
+
+### Where the CAD fallback still lives, deliberately
+
+Only at database and legacy boundaries, where a historical estimate genuinely has no snapshot:
+
+- `lib/currency-db.ts` (`estimateCurrencyOf`, `readEstimateCurrency`, `readEstimateCurrencies`, `readBusinessEstimateCurrency`).
+- `lib/estimate-pricing-server.ts` `toEstimatePricingRecord`, via `estimateCurrencyOf(estimate)`.
+- `lib/payment-reminder-message.ts`, whose context currency stays optional so an old reminder does not move.
+- The initial React state on `/new`, before any estimate exists.
+
+### Tests
+
+`tests/smoke/currency-rendering.spec.ts` gained six regression tests. Each defect site was **re-introduced one at a time** and the suite re-run, to prove the tests fail on the broken code rather than merely passing beside it:
+
+| Re-introduced defect | Test that failed |
+|---|---|
+| `buildCustomerPricingView` renders CAD | `a USD estimate renders US$ in detailed customer pricing`, `the currency label and the amounts beside it always agree` |
+| `renderGroupedLineItemsBlock` renders CAD | `a USD estimate renders US$ in grouped customer pricing` |
+| `/new` drops the editor `currency` prop | `no customer-facing surface can render an estimate without its currency` |
+| PDF label ignores the snapshot | `the share page and PDF label the currency outside the pricing table` |
+
+The tests assert that a USD estimate contains `US$`, contains no `CA$`, and contains no bare `$` amount, with the CAD equivalents in reverse. `tests/smoke/currency.spec.ts` replaced its old "formatters default to CAD" test with one asserting the serializer has no default left to fall back to.
+
+### Verification actually run (2026-08-24 21:51 PT)
+
+- `git diff --check` — clean.
+- `npx tsc --noEmit` — clean.
+- Focused defect proof — each of the four sites re-introduced separately, the correct test failed each time, then restored.
+- `npx playwright test --config=playwright.unit.config.ts` — **338 passed**.
+- `npx next build` — compiled successfully in 27.4s, all routes built.
+
+### Test-account cleanup complete
+
+The remaining USD controlled-test account was deleted once its estimate-generation lease expired at `2026-08-25 04:30:12 UTC`. The lease was **waited out, not bypassed**. Deletion ran through the established `deleteAuthenticatedAccount()` procedure with the production route's own dependency implementations, and the Stripe customer `cus_V8Se6cWoFlWh33` was deleted only after the business row was confirmed gone.
+
+Production baseline verified afterwards, matching the expected numbers exactly:
+
+| Check | Expected | Actual |
+|---|---|---|
+| Live Stripe Customers | 0 | **0** |
+| Trialling / active / past-due subscriptions | 0 | **0** |
+| Auth users | 7 | **7** |
+| Businesses | 7 | **7** |
+| Estimates | 19 | **19** |
+
+Also confirmed: 0 charges, 0 succeeded PaymentIntents, 461 subscriptions all `canceled`, 0 ownerless businesses, 0 orphan estimates, and all 7 businesses plus all 19 estimates still reading `cad`.
+
+### Exact redeployment step
+
+Nothing was committed, pushed, or deployed. To redeploy the currency release:
+
+1. Review the uncommitted diff listed below.
+2. Commit it on `main` (suggested subject: `Fix USD estimate rendering`).
+3. Push to `origin/main`. Vercel deploys `main` automatically, which rolls Production **forward off `1bdc011`** to the currency release plus this fix.
+4. After the deploy, verify one USD estimate end to end on a controlled account: the `/new` editor, the public share page, and the downloaded PDF must all show `US$` with zero `CA$`, under an `All amounts in USD` label. Delete the account afterwards through the normal deletion procedure.
+
+The Production migration and the live Stripe `currency_options` are **already applied** and were unaffected by the rollback, so no database or Stripe step is needed before redeploying.
+
+### Files changed
+
+`lib/estimate-summary.ts`, `lib/estimate-groups.ts`, `lib/estimate-items.ts`, `lib/estimate-item-migration.ts`, `lib/estimate-pricing-mode.ts`, `lib/estimate-pricing-server.ts`, `lib/generate-pdf.ts`, `app/api/generate-estimate/route.ts`, `app/api/estimates/[id]/pricing-mode/route.ts`, `app/new/page.tsx`, `app/share/[id]/page.tsx`, `app/components/editable-estimate-body.tsx`, `app/components/estimate-pricing-editor.tsx`, `app/components/download-pdf-button.tsx`, `tests/smoke/currency-rendering.spec.ts`, `tests/smoke/currency.spec.ts`, `tests/smoke/estimate-items-conversion.spec.ts`, `tests/smoke/estimate-grouped-pricing.spec.ts`, `tests/smoke/estimate-pricing-mode.spec.ts`.
+
+### Removed: scripts/audit-estimate-summary-formats.ts
+
+Deleted in this commit. It was a one-off read-only operator tool from the grouped-pricing planning slice, run manually with `AUDIT_CONFIRM_READONLY=yes` after a hand-rolled `tsc` step. Nothing imported it, no npm script ran it, and neither Playwright config could reach it: both are rooted at `./tests/smoke` and the unit config uses an explicit `testMatch` allowlist. CI runs only `npm run test:smoke`. It needed a currency argument threaded through it for this fix, which is what surfaced it as dead weight. `scripts/` is now empty and gone.
+
+One consequence to know about: the sanitised production fixtures used to describe themselves as generated output, telling the reader not to edit them by hand and to regenerate with the script. With no script left, that instruction was unfollowable, so the header comments in `tests/fixtures/estimate-summaries/production-sanitised.ts` and `index.ts` were rewritten to say what is now true. The fixtures are checked-in source, hand-editable under review, and must stay sanitised with one representative per unique shape. No fixture data and no assertion changed. If a future slice needs a freshly captured corpus, the script has to be rewritten from history at `d5a1d1a^` rather than recovered from the working tree.
+
+### Design smell found in passing, not fixed
+
+`app/components/send-estimate-sheet.tsx` imports `generateEstimatePDF` and never calls it. Dead import, unrelated to this defect, left alone.
 
 ## Currency cutover COMPLETED in Production (2026-08-24)
 

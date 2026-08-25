@@ -104,6 +104,7 @@ const DRAFT: EstimatePricingRecord = {
   invoiceAmount: null,
   reviewRequestedAt: null,
   summary: SUMMARY,
+  currency: "cad",
 };
 
 test("structured detailed pricing stays byte-equivalent to the current customer display", () => {
@@ -115,7 +116,7 @@ test("structured detailed pricing stays byte-equivalent to the current customer 
 
   expect(view.ok).toBe(true);
   expect(view.renderedMode).toBe("detailed");
-  expect(view.summary).toBe(formatEstimateForDisplay(SUMMARY));
+  expect(view.summary).toBe(formatEstimateForDisplay(SUMMARY, "cad"));
   expect(view.detailedSubtotal).toBe(300);
   expect(view.tax).toBe(15);
   expect(view.total).toBe(315);
@@ -144,7 +145,7 @@ test("every convertible fixture keeps the same detailed customer view from struc
     });
 
     expect(view.ok, fixture.name).toBe(true);
-    expect(view.summary, fixture.name).toBe(formatEstimateForDisplay(fixture.summary));
+    expect(view.summary, fixture.name).toBe(formatEstimateForDisplay(fixture.summary, "cad"));
   }
 });
 
@@ -196,7 +197,7 @@ test("a quantity row with one unit and a blank unit label keeps its detailed des
   });
 
   expect(view.ok).toBe(true);
-  expect(view.summary).toBe(formatEstimateForDisplay(summary));
+  expect(view.summary).toBe(formatEstimateForDisplay(summary, "cad"));
   expect(view.summary).toContain("Service allowance (1 @ CA$40.00)");
   expect(view.summary.match(/Service allowance/g)).toHaveLength(1);
 });
@@ -261,7 +262,7 @@ test("a hidden priced row or subtotal mismatch fails closed to detailed markdown
   expect(view.ok).toBe(false);
   expect(view.error).toBe("STRUCTURED_SUBTOTAL_MISMATCH");
   expect(view.renderedMode).toBe("detailed");
-  expect(view.summary).toBe(formatEstimateForDisplay(SUMMARY));
+  expect(view.summary).toBe(formatEstimateForDisplay(SUMMARY, "cad"));
   expect(view.summary).not.toContain("| Work package | Price |");
 });
 
@@ -278,7 +279,7 @@ test("markdown estimates always use the old renderer and ignore grouped mode", (
 
   expect(view.ok).toBe(true);
   expect(view.renderedMode).toBe("detailed");
-  expect(view.summary).toBe(formatEstimateForDisplay(SUMMARY));
+  expect(view.summary).toBe(formatEstimateForDisplay(SUMMARY, "cad"));
 });
 
 test("sent markdown estimates remain on the old renderer", () => {
@@ -293,7 +294,7 @@ test("sent markdown estimates remain on the old renderer", () => {
 
   expect(view.ok).toBe(true);
   expect(view.renderedMode).toBe("detailed");
-  expect(view.summary).toBe(formatEstimateForDisplay(SUMMARY));
+  expect(view.summary).toBe(formatEstimateForDisplay(SUMMARY, "cad"));
   expect(canEditCustomerPricingMode(estimate, 0, true)).toBe(false);
 });
 

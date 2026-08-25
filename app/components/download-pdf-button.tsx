@@ -1,6 +1,7 @@
 "use client";
 
 import { generateEstimatePDF } from "@/lib/generate-pdf";
+import type { Currency } from "@/lib/currency";
 
 interface DownloadPdfButtonProps {
   title: string;
@@ -8,6 +9,8 @@ interface DownloadPdfButtonProps {
   businessName?: string;
   logoUrl?: string | null;
   photoUrls?: string[];
+  /** The estimate's snapshot currency. Required. */
+  currency: Currency;
 }
 
 export function DownloadPdfButton({
@@ -16,6 +19,7 @@ export function DownloadPdfButton({
   businessName,
   logoUrl,
   photoUrls,
+  currency,
 }: DownloadPdfButtonProps) {
   return (
     <button
@@ -25,6 +29,7 @@ export function DownloadPdfButton({
           businessName,
           logoUrl,
           photoUrls,
+          currency,
         })
       }
       className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px]"

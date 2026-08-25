@@ -1,6 +1,6 @@
 "use client";
 
-import { DEFAULT_CURRENCY, type Currency } from "@/lib/currency";
+import type { Currency } from "@/lib/currency";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -17,12 +17,12 @@ export function EstimatePricingEditor({
   structuredPricing,
   canEditMode,
   pricingError,
-  currency = DEFAULT_CURRENCY,
+  currency,
 }: {
   estimateId: string;
   summary: string;
-  /** The estimate's persisted snapshot, not the business setting. */
-  currency?: Currency;
+  /** The estimate's persisted snapshot, not the business setting. Required. */
+  currency: Currency;
   detailedSummary: string;
   groupedSummary: string;
   initialMode: CustomerPricingMode;

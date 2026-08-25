@@ -85,9 +85,18 @@ test("amounts always distinguish CA$ from US$ and never emit a bare $", () => {
   }
 });
 
-test("estimate formatters default to CAD so existing estimates do not move", () => {
-  expect(formatDollars(1234)).toBe("CA$1,234");
-  expect(formatMoney(12.5)).toBe("CA$12.50");
+test("the estimate serializer has no currency default to fall back to", () => {
+  // The USD rendering defect: formatEstimateForDisplay() and friends took
+  // `currency: Currency = DEFAULT_CURRENCY`, so any caller that forgot to
+  // pass the snapshot silently rendered CA$ on a USD estimate. Removing the
+  // import is what makes that unrepresentable rather than merely discouraged.
+  const summary = code("lib/estimate-summary.ts");
+  expect(summary).not.toContain("DEFAULT_CURRENCY");
+  expect(summary).not.toMatch(/currency: Currency\s*=/);
+
+  // Explicit CAD still renders exactly as it always did.
+  expect(formatDollars(1234, "cad")).toBe("CA$1,234");
+  expect(formatMoney(12.5, "cad")).toBe("CA$12.50");
 });
 
 test("plan prices are separate price points, not conversions", () => {

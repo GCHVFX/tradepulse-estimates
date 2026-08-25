@@ -7,12 +7,16 @@ import {
 } from "../../lib/payment-reminder-message";
 import {
   formatDollars,
+  formatEstimateForDisplay,
+  formatEstimateForDisplayWithPricing,
   formatMoney,
   parseCost,
   parseSummary,
   serializeSummary,
 } from "../../lib/estimate-summary";
-import type { Currency } from "../../lib/currency";
+import { buildCustomerPricingView } from "../../lib/estimate-pricing-mode";
+import { renderGroupedLineItemsBlock } from "../../lib/estimate-groups";
+import { allAmountsInLabel, type Currency } from "../../lib/currency";
 
 function code(path: string): string {
   return readFileSync(path, "utf8")
@@ -166,7 +170,9 @@ test("a payment link is unaffected by the currency", () => {
 test("the editor takes the estimate snapshot and never the business setting", () => {
   const editor = code("app/components/editable-estimate-body.tsx");
 
-  expect(editor).toContain("currency = DEFAULT_CURRENCY");
+  // Required, not defaulted. See the /new regression tests below.
+  expect(editor).toContain("currency: Currency;");
+  expect(editor).not.toContain("currency = DEFAULT_CURRENCY");
   expect(editor).not.toContain("estimate_currency");
   // Saving re-serializes with the same snapshot, so a save cannot rewrite it.
   expect(editor).toMatch(/serializeSummary\([\s\S]{0,600}currency,/);
@@ -201,7 +207,137 @@ test("the share page and PDF label the currency outside the pricing table", () =
   expect(share).toContain("allAmountsInLabel(estimateCurrency)");
 
   const pdf = code("lib/generate-pdf.ts");
-  expect(pdf).toContain("allAmountsInLabel(options.currency ?? DEFAULT_CURRENCY)");
+  expect(pdf).toContain("allAmountsInLabel(options.currency)");
+  // Not `?? DEFAULT_CURRENCY`: a USD estimate printed "All amounts in CAD"
+  // because no caller ever passed one.
+  expect(pdf).not.toContain("DEFAULT_CURRENCY");
   // After the table flush, so no currency code can land inside an amount cell.
   expect(pdf.indexOf("flushTable();")).toBeLessThan(pdf.indexOf("allAmountsInLabel(options.currency"));
+});
+
+// ── The USD rendering defect ────────────────────────────────────────────────
+//
+// A USD estimate rendered CA$ on every customer-facing surface. The cause was
+// one shape repeated in four places: a formatter that declared
+// `currency: Currency = DEFAULT_CURRENCY` and a caller that had the snapshot
+// but did not pass it. The tests below fail on the pre-fix code.
+
+/** Every amount in `s`, with its currency prefix. */
+function amounts(s: string): string[] {
+  return s.match(/(?:CA|US)?\$[\d,]+(?:\.\d{2})?/g) ?? [];
+}
+
+function expectOnly(currency: Currency, rendered: string, label: string) {
+  const wrong = currency === "usd" ? "CA$" : "US$";
+  const right = currency === "usd" ? "US$" : "CA$";
+  expect(amounts(rendered).length, `${label}: must render amounts at all`).toBeGreaterThan(0);
+  expect(rendered, `${label}: must not contain ${wrong}`).not.toContain(wrong);
+  expect(rendered, `${label}: must contain ${right}`).toContain(right);
+  // A bare "$1,200" is just as wrong as the other currency's prefix.
+  expect(rendered, `${label}: no unprefixed amounts`).not.toMatch(/(?<![A-Z])\$\d/);
+}
+
+const PRICED_RECORD = {
+  id: "estimate-1",
+  businessId: "business-1",
+  pricingSource: "markdown",
+  customerPricingMode: "detailed",
+  status: "draft",
+  sentAt: null,
+  copiedAt: null,
+  completedAt: null,
+  paymentStatus: null,
+  invoiceAmount: null,
+  reviewRequestedAt: null,
+};
+
+test("formatEstimateForDisplay renders the estimate's own currency, not CAD", () => {
+  for (const currency of ["cad", "usd"] as const) {
+    expectOnly(
+      currency,
+      formatEstimateForDisplay(estimateSummary(currency), currency),
+      `display formatter (${currency})`
+    );
+  }
+});
+
+test("formatEstimateForDisplayWithPricing renders the estimate's own currency", () => {
+  for (const currency of ["cad", "usd"] as const) {
+    const parsed = parseSummary(estimateSummary(currency));
+    expectOnly(
+      currency,
+      formatEstimateForDisplayWithPricing(estimateSummary(currency), parsed.lineItems, currency),
+      `pricing formatter (${currency})`
+    );
+  }
+});
+
+test("a USD estimate renders US$ in detailed customer pricing", () => {
+  for (const currency of ["cad", "usd"] as const) {
+    const view = buildCustomerPricingView({
+      estimate: { ...PRICED_RECORD, summary: estimateSummary(currency), currency },
+      items: [],
+      featureEnabled: false,
+    });
+    expectOnly(currency, view.summary, `detailed pricing view (${currency})`);
+  }
+});
+
+test("a USD estimate renders US$ in grouped customer pricing", () => {
+  for (const currency of ["cad", "usd"] as const) {
+    const block = renderGroupedLineItemsBlock(
+      [
+        { total: 650, groupLabel: "Demolition and disposal" },
+        { total: 1450, groupLabel: "Plumbing" },
+      ],
+      currency
+    );
+    expectOnly(currency, block, `grouped line items (${currency})`);
+  }
+});
+
+test("the currency label and the amounts beside it always agree", () => {
+  // The exact defect a customer would see: "All amounts in USD" printed under
+  // a table of CA$ figures. Composed the way the share page composes it, from
+  // the pricing view plus the label, so a caller that drops the snapshot fails
+  // here and not only in the formatter's own unit test.
+  for (const currency of ["cad", "usd"] as const) {
+    const view = buildCustomerPricingView({
+      estimate: { ...PRICED_RECORD, summary: estimateSummary(currency), currency },
+      items: [],
+      featureEnabled: false,
+    });
+    const page = [view.summary, allAmountsInLabel(currency)].join("\n");
+
+    expect(page).toContain(currency === "usd" ? "All amounts in USD" : "All amounts in CAD");
+    expectOnly(currency, page, `labelled page (${currency})`);
+  }
+});
+
+test("no customer-facing surface can render an estimate without its currency", () => {
+  // /new was the fourth call site: it rendered EditableEstimateBody and the
+  // streaming preview with no currency at all, so every USD estimate showed
+  // CA$ on the screen that creates it.
+  const newPage = code("app/new/page.tsx");
+  expect(newPage).toContain("X-Estimate-Currency");
+  expect(newPage).toContain("currency={estimateCurrency}");
+  expect(newPage).toContain("formatEstimateForDisplay(estimate, estimateCurrency)");
+
+  // The generate route snapshots and reports the same value it saved.
+  const generate = code("app/api/generate-estimate/route.ts");
+  expect(generate).toContain("estimateCurrencyPatch(estimateCurrency)");
+  expect(generate).toContain('"X-Estimate-Currency": estimateCurrency');
+
+  // The pricing view carries the snapshot on the record itself.
+  const mode = code("lib/estimate-pricing-mode.ts");
+  expect(mode).toContain("formatEstimateForDisplay(estimate.summary, estimate.currency)");
+  expect(mode).toContain("renderGroupedLineItemsBlock(groupable, estimate.currency)");
+
+  // ...and the only CAD fallback left sits at the database boundary.
+  const server = code("lib/estimate-pricing-server.ts");
+  expect(server).toContain("currency: estimateCurrencyOf(estimate)");
+
+  // The share page hands its snapshot to the PDF too.
+  const share = code("app/share/[id]/page.tsx");
+  expect(share).toContain("currency={estimateCurrency}");
 });

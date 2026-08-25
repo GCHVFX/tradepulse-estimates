@@ -17,7 +17,7 @@ export default async function ShareEstimatePage({
   const { data: estimate } = await supabaseAdmin
     .from("tpe_estimates")
     .select(
-      "id, title, summary, customer_name, customer_phone, customer_email, job_address, prepared_by, created_at, business_id, include_photos, pricing_source, customer_pricing_mode, status, sent_at, copied_at, completed_at, payment_status, invoice_amount, review_requested_at"
+      "id, title, summary, customer_name, customer_phone, customer_email, job_address, prepared_by, created_at, business_id, include_photos, pricing_source, customer_pricing_mode, status, sent_at, copied_at, completed_at, payment_status, invoice_amount, review_requested_at, currency"
     )
     .eq("id", id)
     .maybeSingle();
@@ -151,6 +151,7 @@ export default async function ShareEstimatePage({
             businessName={businessName}
             logoUrl={logoUrl}
             photoUrls={estimate.include_photos ? photoUrls : []}
+            currency={estimateCurrency}
           />
         </div>
       </main>

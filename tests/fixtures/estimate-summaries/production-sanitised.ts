@@ -1,16 +1,21 @@
 /**
- * SANITISED production estimate summaries, exported by
- * scripts/audit-estimate-summary-formats.ts on 2026-07-31.
+ * SANITISED production estimate summaries, captured from the live corpus on
+ * 2026-07-31.
  *
- * DO NOT EDIT BY HAND. Regenerate with the audit script.
+ * This file is checked-in source, not build output. There is no generator, so
+ * edit it by hand when a reviewed change is warranted: a newly discovered
+ * stored shape, or a correction to an existing entry. Two rules hold for any
+ * edit.
  *
- * Every value here has been through sanitiseSummary(): business names, emails,
- * phone numbers, URLs, postal codes, and street addresses are replaced with
- * deterministic placeholders. No production id appears; fixture names are local
- * sequence numbers. No customer names, contact details, or addresses were
- * fetched from the database in the first place.
+ *   1. Never paste unsanitised production content. Business names, emails,
+ *      phone numbers, URLs, postal codes, and street addresses must be
+ *      deterministic placeholders, matching the entries already here.
+ *   2. Keep one representative per unique shape. This is a corpus of shapes,
+ *      not a copy of every stored estimate.
  *
- * One representative per unique shape, not every stored estimate.
+ * Everything already present follows both. No production id appears, fixture
+ * names are local sequence numbers, and no customer names, contact details, or
+ * addresses were ever fetched from the database.
  */
 import type { EstimateFixture } from "./index";
 

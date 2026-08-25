@@ -25,6 +25,7 @@ import {
   type LineItem,
   type ParsedSummary,
 } from "./estimate-summary";
+import type { Currency } from "./currency";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -282,8 +283,11 @@ export function draftToLineItem(draft: EstimateItemDraft): LineItem {
  * customer summary rows, no identifiers, no metadata, no subtotal or tax or
  * deposit rows.
  */
-export function itemsToLineItemsBlock(items: EstimateItemDraft[]): string {
-  return lineItemsBlock(items.map(draftToLineItem));
+export function itemsToLineItemsBlock(
+  items: EstimateItemDraft[],
+  currency: Currency
+): string {
+  return lineItemsBlock(items.map(draftToLineItem), currency);
 }
 
 export function calculateItemTotal(item: EstimateItemDraft): number {
@@ -387,7 +391,13 @@ export function findMalformedRows(items: EstimateItemDraft[]): MalformedRow[] {
  * Line items alone cannot reconstruct them, and this function does not pretend
  * otherwise.
  */
-export function validateConversionTotals(parsed: ParsedSummary): ConversionValidation {
+// `currency` only decides which prefix both sides of the byte-identity check
+// are rendered with. The comparison itself is currency-invariant, but the
+// serializer requires a real one, so the caller passes the estimate snapshot.
+export function validateConversionTotals(
+  parsed: ParsedSummary,
+  currency: Currency
+): ConversionValidation {
   const items = parsedToItems(parsed);
 
   const originalTotals = computeTotals(parsed.lineItems, parsed.taxRate);
@@ -399,8 +409,8 @@ export function validateConversionTotals(parsed: ParsedSummary): ConversionValid
   const originalDeposit = Math.round((originalTotals.total * parsed.depositPercent) / 100);
   const convertedDeposit = Math.round((convertedTotals.total * parsed.depositPercent) / 100);
 
-  const expectedBlock = lineItemsBlock(parsed.lineItems);
-  const actualBlock = itemsToLineItemsBlock(items);
+  const expectedBlock = lineItemsBlock(parsed.lineItems, currency);
+  const actualBlock = itemsToLineItemsBlock(items, currency);
   const byteIdentical = expectedBlock === actualBlock;
 
   const malformedRows = findMalformedRows(items);
@@ -499,8 +509,11 @@ export function validateConversionTotals(parsed: ParsedSummary): ConversionValid
  * when the estimate must not be migrated. This is the call a future backfill
  * should use, so a bad estimate fails loudly and is left on the markdown path.
  */
-export function assertConversionSafe(parsed: ParsedSummary): EstimateItemDraft[] {
-  const validation = validateConversionTotals(parsed);
+export function assertConversionSafe(
+  parsed: ParsedSummary,
+  currency: Currency
+): EstimateItemDraft[] {
+  const validation = validateConversionTotals(parsed, currency);
   if (!validation.ok) throw new EstimateConversionError(validation);
   return parsedToItems(parsed);
 }

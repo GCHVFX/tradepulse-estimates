@@ -12,6 +12,7 @@
 import { supabaseAdmin } from "./supabase-server";
 import { parseSummary, computeTotals } from "./estimate-summary";
 import { assignGroupLabel } from "./estimate-groups";
+import { estimateCurrencyOf } from "./currency-db";
 import {
   parsedToItems,
   validateConversionTotals,
@@ -234,7 +235,7 @@ export async function convertEstimateToStructuredItems(
   //    not found rather than leaking its existence.
   const { data: estimate } = await supabaseAdmin
     .from("tpe_estimates")
-    .select("id, business_id, status, sent_at, summary, pricing_source")
+    .select("id, business_id, status, sent_at, summary, pricing_source, currency")
     .eq("id", estimateId)
     .eq("business_id", business.id)
     .maybeSingle();
@@ -278,7 +279,10 @@ export async function convertEstimateToStructuredItems(
 
   // 5. Parse, convert, validate. The same functions the invariant suite covers.
   const parsed = parseSummary(summary);
-  const validation: ConversionValidation = validateConversionTotals(parsed);
+  const validation: ConversionValidation = validateConversionTotals(
+    parsed,
+    estimateCurrencyOf(estimate)
+  );
   const items = parsedToItems(parsed);
 
   const totals = buildTotals(validation, parsed.taxRate, items);
