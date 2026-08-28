@@ -34,6 +34,7 @@ export default defineConfig({
     "manual-payment-reminder.spec.ts",
     "cost-amplification-guards.spec.ts",
     "estimate-generation-claims.spec.ts",
+    "share-link-canonical-host.spec.ts",
   ],
   fullyParallel: false,
   workers: 1,

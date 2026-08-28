@@ -12,7 +12,7 @@ import {
   SMS_OPTED_OUT_MESSAGE,
   SMS_OPTED_OUT_CODE,
 } from "@/lib/sms-suppression";
-import { SITE_URL } from "@/lib/site-url";
+import { canonicalUrl } from "@/lib/site-url";
 
 function formatPhone(raw: string): string {
   if (!raw || typeof raw !== "string") {
@@ -106,10 +106,12 @@ if (!hasAccess) return applyTo(NextResponse.json({ error: "Subscription required
     return applyTo(NextResponse.json({ error: "Estimate not found" }, { status: 404 }));
   }
 
-  // Pinned to the canonical host rather than the request origin. A
-  // contractor signed in on a retired alias domain would otherwise mint share
-  // links on that alias, and those links live in customer inboxes forever.
-  const shareUrl = `${SITE_URL}/share/${estimateId}`;
+  // Pinned to the canonical host, never SITE_URL. A share link is a
+  // permanent artifact that ends up sitting in a customer's phone, so it
+  // must never resolve to a Vercel deployment URL or a stale env value. A
+  // contractor signed in on a retired alias domain would otherwise mint
+  // share links on that alias too, and those links live in inboxes forever.
+  const shareUrl = canonicalUrl(`/share/${estimateId}`);
 
   const customerName = (estimate.customer_name ?? "").trim();
   const greeting = customerName ? `Hi ${customerName},` : "Hi,";

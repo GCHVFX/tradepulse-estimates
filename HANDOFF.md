@@ -1,6 +1,82 @@
 # TradePulse handoff
 
-Updated: 2026-08-27 21:36 PT (domain migration, code half: every TradePulse URL now derives from lib/site-url.ts, canonical is the apex tradepulse-estimates.com)
+Updated: 2026-08-27 22:05 PT (share links pinned to canonicalUrl(), never SITE_URL, closing a real risk that a share link could resolve to a Vercel deployment URL)
+
+## Share links pinned to the canonical host, not SITE_URL (2026-08-27 22:05 PT)
+
+**Status:** fixed on `main`, verified, not yet committed.
+
+### The bug
+
+`app/api/send-email/route.ts` and `app/api/send-sms/route.ts` built the
+customer-facing share link from `SITE_URL` (see the migration section below).
+`SITE_URL` resolves through `NEXT_PUBLIC_APP_URL`, then the Vercel deployment
+URL, then localhost, before falling back to the canonical host. A share link is
+a permanent artifact that ends up sitting in a customer's phone or inbox
+indefinitely, so it must always be the canonical domain regardless of which
+deployment or env state generated it. The comments already in both files
+claimed "pinned to the canonical host," but the code underneath read
+`SITE_URL`, which is not canonical, it's runtime-dependent. If
+`NEXT_PUBLIC_APP_URL` were ever unset or wrong in Production, a real customer
+share link could have been minted on a bare `*.vercel.app` deployment URL.
+
+### The fix
+
+Both routes now import `canonicalUrl` instead of `SITE_URL` from
+`lib/site-url.ts`, and build `canonicalUrl(\`/share/${estimateId}\`)`.
+`canonicalUrl()` is a plain wrapper around the `CANONICAL_SITE_URL` constant and
+consults no environment variable at all, so this class of failure is now
+structurally impossible rather than dependent on `NEXT_PUBLIC_APP_URL` being
+set correctly.
+
+Nothing else changed. The billing routes (`checkout`, `portal`, `upgrade`) keep
+`SITE_URL` deliberately: their `success_url` / `cancel_url` / `return_url` are
+transient, live only for the length of a Stripe session, and should follow the
+request origin so a preview deployment round-trips to itself. The password
+reset redirect and the Twilio signature URL were also left on `SITE_URL`,
+out of scope for this task.
+
+### New test
+
+`tests/smoke/share-link-canonical-host.spec.ts`, added to the unit allowlist.
+Two tests:
+
+1. Sets `NEXT_PUBLIC_APP_URL`, `VERCEL_URL`, and `NEXT_PUBLIC_VERCEL_URL` to
+   junk deployment-shaped values, dynamically imports `lib/site-url.ts`
+   **after** that mutation (a static import would have been hoisted ahead of
+   it), and asserts `canonicalUrl("/share/est_123")` is exactly
+   `https://tradepulse-estimates.com/share/est_123`. Also asserts `SITE_URL`
+   itself **did** pick up the junk value, proving the pollution was real and
+   the test isn't accidentally passing because nothing changed.
+2. A source-level guard, matching the convention in
+   `signup-currency-layout.spec.ts`: both route files must import
+   `canonicalUrl`, must contain no `SITE_URL` reference, and must build
+   `shareUrl` with exactly `canonicalUrl(\`/share/${estimateId}\`)`. Comments
+   are stripped before matching, so a comment alone can't satisfy it.
+
+Reverting either route file to `SITE_URL` fails both tests.
+
+### Verification actually run (2026-08-27 22:05 PT)
+
+- `npx tsc --noEmit` — clean.
+- `npx next build` — compiled successfully in 20.5s, 56/56 static pages, no new
+  warnings.
+- `npx playwright test --config=playwright.unit.config.ts` — **371 passed, 0
+  failed** (369 before this change, +2 new). The new spec run in isolation:
+  **2 passed**.
+- `grep -n SITE_URL app/api/send-email/route.ts app/api/send-sms/route.ts` —
+  the only remaining occurrences in either file are the explanatory comment
+  text ("never SITE_URL"), not code. No import, no reference in the URL
+  construction.
+
+No dashboard was touched, no account was created, no Production data was
+touched.
+
+### Files changed
+
+`app/api/send-email/route.ts`, `app/api/send-sms/route.ts`,
+`tests/smoke/share-link-canonical-host.spec.ts` (new),
+`playwright.unit.config.ts`, `HANDOFF.md`.
 
 ## Domain migration, code half (2026-08-27)
 
