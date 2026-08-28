@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
 import { recoverStoredStripeBillingReferences } from "@/lib/stripe-billing-recovery";
+import { SITE_URL } from "@/lib/site-url";
 
 function wantsHtmlRedirect(request: NextRequest): boolean {
   return request.headers.get("accept")?.includes("text/html") ?? false;
@@ -41,7 +42,7 @@ async function createProCheckoutUrl(
   user: { id: string; email?: string },
   business: UpgradeBusiness
 ): Promise<string | null> {
-  const origin = request.headers.get("origin") ?? process.env.NEXT_PUBLIC_APP_URL ?? "https://www.trytradepulse.com";
+  const origin = request.headers.get("origin") ?? SITE_URL;
   const references = await recoverStoredStripeBillingReferences(
     stripe,
     {
@@ -148,7 +149,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     try {
       const subscription = await stripe.subscriptions.retrieve(business.stripe_subscription_id);
       const itemId = subscription.items.data[0]?.id;
-      const origin = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.trytradepulse.com";
+      const origin = SITE_URL;
 
       if (!itemId || !business.stripe_customer_id) {
         return respondWithError(request, applyTo, "Subscription not ready for upgrade", 400);

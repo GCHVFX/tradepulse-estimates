@@ -18,6 +18,7 @@ import { readEstimateCurrencies } from "@/lib/currency-db";
 import { DEFAULT_CURRENCY } from "@/lib/currency";
 import { computeNextReminderStage, formatDueDateText } from "@/lib/payment-reminder-stage";
 import { claimDelivery, markDeliverySent } from "@/lib/delivery-claims";
+import { ESTIMATES_FROM } from "@/lib/email-addresses";
 
 const MAX_REMINDERS_PER_RUN = 100;
 
@@ -201,7 +202,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           console.info(`[payment-reminders] duplicate email claim skipped for estimate ${estimate.id}`);
         } else {
           const result = await resend.emails.send({
-            from: "TradePulse Estimates <estimates@trytradepulse.com>",
+            from: ESTIMATES_FROM,
             to: recipient,
             subject: `Invoice reminder -- ${businessName}`,
             html,

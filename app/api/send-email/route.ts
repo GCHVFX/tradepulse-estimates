@@ -6,6 +6,8 @@ import { Resend } from "resend";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
 import { claimDelivery, markDeliverySent } from "@/lib/delivery-claims";
 import { normalizeEmail } from "@/lib/request-guards";
+import { SITE_URL } from "@/lib/site-url";
+import { ESTIMATES_FROM } from "@/lib/email-addresses";
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const { supabase, applyTo } = createApiClient(request);
@@ -108,12 +110,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return applyTo(NextResponse.json({ error: "This estimate was already sent by email to this customer" }, { status: 409 }));
   }
 
-  const origin =
-    request.headers.get("origin") ??
-    process.env.NEXT_PUBLIC_APP_URL ??
-    "https://www.trytradepulse.com";
-
-  const shareUrl = `${origin}/share/${estimateId}`;
+  // Pinned to the canonical host rather than the request origin, for the
+  // same reason as the SMS share link in app/api/send-sms/route.ts.
+  const shareUrl = `${SITE_URL}/share/${estimateId}`;
   const businessName = business?.name?.trim() ?? "";
   const customerName = (estimate.customer_name ?? "").trim();
   const greeting = customerName ? `Hi ${customerName},` : "Hi,";
@@ -124,7 +123,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   try {
     const result = await resend.emails.send({
-      from: "TradePulse Estimates <estimates@trytradepulse.com>",
+      from: ESTIMATES_FROM,
       to: recipient,
       subject,
       html: `

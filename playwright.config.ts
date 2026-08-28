@@ -11,7 +11,8 @@
  * as CI secrets — never hardcode real values in test files):
  *
  *   PLAYWRIGHT_BASE_URL             Base URL to run against. Defaults to
- *                                   https://trytradepulse.com (production).
+ *                                   https://tradepulse-estimates.com
+ *                                   (production, the canonical apex host).
  *
  *   NEXT_PUBLIC_SUPABASE_URL        Supabase project URL.
  *   SUPABASE_SERVICE_ROLE_KEY       Service-role key, used only for test
@@ -54,7 +55,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: [["list"]],
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "https://trytradepulse.com",
+    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "https://tradepulse-estimates.com",
     trace: "on-first-retry",
   },
   projects: [

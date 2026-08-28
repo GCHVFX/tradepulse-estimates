@@ -3,19 +3,21 @@ import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { PLUMBING_ESTIMATE_TEMPLATE } from "./content";
+import { CANONICAL_URL, CANONICAL_DOMAIN } from "@/lib/site-url";
+import { SUPPORT_EMAIL } from "@/lib/email-addresses";
 
 export const metadata: Metadata = {
   title: "Plumbing Estimate Template: How to Write Quotes That Close Jobs",
   description:
     "Professional plumbing estimate template with step-by-step guide. See exactly what to include in a quote: scope, line items, payment terms, assumptions. Built for plumbers.",
-  alternates: { canonical: "https://trytradepulse.com/plumbing-estimate-template" },
+  alternates: { canonical: `${CANONICAL_URL}/plumbing-estimate-template` },
   openGraph: {
     title: "Plumbing Estimate Template: How to Write Quotes That Close Jobs",
     description:
       "Professional plumbing estimate template with step-by-step guide. See exactly what to include in a quote: scope, line items, payment terms, assumptions. Built for plumbers.",
-    url: "https://trytradepulse.com/plumbing-estimate-template",
+    url: `${CANONICAL_URL}/plumbing-estimate-template`,
     siteName: "TradePulse",
-    images: [{ url: "https://trytradepulse.com/opengraph-image.png", width: 1200, height: 630, alt: "TradePulse Estimates" }],
+    images: [{ url: `${CANONICAL_URL}/opengraph-image.png`, width: 1200, height: 630, alt: "TradePulse Estimates" }],
     locale: "en_CA",
     type: "article",
   },
@@ -24,7 +26,7 @@ export const metadata: Metadata = {
     title: "Plumbing Estimate Template: How to Write Quotes That Close Jobs",
     description:
       "Professional plumbing estimate template with step-by-step guide. See exactly what to include in a quote: scope, line items, payment terms, assumptions.",
-    images: ["https://trytradepulse.com/opengraph-image.png"],
+    images: [`${CANONICAL_URL}/opengraph-image.png`],
   },
 };
 
@@ -151,12 +153,12 @@ export default function PlumbingEstimateTemplatePage() {
       <footer className="text-center py-8 text-sm text-slate-500">
         <p>
           TradePulse Estimates,{" "}
-          <a href="https://trytradepulse.com" className="hover:text-slate-300 transition-colors">
-            trytradepulse.com
+          <a href={CANONICAL_URL} className="hover:text-slate-300 transition-colors">
+            {CANONICAL_DOMAIN}
           </a>
         </p>
         <div className="mt-2 flex items-center justify-center gap-4 text-xs flex-wrap">
-          <a href="mailto:support@trytradepulse.com" className="hover:text-slate-300 transition-colors">support@trytradepulse.com</a>
+          <a href={`mailto:${SUPPORT_EMAIL}`} className="hover:text-slate-300 transition-colors">{SUPPORT_EMAIL}</a>
           <a href="/terms" className="hover:text-slate-300 transition-colors">Terms of Service</a>
           <a href="/privacy" className="hover:text-slate-300 transition-colors">Privacy Policy</a>
         </div>

@@ -1,17 +1,19 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { JsonLd } from "@/app/components/json-ld";
+import { CANONICAL_URL, CANONICAL_DOMAIN } from "@/lib/site-url";
+import { SUPPORT_EMAIL } from "@/lib/email-addresses";
 
 export const metadata: Metadata = {
   title: "How Much Does a Plumber Cost in 2026? Real Pricing Guide",
   description: "Real plumbing costs for common jobs in Canada. Water heaters, drain repairs, fixture installs, and more. Prices include labour and materials.",
-  alternates: { canonical: "https://trytradepulse.com/plumbing-cost" },
+  alternates: { canonical: `${CANONICAL_URL}/plumbing-cost` },
   openGraph: {
     title: "How Much Does a Plumber Cost in 2026? Real Pricing Guide",
     description: "Real plumbing costs for common jobs in Canada. Water heaters, drain repairs, fixture installs, and more. Prices include labour and materials.",
-    url: "https://trytradepulse.com/plumbing-cost",
+    url: `${CANONICAL_URL}/plumbing-cost`,
     siteName: "TradePulse",
-    images: [{ url: "https://trytradepulse.com/opengraph-image.png", width: 1200, height: 630, alt: "TradePulse Estimates" }],
+    images: [{ url: `${CANONICAL_URL}/opengraph-image.png`, width: 1200, height: 630, alt: "TradePulse Estimates" }],
     locale: "en_CA",
     type: "website",
   },
@@ -19,7 +21,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "How Much Does a Plumber Cost in 2026? Real Pricing Guide",
     description: "Real plumbing costs for common jobs in Canada. Water heaters, drain repairs, fixture installs, and more. Prices include labour and materials.",
-    images: ["https://trytradepulse.com/opengraph-image.png"],
+    images: [`${CANONICAL_URL}/opengraph-image.png`],
   },
 };
 
@@ -253,12 +255,12 @@ export default function PlumbingCostPage() {
       <footer className="text-center py-8 text-sm text-slate-400">
         <p>
           TradePulse Estimates,{" "}
-          <a href="https://trytradepulse.com" className="hover:text-slate-600 transition-colors">
-            trytradepulse.com
+          <a href={CANONICAL_URL} className="hover:text-slate-600 transition-colors">
+            {CANONICAL_DOMAIN}
           </a>
         </p>
         <div className="mt-2 flex items-center justify-center gap-4 text-xs flex-wrap">
-          <a href="mailto:support@trytradepulse.com" className="hover:text-slate-600 transition-colors">support@trytradepulse.com</a>
+          <a href={`mailto:${SUPPORT_EMAIL}`} className="hover:text-slate-600 transition-colors">{SUPPORT_EMAIL}</a>
           <a href="/terms" className="hover:text-slate-600 transition-colors">Terms of Service</a>
           <a href="/privacy" className="hover:text-slate-600 transition-colors">Privacy Policy</a>
         </div>

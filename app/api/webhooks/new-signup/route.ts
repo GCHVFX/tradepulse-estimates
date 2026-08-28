@@ -1,5 +1,6 @@
 import { Resend } from 'resend';
 import { NextRequest, NextResponse } from 'next/server';
+import { ESTIMATES_EMAIL } from "@/lib/email-addresses";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -14,7 +15,7 @@ export async function POST(request: NextRequest) {
   const createdAt = body?.record?.created_at ?? '';
 
   await resend.emails.send({
-    from: 'estimates@trytradepulse.com',
+    from: ESTIMATES_EMAIL,
     to: process.env.NOTIFY_EMAIL!,
     subject: 'New TradePulse signup',
     text: `New signup\n\nEmail: ${email}\nTime: ${createdAt}\n\nView in Supabase:\nhttps://supabase.com/dashboard/project/fctequqcwxyhmnjgxixg/auth/users`,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
 import { stripe } from "@/lib/stripe";
+import { SITE_URL } from "@/lib/site-url";
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const { supabase, applyTo } = createApiClient(request);
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return applyTo(NextResponse.redirect(new URL("/api/billing/checkout", request.url), 307));
   }
 
-  const origin = request.headers.get("origin") ?? process.env.NEXT_PUBLIC_APP_URL ?? "https://www.trytradepulse.com";
+  const origin = request.headers.get("origin") ?? SITE_URL;
 
   try {
     const session = await stripe.billingPortal.sessions.create({

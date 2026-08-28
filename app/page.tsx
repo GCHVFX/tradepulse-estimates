@@ -7,19 +7,20 @@ import { TradeExamples } from "@/app/components/TradeExamples";
 import { STARTER_MONTHLY_PRICE_CAD } from "@/lib/plan-pricing";
 import { headers } from "next/headers";
 import { currencyFromCountry, currencyPrefix, formatMonthlyPlanPrice, planMonthlyPrice } from "@/lib/currency";
+import { CANONICAL_URL } from "@/lib/site-url";
 
 export const metadata: Metadata = {
   title: "Estimate Software for Contractors & Trades | TradePulse",
   description: `Generate professional estimates in seconds. Send quotes from the job site via text or email. Built for Canadian plumbers, electricians, and trades. CA$${STARTER_MONTHLY_PRICE_CAD}/month.`,
-  alternates: { canonical: "https://trytradepulse.com" },
+  alternates: { canonical: CANONICAL_URL },
   openGraph: {
     title: "Professional Estimates in Seconds | TradePulse",
     description: "Create and send professional estimates from the job site in seconds. Built for Canadian contractors.",
-    url: "https://trytradepulse.com",
+    url: CANONICAL_URL,
     siteName: "TradePulse",
     images: [
       {
-        url: "https://trytradepulse.com/social-card.png",
+        url: `${CANONICAL_URL}/social-card.png`,
         width: 1200,
         height: 630,
         alt: "TradePulse Estimates",
@@ -32,7 +33,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Professional Estimates in Seconds | TradePulse",
     description: "Create and send professional estimates from the job site in seconds.",
-    images: ["https://trytradepulse.com/social-card.png"],
+    images: [`${CANONICAL_URL}/social-card.png`],
   },
 };
 

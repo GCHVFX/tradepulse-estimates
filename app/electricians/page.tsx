@@ -5,17 +5,19 @@ import { EstimateDemo } from "@/app/components/EstimateDemo";
 import { EstimateDemoElectrical } from "@/app/components/EstimateDemoElectrical";
 import { JsonLd } from "@/app/components/json-ld";
 import { STARTER_MONTHLY_PRICE_CAD } from "@/lib/plan-pricing";
+import { CANONICAL_URL, CANONICAL_DOMAIN } from "@/lib/site-url";
+import { SUPPORT_EMAIL } from "@/lib/email-addresses";
 
 export const metadata: Metadata = {
   title: "Estimating Software for Electricians | TradePulse",
   description: "Send professional electrical estimates in seconds. Built for solo electricians and small electrical contractors in Canada.",
-  alternates: { canonical: "https://trytradepulse.com/electricians" },
+  alternates: { canonical: `${CANONICAL_URL}/electricians` },
   openGraph: {
     title: "Estimating Software for Electricians | TradePulse",
     description: "Send professional electrical estimates in seconds. Built for solo electricians and small electrical contractors in Canada.",
-    url: "https://trytradepulse.com/electricians",
+    url: `${CANONICAL_URL}/electricians`,
     siteName: "TradePulse",
-    images: [{ url: "https://trytradepulse.com/opengraph-image.png", width: 1200, height: 630, alt: "TradePulse Estimates" }],
+    images: [{ url: `${CANONICAL_URL}/opengraph-image.png`, width: 1200, height: 630, alt: "TradePulse Estimates" }],
     locale: "en_CA",
     type: "website",
   },
@@ -23,7 +25,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Estimating Software for Electricians | TradePulse",
     description: "Send professional electrical estimates in seconds. Built for solo electricians and small electrical contractors in Canada.",
-    images: ["https://trytradepulse.com/opengraph-image.png"],
+    images: [`${CANONICAL_URL}/opengraph-image.png`],
   },
 };
 
@@ -36,7 +38,7 @@ export default function ElectriciansPage() {
         "name": "TradePulse Estimates",
         "applicationCategory": "BusinessApplication",
         "description": "Create and send professional trade estimates in seconds from your phone.",
-        "url": "https://trytradepulse.com",
+        "url": CANONICAL_URL,
         "operatingSystem": "Web, iOS, Android",
         "offers": {
           "@type": "Offer",
@@ -152,14 +154,14 @@ export default function ElectriciansPage() {
 
       <footer className="hidden sm:block text-center py-8 text-sm text-slate-400">
         TradePulse Estimates,{" "}
-        <a href="https://trytradepulse.com" className="hover:text-slate-600 transition-colors">
-          trytradepulse.com
+        <a href={CANONICAL_URL} className="hover:text-slate-600 transition-colors">
+          {CANONICAL_DOMAIN}
         </a>
       </footer>
 
       <footer className="border-t border-zinc-800 mt-16 py-6 px-5 text-center">
         <div className="flex items-center justify-center gap-6 text-xs text-zinc-600 flex-wrap">
-          <a href="mailto:support@trytradepulse.com" className="hover:text-zinc-400 transition-colors">support@trytradepulse.com</a>
+          <a href={`mailto:${SUPPORT_EMAIL}`} className="hover:text-zinc-400 transition-colors">{SUPPORT_EMAIL}</a>
           <a href="/terms" className="hover:text-zinc-400 transition-colors">Terms of Service</a>
           <a href="/privacy" className="hover:text-zinc-400 transition-colors">Privacy Policy</a>
         </div>

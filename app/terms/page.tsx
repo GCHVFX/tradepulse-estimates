@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SUPPORT_EMAIL } from "@/lib/email-addresses";
 
 export const metadata = {
   title: "Terms of Service - TradePulse",
@@ -81,10 +82,10 @@ export default function TermsPage() {
           TradePulse offers a 30-day money-back guarantee on your first paid
           subscription charge. To request a refund, contact{" "}
           <a
-            href="mailto:support@trytradepulse.com"
+            href={`mailto:${SUPPORT_EMAIL}`}
             className="text-white underline"
           >
-            support@trytradepulse.com
+            {SUPPORT_EMAIL}
           </a>{" "}
           within 30 days of that charge. Refunds are reviewed and processed
           manually through Stripe. After that first 30-day window, we do not
@@ -183,10 +184,10 @@ export default function TermsPage() {
         <p className="text-zinc-300 text-sm leading-relaxed mt-4">
           You can cancel your account at any time by contacting{" "}
           <a
-            href="mailto:support@trytradepulse.com"
+            href={`mailto:${SUPPORT_EMAIL}`}
             className="text-white underline"
           >
-            support@trytradepulse.com
+            {SUPPORT_EMAIL}
           </a>{" "}
           or through the billing settings in the app.
         </p>
@@ -225,10 +226,10 @@ export default function TermsPage() {
           TradePulse
           <br />
           <a
-            href="mailto:support@trytradepulse.com"
+            href={`mailto:${SUPPORT_EMAIL}`}
             className="text-white underline"
           >
-            support@trytradepulse.com
+            {SUPPORT_EMAIL}
           </a>
           <br />
           British Columbia, Canada

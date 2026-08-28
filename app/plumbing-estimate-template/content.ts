@@ -1,3 +1,5 @@
+import { CANONICAL_URL } from "@/lib/site-url";
+
 export const PLUMBING_ESTIMATE_TEMPLATE = `# Plumbing Estimate Template: How to Write Quotes That Actually Close Jobs
 
 A professional estimate closes jobs. A sloppy one loses them.
@@ -159,6 +161,6 @@ Homeowners will pay more for a plumber they trust. And trust starts with an esti
 
 Professional estimates take time to organize. Materials to list, math to check, formatting to get right.
 
-If you're spending 30 minutes per estimate, there's a better way. [TradePulse](https://trytradepulse.com) generates professional estimates from a job description in seconds. Customize the template once, then create new estimates without the paperwork.
+If you're spending 30 minutes per estimate, there's a better way. [TradePulse](${CANONICAL_URL}) generates professional estimates from a job description in seconds. Customize the template once, then create new estimates without the paperwork.
 
 Try it free for 14 days. No card required.`;

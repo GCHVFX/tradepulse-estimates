@@ -12,6 +12,7 @@ import {
   SMS_OPTED_OUT_MESSAGE,
   SMS_OPTED_OUT_CODE,
 } from "@/lib/sms-suppression";
+import { SITE_URL } from "@/lib/site-url";
 
 function formatPhone(raw: string): string {
   if (!raw || typeof raw !== "string") {
@@ -105,12 +106,10 @@ if (!hasAccess) return applyTo(NextResponse.json({ error: "Subscription required
     return applyTo(NextResponse.json({ error: "Estimate not found" }, { status: 404 }));
   }
 
-  const origin =
-    request.headers.get("origin") ??
-    process.env.NEXT_PUBLIC_APP_URL ??
-    "https://www.trytradepulse.com";
-
-  const shareUrl = `${origin}/share/${estimateId}`;
+  // Pinned to the canonical host rather than the request origin. A
+  // contractor signed in on a retired alias domain would otherwise mint share
+  // links on that alias, and those links live in customer inboxes forever.
+  const shareUrl = `${SITE_URL}/share/${estimateId}`;
 
   const customerName = (estimate.customer_name ?? "").trim();
   const greeting = customerName ? `Hi ${customerName},` : "Hi,";

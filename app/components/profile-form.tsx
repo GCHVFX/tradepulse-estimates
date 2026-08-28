@@ -9,6 +9,8 @@ import { CURRENCIES, currencyOrDefault, type Currency } from "@/lib/currency";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { formatMonthlyPlanPrice } from "@/lib/plan-pricing";
 import { buildPaymentReminderSms } from "@/lib/payment-reminder-message";
+import { CANONICAL_URL } from "@/lib/site-url";
+import { SUPPORT_EMAIL } from "@/lib/email-addresses";
 
 // Fixed example values for the read-only message preview below. These are
 // never real estimate data -- the actual reference, amount, and due date are
@@ -99,7 +101,7 @@ export function ProfileForm({
   const logoUrlRef = useRef(logoUrl);
   logoUrlRef.current = logoUrl;
 
-  const referralUrl = `https://trytradepulse.com`;
+  const referralUrl = CANONICAL_URL;
 
   const inputClass =
     "w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3.5 text-white placeholder-zinc-600 text-base focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]";
@@ -796,8 +798,8 @@ export function ProfileForm({
 
         <p className="text-center text-zinc-400 text-sm">
           Need help?{" "}
-          <a href="mailto:support@trytradepulse.com" className="hover:text-zinc-400 transition-colors">
-            support@trytradepulse.com
+          <a href={`mailto:${SUPPORT_EMAIL}`} className="hover:text-zinc-400 transition-colors">
+            {SUPPORT_EMAIL}
           </a>
         </p>
 

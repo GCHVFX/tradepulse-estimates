@@ -6,6 +6,7 @@ import { loadCustomerPricingView } from "@/lib/estimate-pricing-server";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { allAmountsInLabel } from "@/lib/currency";
 import { readEstimateCurrency } from "@/lib/currency-db";
+import { CANONICAL_URL } from "@/lib/site-url";
 
 export default async function ShareEstimatePage({
   params,
@@ -160,7 +161,7 @@ export default async function ShareEstimatePage({
         <p className="text-slate-400 text-xs">
           Powered by{" "}
           <a
-            href="https://trytradepulse.com"
+            href={CANONICAL_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="text-slate-500 hover:text-amber-500 transition-colors font-medium"

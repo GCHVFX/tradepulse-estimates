@@ -193,6 +193,33 @@ docs/
 
 ---
 
+## Domains
+
+Canonical host: **https://tradepulse-estimates.com** (apex, no www).
+
+`lib/site-url.ts` is the single source of truth. Nothing else in the repo
+carries a TradePulse hostname.
+
+- `SITE_URL` — runtime origin. `NEXT_PUBLIC_APP_URL`, then the Vercel
+  deployment URL for previews, then localhost in development, then the
+  canonical host. Used for share links, Stripe redirect URLs, the password
+  reset redirect, and the Twilio signature URL.
+- `CANONICAL_URL` / `CANONICAL_DOMAIN` — always the real domain, never a
+  preview or localhost origin. Used for `metadataBase`, canonical tags, Open
+  Graph and Twitter URLs, JSON-LD, the sitemap, `robots.ts`, the OG image
+  text, and public marketing links.
+
+These alias hosts 301 to the canonical host and stay attached permanently:
+`www.tradepulse-estimates.com`, `tradepulseestimates.com`,
+`www.tradepulseestimates.com`, `trytradepulse.com`, `www.trytradepulse.com`.
+Estimate share links and printed postcard QR codes still in circulation point
+at `trytradepulse.com`, so it must never be detached.
+
+**Email has not moved.** Every `from:` and the published support address are
+still on `trytradepulse.com`, held in `lib/email-addresses.ts`. The Resend
+sending domain has to be added, verified, and warmed up before they change.
+That switch is one edit to `EMAIL_DOMAIN` in that file.
+
 ## Routing
 
 - `/` public landing page, light theme
@@ -467,3 +494,37 @@ In app/components/estimate-markdown.tsx, do X.
 3. Do not touch unrelated code. Surface unrelated smells separately.
 4. Flag uncertainty explicitly. Use small, low-risk local experiments when they can clarify a hypothesis.
 5. If a clearly better approach exists, say so and explain the tradeoff briefly. Proceed if the current request is still reasonable.
+
+## Task Execution and Verification
+
+Complete the full task, including implementation, relevant testing, documentation, commit, deployment, and hosted verification when requested.
+
+Use HANDOFF.md and existing verified results as the starting point. Do not repeat completed audits or retest unaffected systems.
+
+Inspect only the files and behaviour relevant to the requested change unless evidence points to a broader problem.
+
+Do not use subagents unless the task contains genuinely independent work that will save time.
+
+Run targeted verification for the changed behaviour and its realistic regression surface. Do not perform broad repository analysis or external-system audits when they are unrelated to the change.
+
+Keep the final report concise. Report:
+
+- what changed
+- verification run and results
+- commit and deployment status
+- unresolved problems
+- exact next action
+
+### Release efficiency
+
+Do not push or deploy every small adjustment unless explicitly requested.
+
+For UI, copy, and marketing work:
+
+1. Complete the full related implementation locally.
+2. Run targeted tests, TypeScript, build, and relevant browser verification.
+3. Stop for visual approval before pushing.
+4. Combine approved related changes into one production deployment.
+5. Run hosted verification once after the final deployment.
+
+Do not repeat full regression suites, production-log reviews, or deployment checks for each minor revision unless the changed behaviour justifies them.

@@ -11,7 +11,7 @@ name: Smoke tests
 # the immutable per-deployment URL, which Vercel's Standard Protection
 # (enabled by default on projects with a custom production domain) blocks at
 # the edge for anyone without a Vercel SSO session — every request 401s
-# before it reaches the app. trytradepulse.com is the aliased custom domain
+# before it reaches the app. tradepulse-estimates.com is the canonical custom domain
 # and is public. Once deployment_status reports success for Production, the
 # alias has already been repointed, so there's no timing gap from hardcoding it.
 on:
@@ -35,7 +35,7 @@ jobs:
 
       - run: npm run test:smoke
         env:
-          PLAYWRIGHT_BASE_URL: https://trytradepulse.com
+          PLAYWRIGHT_BASE_URL: https://tradepulse-estimates.com
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}

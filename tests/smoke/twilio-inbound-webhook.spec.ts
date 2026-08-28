@@ -8,7 +8,7 @@ import {
 import type { SmsSuppressionStore } from "../../lib/sms-suppression";
 
 const AUTH_TOKEN = "unit_test_auth_token_only";
-const WEBHOOK_URL = "https://www.trytradepulse.com/api/webhooks/twilio-inbound";
+const WEBHOOK_URL = "https://tradepulse-estimates.com/api/webhooks/twilio-inbound";
 
 // In-memory fake standing in for the Supabase-backed store, matching how
 // stripe-webhook.spec.ts fakes StripeWebhookStore. No network, no real DB.

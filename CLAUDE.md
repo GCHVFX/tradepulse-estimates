@@ -113,6 +113,7 @@ docs/
 ## What Is Built (Current State)
 
 ### Starter Features (live)
+
 - Estimate creation: text input → AI streaming → save to DB
 - Estimate list, detail, edit, delete
 - Send estimate: SMS (Twilio), email (Resend), copy link, PDF download
@@ -123,6 +124,7 @@ docs/
 - Billing portal (shown on profile only when subscription_status === 'active')
 
 ### Reviews Feature (live, Pro-gated)
+
 - `mark-job-done-sheet.tsx` — bottom sheet triggered from estimate detail after marking done
 - Sends Google review request via SMS using Twilio
 - Custom message editable before send, Google review link appended automatically
@@ -132,6 +134,7 @@ docs/
 - "Mark Job Done" button only shown on estimate detail when `isPro === true` and status === 'sent'
 
 ### Photo Input (live, Starter capped / Pro unlimited)
+
 - Camera icon in the twin-action row attached to the job description textarea in `app/new/page.tsx` FormView (mic + camera, both 44px circles overlapping the textarea's bottom-right corner)
 - Tapping camera opens `PhotoSourceSheet` (`photo-source-sheet.tsx`) — choice of Take Photo or Choose from Camera Roll, up to 5 photos, optional per-photo note
 - Each photo is downscaled client-side (1568px max edge, JPEG) then sent to `POST /api/analyze-photo`
@@ -142,6 +145,7 @@ docs/
 - Rate limited: 5 calls per user per 60 minutes (separate short-window abuse throttle, applies to both plans, unchanged by the monthly cap above)
 
 ### Dictation (live, all plans)
+
 - Mic icon in the same twin-action row as Photo Input, attached to the job description textarea in `app/new/page.tsx` FormView
 - Tap to start recording (`MediaRecorder`, `audio/webm` or `audio/mp4` depending on browser), tap again to stop; auto-stops at 120 seconds
 - Recorded clip is sent to `POST /api/transcribe-audio`, which transcribes it via Gemini (`gemini-3.5-flash`, `@google/genai`) and appends the result to the existing job description text
@@ -150,6 +154,7 @@ docs/
 - No audio is stored
 
 ### Payments Feature (live, Pro-gated)
+
 - Contractor marks a done estimate as invoiced (`invoice-sheet.tsx`, amount + due date), TradePulse sends automated reminders until marked paid. No payment processing, no Stripe Connect.
 - Reminder stages: pre-due (due minus 2 days), first overdue (due plus 1 day), second overdue (due plus 5 days), then ongoing weekly reminders (`overdue_ongoing`) starting at due plus 14 days until paid. One reminder per stage, tracked via `reminder_count` on `tpe_estimates` (counts above 3 are weekly reminders). Reminders stop when `payment_status = 'paid'`.
 - `GET /api/cron/payment-reminders` — daily Vercel cron (17:00 UTC, `vercel.json`), secured by `Authorization: Bearer CRON_SECRET`. Sends SMS (Twilio) and email (Resend) per stage, logs each send to `tpe_payment_reminders`.
@@ -161,10 +166,38 @@ docs/
 - Requires `CRON_SECRET` env var
 
 ### Not Yet Built
+
 - Follow-Up (scheduled customer outreach)
 - Pro upgrade flow (no Pro subscribers yet, STRIPE_PRO_PRICE_ID not set)
 
 ---
+
+## Domains
+
+Canonical host: **https://tradepulse-estimates.com** (apex, no www).
+
+`lib/site-url.ts` is the single source of truth. Nothing else in the repo
+carries a TradePulse hostname.
+
+- `SITE_URL` — runtime origin. `NEXT_PUBLIC_APP_URL`, then the Vercel
+  deployment URL for previews, then localhost in development, then the
+  canonical host. Used for share links, Stripe redirect URLs, the password
+  reset redirect, and the Twilio signature URL.
+- `CANONICAL_URL` / `CANONICAL_DOMAIN` — always the real domain, never a
+  preview or localhost origin. Used for `metadataBase`, canonical tags, Open
+  Graph and Twitter URLs, JSON-LD, the sitemap, `robots.ts`, the OG image
+  text, and public marketing links.
+
+These alias hosts 301 to the canonical host and stay attached permanently:
+`www.tradepulse-estimates.com`, `tradepulseestimates.com`,
+`www.tradepulseestimates.com`, `trytradepulse.com`, `www.trytradepulse.com`.
+Estimate share links and printed postcard QR codes still in circulation point
+at `trytradepulse.com`, so it must never be detached.
+
+**Email has not moved.** Every `from:` and the published support address are
+still on `trytradepulse.com`, held in `lib/email-addresses.ts`. The Resend
+sending domain has to be added, verified, and warmed up before they change.
+That switch is one edit to `EMAIL_DOMAIN` in that file.
 
 ## Routing
 
@@ -228,6 +261,7 @@ In practice only `'sent'` is ever written, from `/api/send-sms` and `/api/send-e
 All tables: uuid primary keys, RLS enabled.
 
 **Critical field names:**
+
 - `tpe_businesses` uses `id` as PK and `owner_user_id` to link to auth.users
 - Business name field is `name` not `company_name`
 - `tpe_estimates` uses `business_id` referencing `tpe_businesses.id` (not auth.users)
@@ -291,6 +325,7 @@ import { stripe } from "@/lib/stripe";
 ## API Routes
 
 **Estimates**
+
 - `GET /api/estimates` — list user's estimates (id, title, status, customer_name, created_at)
 - `PATCH /api/estimates` — update estimate fields (selective — only fields present in body are updated)
 - `DELETE /api/estimates?id=` — delete estimate
@@ -315,29 +350,34 @@ import { stripe } from "@/lib/stripe";
   - Rate limited: 20 calls per user per 60 minutes via `tpe_rate_limits`
 
 **Profile**
+
 - `GET /api/profile` — returns `tpe_businesses` record (includes `plan`, `subscription_status`, `trial_ends_at`, `google_review_link`)
 - `PATCH /api/profile` — upserts all profile fields; always send all fields to avoid overwriting with empty strings
 - `POST /api/profile/find-review-link` — Google Places API search, returns ranked `{ matches, hasStrongMatch }`
 - `POST /api/upload-logo` — accepts base64 `{ data, type }`, uploads to Supabase Storage `{userId}/logo`, returns `{ url }`
 
 **Price Book**
+
 - `GET /api/price-book` — returns the business pricing settings (labour rate, markup %, deposit %) from `tpe_businesses`
 - `PATCH /api/price-book` — updates those business-level pricing fields
 - `GET/POST/PATCH/DELETE /api/price-book-items` — CRUD on `tpe_pricebook_items` (common line items)
 - `POST /api/price-book-items/import` — bulk import of `tpe_pricebook_items`
 
 **Comms**
+
 - `POST /api/send-sms` — Twilio SMS (`{ to, estimateId }`)
 - `POST /api/send-email` — Resend email; do not include `reply_to` / `replyTo` (TypeScript conflict)
 - `POST /api/send-reset-email` — password reset email
 
 **Billing**
+
 - `POST /api/billing/checkout` — creates Stripe Checkout session, redirects to Stripe
 - `POST /api/billing/portal` — creates Stripe billing portal session, redirects to Stripe
 - `POST /api/billing/upgrade` — starts Stripe Checkout to move a Starter user to Pro (guards already-Pro); `GET` redirects to `/subscribe`
 - `POST /api/billing/webhook` — Stripe webhook handler (handles subscription.created/updated/deleted, invoice.payment_succeeded)
 
 **Auth / Internal**
+
 - `POST /api/auth/signup` — creates Supabase user + Stripe trial subscription + `tpe_businesses` row
 - `POST /api/auth/login` — email/password sign in via `signInWithPassword`
 - `GET /auth/google` — starts Google OAuth (`signInWithOAuth`), redirects to `/auth/callback?next=` (default `/onboarding`); note: under `/auth`, not `/api`
@@ -442,7 +482,7 @@ Never use interactive widgets or custom HTML boxes for CC prompts.
 
 5. If you see a clearly better approach, say so before implementing. Explain the tradeoff in 2-4 bullets. If the current request is still reasonable, proceed unless the alternative avoids serious risk or wasted work.
 
-<!-- ai-control-centre:managed-block:start v2 -->
+<!-- ai-control-centre:managed-block:start v4 -->
 ## AI Control Centre tracking
 
 This project is tracked by AI Control Centre. Compatible coding agents
@@ -454,24 +494,52 @@ This project is tracked by AI Control Centre. Compatible coding agents
 2. When recording a session, include whichever of these can actually be
    confirmed: the provider, the exact model id, the model's display name,
    and the effort or reasoning level used. Never guess an unavailable
-   value — omit the field, or use "Unknown", instead.
+   value; omit the field, or use "Unknown", instead.
 3. Give the session a short, descriptive title or reference so it can be
    told apart from other sessions later.
 4. Record a concise summary and the exact next action with each recorded
    event.
-5. Report only verification that was actually performed — pass the exact
+5. Report only verification that was actually performed. Pass the exact
    commands or checks run via `--verification`, never claim untested
    results.
-6. Update HANDOFF.md when this project's state materially changes.
+6. Update HANDOFF.md before the final commit of a session, not after,
+   whenever this project's state materially changes.
 7. Avoid manually editing `.ai-control-centre/activity.jsonl` or
    `current-session.json` when the helper is available; let the helper
    write them.
-8. Before substantial work and before ending a session, read and follow
-   AI_WORKFLOW.md.
+8. Follow the AI Control Centre repository's AI_WORKFLOW.md for the
+   exact end-of-session order (verify, update HANDOFF.md, record the
+   session, refresh or reindex, then commit only if authorized). Do not
+   modify HANDOFF.md again after a final, authorized commit.
+9. At the start of substantial work, check whether the incoming prompt
+   begins with an [AICC]...[/AICC] header. If so, record that source
+   browser-chat handoff via the AI Control Centre CLI's `handoff
+   record` command before recording your own session (see
+   AI_WORKFLOW.md's "Recording a coding-prompt handoff" section).
 
 See the AI Control Centre repository's `docs/agent-integration.md` for
 exact commands, including the `--model`, `--model-display-name`,
 `--effort`, `--reasoning-level`, and `--verification` flags.
 
-Claude Code specifically: run the commands above via `npm run aicc --` from the AI Control Centre repository, pointing `--project` at this directory. Claude Code does not expose its selected model or effort level through any documented, reliable mechanism a shelled-out command can read — pass `--model`, `--model-display-name`, and `--effort` explicitly based on what you actually know for this session, or omit them rather than guessing.
+Claude Code specifically: run the commands above via `npm run aicc --` from the AI Control Centre repository, pointing `--project` at this directory. Claude Code does not expose its selected model or effort level through any documented, reliable mechanism a shelled-out command can read. Pass `--model`, `--model-display-name`, and `--effort` explicitly based on what you actually know for this session, or omit them rather than guessing.
 <!-- ai-control-centre:managed-block:end -->
+
+## Task Execution and Verification
+
+Complete the full task, including implementation, relevant testing, documentation, commit, deployment, and hosted verification when requested.
+
+Use HANDOFF.md and existing verified results as the starting point. Do not repeat completed audits or retest unaffected systems.
+
+Inspect only the files and behaviour relevant to the requested change unless evidence points to a broader problem.
+
+Do not use subagents unless the task contains genuinely independent work that will save time.
+
+Run targeted verification for the changed behaviour and its realistic regression surface. Do not perform broad repository analysis or external-system audits when they are unrelated to the change.
+
+Keep the final report concise. Report:
+
+- what changed
+- verification run and results
+- commit and deployment status
+- unresolved problems
+- exact next action

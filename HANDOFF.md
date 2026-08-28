@@ -1,6 +1,215 @@
 # TradePulse handoff
 
-Updated: 2026-08-25 09:38 PT (/subscribe recovery block moved above the price card and mobile top spacing reduced, in the working tree; not committed, not deployed)
+Updated: 2026-08-27 21:36 PT (domain migration, code half: every TradePulse URL now derives from lib/site-url.ts, canonical is the apex tradepulse-estimates.com)
+
+## Domain migration, code half (2026-08-27)
+
+**Status:** implemented on `main`. DNS, Cloudflare, and Vercel were done and
+verified before this session and were not touched. No Stripe, Supabase, Resend,
+or PostHog dashboard was opened. Nothing in Section B of `MIGRATION.md` was
+executed here; this is Section A only.
+
+### Canonical host
+
+**`https://tradepulse-estimates.com`, apex, no www.**
+
+These alias hosts 301 to it and stay attached to the Vercel project
+permanently: `www.tradepulse-estimates.com`, `tradepulseestimates.com`,
+`www.tradepulseestimates.com`, `trytradepulse.com`, `www.trytradepulse.com`.
+
+`trytradepulse.com` and `www.trytradepulse.com` are being retired but must never
+be detached. Every estimate share link ever sent to a customer, and the printed
+postcard QR codes for `/go/electricians-postcard` and `/go/trades-postcard`,
+live on them. The 301 is the only thing keeping those working.
+
+### Single source of truth: `lib/site-url.ts`
+
+Two exports, deliberately separate:
+
+- **`SITE_URL`** — the runtime origin. `NEXT_PUBLIC_APP_URL`, then the Vercel
+  deployment URL (`NEXT_PUBLIC_VERCEL_URL` or `VERCEL_URL`) so previews link to
+  themselves, then localhost in development, then the canonical host. Used for
+  share links, Stripe `success_url` / `cancel_url` / `return_url`, the password
+  reset `redirectTo`, and the Twilio signature URL.
+- **`CANONICAL_URL`** / **`CANONICAL_DOMAIN`** — always the real domain, never a
+  preview or localhost origin. Used for `metadataBase`, canonical tags, Open
+  Graph and Twitter URLs, JSON-LD, the sitemap, `robots.ts`, the text baked into
+  the OG image, and public marketing links.
+
+They are separate because of `MIGRATION.md` D1. If `NEXT_PUBLIC_APP_URL` is
+genuinely empty in Production, a single env-driven constant would resolve to the
+`.vercel.app` deployment URL and publish canonical tags and a sitemap pointing
+at it. Pinning the published identity to a constant makes that failure
+impossible.
+
+**Every term is blank-checked, not nullish-checked.** An empty string is not
+nullish, so the old `NEXT_PUBLIC_APP_URL ?? "https://www.trytradepulse.com"`
+chain would have handed an empty string to Stripe and to Twilio signature
+validation. `cleanEnv()` treats empty and whitespace-only as unset. This closes
+D1 in code regardless of what the dashboard value turns out to be.
+
+A future domain change is `NEXT_PUBLIC_APP_URL` in Vercel plus
+`CANONICAL_SITE_URL` in `lib/site-url.ts`. Nothing else in the repo carries a
+TradePulse hostname.
+
+### Behaviour change worth knowing: share links no longer follow the request origin
+
+`/api/send-sms` and `/api/send-email` built the share URL from the request
+`origin` header first. A contractor still signed in on `www.trytradepulse.com`
+would therefore have minted share links on the retired alias, and those links
+sit in customer inboxes permanently. Both routes now build the share URL from
+`SITE_URL` unconditionally.
+
+The billing routes keep origin-first. Their URLs are transient, so an alias
+origin costs nothing there.
+
+### `robots.txt` is now generated
+
+`public/robots.txt` was static and could not read the constant. It is replaced
+by `app/robots.ts`, which emits the same two rules with the `Sitemap:` line
+built from `CANONICAL_URL`. Verified in the build output.
+
+### `metadataBase` is set
+
+`app/layout.tsx` now sets `metadataBase: new URL(CANONICAL_URL)`. **The three
+long-standing `metadataBase` build notices recorded throughout this document are
+gone.** That baseline no longer applies.
+
+### Email deliberately did NOT move
+
+Every `from:` address and the published support address are still on
+`trytradepulse.com`. Resend has exactly one verified sending domain and sending
+reputation is per-domain, so the new domain has to be added, verified, and
+warmed up first.
+
+They are now all held in **`lib/email-addresses.ts`**, values unchanged:
+`EMAIL_DOMAIN`, `ESTIMATES_EMAIL`, `ESTIMATES_FROM`, `SUPPORT_EMAIL`. The later
+switch is one edit to `EMAIL_DOMAIN`. Eighteen files previously carried a
+literal address; none does now.
+
+The only remaining `trytradepulse.com` string in application code is that one
+constant. Everything else is historical documentation, which was left alone.
+
+### Environment variables Greg must set in Vercel
+
+| Variable | Environment | Required value |
+|---|---|---|
+| `NEXT_PUBLIC_APP_URL` | Production | `https://tradepulse-estimates.com` |
+| `NEXT_PUBLIC_APP_URL` | Preview | leave unset, so previews resolve to their own deployment URL |
+| `NEXT_PUBLIC_APP_URL` | Development | unset, or `http://localhost:3000` |
+
+`NEXT_PUBLIC_` values are inlined at build time. **Changing it does nothing
+until a redeploy.**
+
+`NEXT_PUBLIC_SUPABASE_URL` also holds a URL and is unaffected by this migration.
+`PLAYWRIGHT_BASE_URL` is not a Vercel variable; it is a CI and local test
+variable, and both its workflow value and its code default now point at the
+canonical host.
+
+**The live value of `NEXT_PUBLIC_APP_URL` could not be read from this session.**
+The only record is the gitignored `.env.vercel.production` snapshot dated
+2026-06-20, which shows an empty string. That is over two months old and is not
+authoritative. Confirm it in the dashboard.
+
+### New test
+
+`tests/smoke/share-link-canonical-domain.spec.ts`, in the browser suite (not the
+unit allowlist, because it needs a real browser and network). It asserts the
+invariant directly: it seeds an estimate, navigates to the share route on the
+canonical host **by absolute URL**, and asserts 200 with no redirect, that the
+final host is the canonical host, and that the title, customer line, line item,
+amount, and `All amounts in CAD` label are all on the page. It locates no nav
+element to get there. A second test pins the canonical host to https, apex, no
+`www.`, no trailing slash.
+
+The seeded business row is ownerless on purpose: no Auth user, no Stripe
+customer, no subscription. Teardown is a plain delete of the estimate then the
+business, not the account-deletion RPC, which cannot act on an ownerless
+business.
+
+**It has not been run.** Running it writes to the Production database and hits
+the Production site.
+
+### Verification actually run (2026-08-27 21:36 PT)
+
+- `npx tsc --noEmit` — clean.
+- `npx next build` — compiled successfully in 20.6s, 56/56 static pages, **zero
+  `metadataBase` notices**.
+- `npx playwright test --config=playwright.unit.config.ts` — **369 passed, 0
+  failed**, unchanged from the documented baseline.
+- `npx eslint .` — **8 errors, 18 warnings**, identical to the documented
+  baseline. No new lint problem.
+- Generated build output inspected directly: `.next/server/app/robots.txt.body`
+  and `sitemap.xml.body` are entirely on `tradepulse-estimates.com`, and
+  `plumbers.html` carries `rel="canonical"`, `og:url`, and `og:image` on the
+  canonical host with the JSON-LD `"url"` matching.
+- `git grep -n trytradepulse` — zero hits in application code. The only code hit
+  is the deliberate `EMAIL_DOMAIN` constant.
+
+**Not run:** the full Playwright smoke suite, the new share-route test, and any
+Production check. No account was created and no Production data was touched.
+
+### Files changed
+
+New: `lib/site-url.ts`, `lib/email-addresses.ts`, `app/robots.ts`,
+`tests/smoke/share-link-canonical-domain.spec.ts`.
+Deleted: `public/robots.txt`.
+Changed: `app/layout.tsx`, `app/page.tsx`, `app/sitemap.ts`,
+`app/opengraph-image.tsx`, `app/contact/page.tsx`, `app/login/layout.tsx`,
+`app/signup/layout.tsx`, `app/plumbers/page.tsx`, `app/electricians/page.tsx`,
+`app/trades/page.tsx`, `app/plumbing-cost/page.tsx`,
+`app/electrical-cost/page.tsx`, `app/plumbing-estimate-template/page.tsx`,
+`app/plumbing-estimate-template/content.ts`, `app/privacy/page.tsx`,
+`app/terms/page.tsx`, `app/subscribe/page.tsx`, `app/share/[id]/page.tsx`,
+`app/components/profile-form.tsx`, `app/components/estimate-actions.tsx`,
+`app/components/CopyEmailButton.tsx`, `app/components/EstimateDemo.tsx`,
+`app/components/EstimateDemoTrades.tsx`,
+`app/components/EstimateDemoElectrical.tsx`, `app/api/send-sms/route.ts`,
+`app/api/send-email/route.ts`, `app/api/send-reset-email/route.ts`,
+`app/api/billing/checkout/route.ts`, `app/api/billing/portal/route.ts`,
+`app/api/billing/upgrade/route.ts`, `app/api/cron/payment-reminders/route.ts`,
+`app/api/estimates/[id]/send-reminder/route.ts`,
+`app/api/webhooks/new-signup/route.ts`,
+`app/api/webhooks/twilio-inbound/route.ts`, `lib/notify-error.ts`,
+`playwright.config.ts`, `.github/workflows/smoke-tests.yml`,
+`tests/smoke/twilio-inbound-webhook.spec.ts`, `CLAUDE.md`, `CODEX.md`,
+`PROJECT.md`, `PROJECT-RELATIONSHIPS.md`, `HANDOFF.md`.
+
+### Exact next action
+
+1. Set `NEXT_PUBLIC_APP_URL=https://tradepulse-estimates.com` for Production in
+   Vercel, then **redeploy** so the inlined value takes effect.
+2. Work `MIGRATION.md` Section B5 while the old domain still serves 200: the
+   Stripe webhook URL, the Supabase Site URL and redirect allow-list, the Google
+   OAuth redirect, and the Supabase `auth.users` hook. Stripe does not follow
+   redirects on webhook delivery, so this must happen before any 301 on the old
+   host.
+3. Only then turn on the four alias 301s (Section B6), and run Section C,
+   starting with C11, the real share-link check.
+
+### Still open, not addressed here
+
+- `MIGRATION.md` D4: the homepage meta description and the OG image bake
+  `CA$29` for every visitor while the visible pricing cards are geo-priced. See
+  the pricing note below.
+- `MIGRATION.md` D5: `app/page.tsx` still redirects a no-business identity to
+  `/onboarding` instead of the proxy's `/signup?error=setup_required`.
+- `MIGRATION.md` D8: the Twilio inbound webhook is still not configured
+  anywhere. If it ever is, its Console URL must match `SITE_URL` character for
+  character.
+- `MIGRATION.md` D10: six untracked `*.bak-*` files still sit at the repo root
+  and pollute every repo-wide grep.
+
+### Pricing, checked and deliberately not changed
+
+`lib/currency.ts` holds `cad: { starter: 29, pro: 59 }` and
+`usd: { starter: 19, pro: 39 }`. The homepage pricing cards render
+`currencyPrefix(currency)` plus `planMonthlyPrice(plan, currency)`, where the
+currency comes from `currencyFromCountry(x-vercel-ip-country)`. **A Canadian
+visitor sees CA$29 and CA$59; a US visitor sees US$19 and US$39, by design.**
+The CAD figures are correct. The meta description is always `CA$29` because
+static `metadata` cannot vary per request, and the OG image bakes `CA$29` into
+the PNG. That mismatch is real but is not a wrong price, and it was not changed.
 
 ## Release 1: account-provisioning integrity (2026-08-24, uncommitted)
 

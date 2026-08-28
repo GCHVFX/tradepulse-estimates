@@ -7,6 +7,7 @@ import { PostHogProvider } from "@/app/components/posthog-provider";
 import { PostHogPageView } from "@/app/components/posthog-pageview";
 import { Suspense } from "react";
 import { GoogleAnalytics } from "@next/third-parties/google";
+import { CANONICAL_URL } from "@/lib/site-url";
 
 const dmSans = DM_Sans({
   subsets: ["latin"],
@@ -15,6 +16,7 @@ const dmSans = DM_Sans({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(CANONICAL_URL),
   title: "TradePulse Estimates",
   description: "Create and send professional estimates in seconds.",
   icons: {

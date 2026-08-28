@@ -3,6 +3,8 @@ import { supabaseAdmin } from '@/lib/supabase-server';
 import { Resend } from 'resend';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getRequestIp, normalizeEmail } from '@/lib/request-guards';
+import { SITE_URL } from '@/lib/site-url';
+import { ESTIMATES_EMAIL } from '@/lib/email-addresses';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const GENERIC_RESPONSE = { ok: true };
@@ -25,7 +27,7 @@ export async function POST(request: NextRequest) {
       type: 'recovery',
       email: normalizedEmail,
       options: {
-        redirectTo: 'https://www.trytradepulse.com/reset-password',
+        redirectTo: `${SITE_URL}/reset-password`,
       },
     });
 
@@ -35,7 +37,7 @@ export async function POST(request: NextRequest) {
     }
 
     await resend.emails.send({
-      from: 'estimates@trytradepulse.com',
+      from: ESTIMATES_EMAIL,
       to: normalizedEmail,
       subject: 'Reset your TradePulse password',
       text: `Click the link below to reset your password. This link expires in 1 hour.\n\n${data.properties.action_link}\n\nIf you did not request a password reset, ignore this email.`,

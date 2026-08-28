@@ -9,6 +9,7 @@ import { resolveBillingCurrency } from "@/lib/billing-currency";
 import { readBusinessEstimateCurrency } from "@/lib/currency-db";
 import { currencyFromCountry, type Currency } from "@/lib/currency";
 import { stripe } from "@/lib/stripe";
+import { SUPPORT_EMAIL } from "@/lib/email-addresses";
 
 export default async function SubscribePage({ searchParams }: { searchParams: Promise<{ preview?: string }> }) {
   const { preview } = await searchParams;
@@ -195,8 +196,8 @@ export default async function SubscribePage({ searchParams }: { searchParams: Pr
 
         <p className="text-center text-zinc-400 text-sm mt-4">
           Questions?{" "}
-          <a href="mailto:support@trytradepulse.com" className="text-zinc-400 hover:text-zinc-300 transition-colors">
-            support@trytradepulse.com
+          <a href={`mailto:${SUPPORT_EMAIL}`} className="text-zinc-400 hover:text-zinc-300 transition-colors">
+            {SUPPORT_EMAIL}
           </a>
         </p>
 

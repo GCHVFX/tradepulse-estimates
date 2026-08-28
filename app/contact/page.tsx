@@ -13,14 +13,15 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { CopyEmailButton } from "@/app/components/CopyEmailButton";
+import { CANONICAL_URL } from "@/lib/site-url";
+import { SUPPORT_EMAIL } from "@/lib/email-addresses";
 
-const SUPPORT_EMAIL = "support@trytradepulse.com";
 
 export const metadata: Metadata = {
   title: "TradePulse Support | Contact Us",
   description:
     "Get help with your TradePulse account, estimates, billing, refunds, or privacy and data requests.",
-  alternates: { canonical: "https://trytradepulse.com/contact" },
+  alternates: { canonical: `${CANONICAL_URL}/contact` },
 };
 
 const supportTopics = [
@@ -133,7 +134,7 @@ export default function ContactPage() {
               <Mail className="h-5 w-5" aria-hidden="true" />
               Email support
             </a>
-            <p className="mt-2 text-xs text-slate-400 sm:mt-4 sm:text-sm">support@trytradepulse.com</p>
+            <p className="mt-2 text-xs text-slate-400 sm:mt-4 sm:text-sm">{SUPPORT_EMAIL}</p>
             <p className="mt-2 text-xs leading-relaxed text-slate-400 sm:hidden">
               Include your account email, what happened, and a screenshot if useful. Never send your password by email.
             </p>

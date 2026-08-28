@@ -17,6 +17,7 @@ import {
 import { readEstimateCurrency } from "@/lib/currency-db";
 import { selectManualReminderStage, formatDueDateText } from "@/lib/payment-reminder-stage";
 import { claimDelivery, markDeliverySent } from "@/lib/delivery-claims";
+import { ESTIMATES_FROM } from "@/lib/email-addresses";
 
 type SmsOutcome = "sent" | "suppressed" | "no_phone" | "not_configured" | "failed";
 type EmailOutcome = "sent" | "no_email" | "not_configured" | "failed";
@@ -202,7 +203,7 @@ export async function POST(
         emailOutcome = "failed";
       } else {
         const result = await resend.emails.send({
-          from: "TradePulse Estimates <estimates@trytradepulse.com>",
+          from: ESTIMATES_FROM,
           to: recipient,
           subject: `Invoice reminder -- ${businessName}`,
           html,

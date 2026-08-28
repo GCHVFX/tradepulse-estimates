@@ -4,8 +4,8 @@
 
 Do not delete, rename, or migrate any Supabase tables without checking BOTH repos:
 
-- C:\Work\web-apps\tradepulse-estimates (this repo)
-- C:\Work\web-apps\clearwater-plumbing
+- C:\Work\tools\tradepulse-estimates (this repo)
+- C:\Work\websites\clearwater-plumbing
 
 Both apps share the same TradePulse Supabase project.
 
@@ -15,7 +15,7 @@ Both apps share the same TradePulse Supabase project.
 
 **Name:** TradePulse Estimates (standalone SaaS)
 **Purpose:** AI-powered estimate generation for contractors. Multi-tenant SaaS with auth, billing, SMS/email sending, payment reminders.
-**Live URL:** https://www.trytradepulse.com
+**Live URL:** https://tradepulse-estimates.com (canonical apex; trytradepulse.com and the other aliases 301 here)
 
 ## Supabase Project
 

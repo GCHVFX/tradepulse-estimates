@@ -1,5 +1,6 @@
 import { ImageResponse } from "next/og";
 import { STARTER_MONTHLY_PRICE_CAD } from "@/lib/plan-pricing";
+import { CANONICAL_DOMAIN } from "@/lib/site-url";
 
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
@@ -37,7 +38,7 @@ export default function Image() {
         {/* Bottom-right: URL */}
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
           <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 20 }}>
-            trytradepulse.com
+            {CANONICAL_DOMAIN}
           </div>
         </div>
       </div>

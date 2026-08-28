@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { CANONICAL_URL } from "@/lib/site-url";
 
 // ─── Assets ───────────────────────────────────────────────────────────────────
 
@@ -272,7 +273,7 @@ export function EstimateDemoTrades() {
 
   const handleSend = useCallback(() => {
     setSendReady(false);
-    setTimeout(() => window.open('https://trytradepulse.com/signup', '_blank'), 250);
+    setTimeout(() => window.open(`${CANONICAL_URL}/signup`, '_blank'), 250);
   }, []);
 
   // ── Render ─────────────────────────────────────────────────────────────────

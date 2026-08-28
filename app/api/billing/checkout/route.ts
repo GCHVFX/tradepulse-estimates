@@ -6,6 +6,7 @@ import { isDeletedStripeObject } from "@/lib/stripe-object-state";
 import type { Currency } from "@/lib/currency";
 import { lockedSubscriptionCurrency } from "@/lib/billing-currency";
 import { readBusinessEstimateCurrency } from "@/lib/currency-db";
+import { SITE_URL } from "@/lib/site-url";
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const { supabase, applyTo } = createApiClient(request);
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return applyTo(NextResponse.json({ error: "Too many checkout attempts. Try again shortly." }, { status: 429 }));
   }
 
-  const origin = request.headers.get("origin") ?? process.env.NEXT_PUBLIC_APP_URL ?? "https://www.trytradepulse.com";
+  const origin = request.headers.get("origin") ?? SITE_URL;
 
   try {
     // Get or create Stripe customer

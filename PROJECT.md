@@ -2,8 +2,8 @@
 
 Turns a short job description into a professional estimate in seconds. Mobile-first, built for contractors and tradespeople in the field.
 
-- **Live URL:** https://trytradepulse.com
-- **Repository path:** this directory (`C:\Work\web-apps\tradepulse-estimates`)
+- **Live URL:** https://tradepulse-estimates.com (canonical apex; trytradepulse.com and the other aliases 301 here)
+- **Repository path:** this directory (`C:\Work\tools\tradepulse-estimates`)
 - **Owner/operator:** Greg Hansen, sole proprietorship, British Columbia, Canada
 - **Stack:** Next.js (App Router), TypeScript, Tailwind CSS, Supabase (database + auth), Stripe (subscriptions), Twilio (SMS), Resend (email), Anthropic + Google Gemini (AI generation, vision, transcription), Vercel (hosting), Sentry (errors), PostHog (analytics)
 - **Pricing:** Starter CA$29/month, Pro CA$59/month, 14-day free trial, no card required

@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { supabaseAdmin } from "@/lib/supabase-server";
+import { ESTIMATES_EMAIL, SUPPORT_EMAIL } from "@/lib/email-addresses";
 
 export async function notifyInternalError(input: {
   context: string;
@@ -15,8 +16,8 @@ export async function notifyInternalError(input: {
 
     const resend = new Resend(process.env.RESEND_API_KEY);
     await resend.emails.send({
-      from: "estimates@trytradepulse.com",
-      to: "support@trytradepulse.com",
+      from: ESTIMATES_EMAIL,
+      to: SUPPORT_EMAIL,
       subject: `[TradePulse Alert] ${input.context.slice(0, 80)} failed with ${input.status}`,
       text: [
         `Context: ${input.context.slice(0, 200)}`,

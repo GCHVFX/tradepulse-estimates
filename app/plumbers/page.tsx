@@ -4,17 +4,19 @@ import Image from "next/image";
 import { EstimateDemo } from "@/app/components/EstimateDemo";
 import { JsonLd } from "@/app/components/json-ld";
 import { STARTER_MONTHLY_PRICE_CAD } from "@/lib/plan-pricing";
+import { CANONICAL_URL, CANONICAL_DOMAIN } from "@/lib/site-url";
+import { SUPPORT_EMAIL } from "@/lib/email-addresses";
 
 export const metadata: Metadata = {
   title: "Plumbing Estimates in 30 Seconds | TradePulse",
   description: "Type what the job is. Get a ready-to-send plumbing estimate. Works from your phone. 14-day free trial, no card required.",
-  alternates: { canonical: "https://trytradepulse.com/plumbers" },
+  alternates: { canonical: `${CANONICAL_URL}/plumbers` },
   openGraph: {
     title: "Plumbing Estimates in 30 Seconds | TradePulse",
     description: "Type what the job is. Get a ready-to-send plumbing estimate. Works from your phone. 14-day free trial, no card required.",
-    url: "https://trytradepulse.com/plumbers",
+    url: `${CANONICAL_URL}/plumbers`,
     siteName: "TradePulse",
-    images: [{ url: "https://trytradepulse.com/opengraph-image.png", width: 1200, height: 630, alt: "TradePulse Estimates" }],
+    images: [{ url: `${CANONICAL_URL}/opengraph-image.png`, width: 1200, height: 630, alt: "TradePulse Estimates" }],
     locale: "en_CA",
     type: "website",
   },
@@ -22,7 +24,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Plumbing Estimates in 30 Seconds | TradePulse",
     description: "Type what the job is. Get a ready-to-send plumbing estimate. Works from your phone.",
-    images: ["https://trytradepulse.com/opengraph-image.png"],
+    images: [`${CANONICAL_URL}/opengraph-image.png`],
   },
 };
 
@@ -35,7 +37,7 @@ export default function PlumbersPage() {
         "name": "TradePulse Estimates",
         "applicationCategory": "BusinessApplication",
         "description": "Create and send professional trade estimates in seconds from your phone.",
-        "url": "https://trytradepulse.com",
+        "url": CANONICAL_URL,
         "operatingSystem": "Web, iOS, Android",
         "offers": {
           "@type": "Offer",
@@ -151,14 +153,14 @@ export default function PlumbersPage() {
 
       <footer className="hidden sm:block text-center py-8 text-sm text-slate-400">
         TradePulse Estimates,{" "}
-        <a href="https://trytradepulse.com" className="hover:text-slate-600 transition-colors">
-          trytradepulse.com
+        <a href={CANONICAL_URL} className="hover:text-slate-600 transition-colors">
+          {CANONICAL_DOMAIN}
         </a>
       </footer>
 
       <footer className="border-t border-zinc-800 mt-16 py-6 px-5 text-center">
         <div className="flex items-center justify-center gap-6 text-xs text-zinc-600 flex-wrap">
-          <a href="mailto:support@trytradepulse.com" className="hover:text-zinc-400 transition-colors">support@trytradepulse.com</a>
+          <a href={`mailto:${SUPPORT_EMAIL}`} className="hover:text-zinc-400 transition-colors">{SUPPORT_EMAIL}</a>
           <a href="/terms" className="hover:text-zinc-400 transition-colors">Terms of Service</a>
           <a href="/privacy" className="hover:text-zinc-400 transition-colors">Privacy Policy</a>
         </div>

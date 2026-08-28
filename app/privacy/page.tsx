@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SUPPORT_EMAIL } from "@/lib/email-addresses";
 
 export const metadata = {
   title: "Privacy Policy — TradePulse",
@@ -232,10 +233,10 @@ export default function PrivacyPage() {
         <p className="text-zinc-300 text-sm leading-relaxed mt-4">
           To exercise any of these rights, email us at{" "}
           <a
-            href="mailto:support@trytradepulse.com"
+            href={`mailto:${SUPPORT_EMAIL}`}
             className="text-white underline"
           >
-            support@trytradepulse.com
+            {SUPPORT_EMAIL}
           </a>
           .
         </p>
@@ -266,10 +267,10 @@ export default function PrivacyPage() {
           TradePulse
           <br />
           <a
-            href="mailto:support@trytradepulse.com"
+            href={`mailto:${SUPPORT_EMAIL}`}
             className="text-white underline"
           >
-            support@trytradepulse.com
+            {SUPPORT_EMAIL}
           </a>
           <br />
           British Columbia, Canada

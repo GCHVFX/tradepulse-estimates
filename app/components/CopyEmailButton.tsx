@@ -1,8 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-
-const SUPPORT_EMAIL = 'support@trytradepulse.com';
+import { SUPPORT_EMAIL } from '@/lib/email-addresses';
 
 type CopyState = 'idle' | 'copied' | 'error';
 

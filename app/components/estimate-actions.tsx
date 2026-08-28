@@ -8,6 +8,7 @@ import { InvoiceSheet } from "./invoice-sheet";
 import { Spinner } from "./spinner";
 import { matchTemplate, buildDraftSummary } from "@/lib/quote-templates";
 import type { PricebookItem } from "@/lib/quote-templates";
+import { CANONICAL_URL } from "@/lib/site-url";
 
 interface EstimateActionsProps {
   estimateId: string;
@@ -553,7 +554,7 @@ export function EstimateActions({
             <button
               type="button"
               onClick={() => {
-                const url = "https://trytradepulse.com";
+                const url = CANONICAL_URL;
                 if (navigator.share) {
                   navigator.share({ title: "TradePulse", url }).catch(() => {});
                 } else {
