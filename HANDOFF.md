@@ -4,9 +4,8 @@ Updated: 2026-08-28 09:20 PT (SMS-configured gates no longer hard-require TWILIO
 
 ## SMS-configured gates decoupled from TWILIO_FROM_NUMBER (2026-08-28 09:20 PT)
 
-**Status:** fixed on `main`, verified. Commit hash filled in below once
-pushed, matching the two-commit pattern from the prior two sessions (initial
-commit, then one follow-up filling in the hash this same entry references).
+**Status:** fixed on `main`, verified, committed as `18ef693` and pushed to
+`origin/main`.
 
 ### The gap this closes
 
