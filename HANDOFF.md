@@ -4,9 +4,10 @@ Updated: 2026-08-28 09:05 PT (all four Twilio send paths now use the Messaging S
 
 ## Messaging Service SID extended to the remaining Twilio send paths (2026-08-28 09:05 PT)
 
-**Status:** fixed on `main`, verified. Confirmed in production before this
-task started: `send-sms` (switched in the prior session) delivered a real
-estimate text successfully via the Messaging Service SID.
+**Status:** fixed on `main`, verified, committed as `aab11de` and pushed to
+`origin/main`. Confirmed in production before this task started: `send-sms`
+(switched in the prior session) delivered a real estimate text successfully
+via the Messaging Service SID.
 
 ### Context
 
