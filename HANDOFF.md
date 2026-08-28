@@ -4,7 +4,7 @@ Updated: 2026-08-28 08:56 PT (send-sms switched to the Twilio Messaging Service 
 
 ## Messaging Service SID for send-sms, domain-migration outcome, HANDOFF corrections (2026-08-28 08:56 PT)
 
-**Status:** fixed on `main`, verified, committed and pushed -- see commit hash under "Files changed" below.
+**Status:** fixed on `main`, verified, committed as `0b68120` and pushed to `origin/main`.
 
 ### HANDOFF status-line corrections (Task 1)
 
