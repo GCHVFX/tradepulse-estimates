@@ -18,6 +18,7 @@ import { readEstimateCurrencies } from "@/lib/currency-db";
 import { DEFAULT_CURRENCY } from "@/lib/currency";
 import { computeNextReminderStage, formatDueDateText } from "@/lib/payment-reminder-stage";
 import { claimDelivery, markDeliverySent } from "@/lib/delivery-claims";
+import { resolveTwilioSendAddress } from "@/lib/twilio-send";
 import { ESTIMATES_FROM } from "@/lib/email-addresses";
 
 const MAX_REMINDERS_PER_RUN = 100;
@@ -157,8 +158,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             } else {
               await twilioClient.messages.create({
                 body: smsBody,
-                from: process.env.TWILIO_FROM_NUMBER,
                 to: formattedPhone,
+                ...resolveTwilioSendAddress(process.env),
               });
               await markDeliverySent(supabaseAdmin, claimId);
               reminderRows.push({

@@ -12,7 +12,8 @@
  * that same function directly -- nothing here mocks the Twilio SDK.
  */
 import { expect, test } from "@playwright/test";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { resolveTwilioSendAddress } from "../../lib/twilio-send";
 import {
   isTwilioUnsubscribedError,
@@ -124,4 +125,63 @@ test("send-sms builds its Twilio payload from resolveTwilioSendAddress, not a ha
   expect(source).toContain('import { resolveTwilioSendAddress } from "@/lib/twilio-send"');
   expect(source).toContain("...resolveTwilioSendAddress(process.env)");
   expect(source).not.toContain("from: process.env.TWILIO_FROM_NUMBER");
+});
+
+// Excluded on purpose: lib/twilio-send.ts is the resolver itself (never
+// calls messages.create, so it wouldn't match the scan below anyway), and
+// lib/notify-error.ts's `from` is a Resend email address, not a Twilio
+// field (it doesn't import "twilio" either, so it wouldn't match -- listed
+// explicitly anyway, matching the exact exclusion this task named).
+const EXCLUDED_FROM_SCAN = new Set(["lib/twilio-send.ts", "lib/notify-error.ts"]);
+
+/** Recursively lists every .ts/.tsx file under `dir`, repo-relative, forward
+ * slashes, skipping node_modules and dotfolders. */
+function listTsFiles(dir: string, out: string[] = []): string[] {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
+    const full = join(dir, entry.name).split("\\").join("/");
+    if (entry.isDirectory()) {
+      listTsFiles(full, out);
+    } else if (entry.name.endsWith(".ts") || entry.name.endsWith(".tsx")) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
+test("no route in the repo constructs a Twilio send payload with a hardcoded from field outside lib/twilio-send.ts", () => {
+  // A "Twilio sender" is any file that both imports the twilio SDK and calls
+  // .messages.create( -- the import check is what keeps this from false-
+  // positiving on unrelated .messages.create( calls (the Anthropic SDK uses
+  // the exact same method name in app/api/analyze-photo/route.ts and
+  // app/api/estimates/[id]/analyze-photos/route.ts).
+  const candidates = [...listTsFiles("app"), ...listTsFiles("lib")].filter(
+    (path) => !EXCLUDED_FROM_SCAN.has(path)
+  );
+  const twilioSenders = candidates.filter((path) => {
+    const source = readFileSync(path, "utf8");
+    return /from ["']twilio["']/.test(source) && source.includes("messages.create(");
+  });
+
+  // Sanity check on the scan itself: if this ever comes back empty or
+  // missing a known sender, every assertion below passes vacuously and this
+  // test stops meaning anything. Fail loudly instead.
+  expect(twilioSenders.sort()).toEqual(
+    [
+      "app/api/cron/payment-reminders/route.ts",
+      "app/api/estimates/[id]/review-request/route.ts",
+      "app/api/estimates/[id]/send-reminder/route.ts",
+      "app/api/send-sms/route.ts",
+    ].sort()
+  );
+
+  for (const path of twilioSenders) {
+    const source = readFileSync(path, "utf8");
+    expect(source, `${path} must not hardcode a from field on a Twilio send`).not.toMatch(
+      /from:\s*process\.env\.TWILIO_FROM_NUMBER/
+    );
+    expect(source, `${path} must resolve its Twilio send address via resolveTwilioSendAddress`).toContain(
+      "...resolveTwilioSendAddress(process.env)"
+    );
+  }
 });

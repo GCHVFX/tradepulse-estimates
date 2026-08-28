@@ -1,6 +1,99 @@
 # TradePulse handoff
 
-Updated: 2026-08-28 08:56 PT (send-sms switched to the Twilio Messaging Service SID; domain-migration outcome confirmed; two stale HANDOFF status lines corrected)
+Updated: 2026-08-28 09:05 PT (all four Twilio send paths now use the Messaging Service SID, not just send-sms; repo-wide regression guard added)
+
+## Messaging Service SID extended to the remaining Twilio send paths (2026-08-28 09:05 PT)
+
+**Status:** fixed on `main`, verified. Confirmed in production before this
+task started: `send-sms` (switched in the prior session) delivered a real
+estimate text successfully via the Messaging Service SID.
+
+### Context
+
+Prior session switched only `app/api/send-sms/route.ts` to
+`resolveTwilioSendAddress()` and explicitly flagged three more routes with
+the identical bare-`from` pattern, pending a decision to extend it. That
+decision came back this session: extend to all three.
+
+### The fix (Task 1)
+
+Same helper, same semantics, three files, nothing else touched in any of
+them (per instruction):
+
+- `app/api/cron/payment-reminders/route.ts`
+- `app/api/estimates/[id]/send-reminder/route.ts`
+- `app/api/estimates/[id]/review-request/route.ts`
+
+Each gained one import (`import { resolveTwilioSendAddress } from
+"@/lib/twilio-send";`) and one call-site change: `from:
+process.env.TWILIO_FROM_NUMBER,` replaced with
+`...resolveTwilioSendAddress(process.env),` inside the existing
+`client.messages.create({ body, to, ... })` call. All four Twilio send paths
+in the repo now resolve their address the same way.
+
+**Left deliberately untouched, out of this task's scope:** each route's own
+`smsConfigured` / config-presence check (e.g. `payment-reminders`' and
+`send-reminder`'s `Boolean(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN &&
+TWILIO_FROM_NUMBER)`, `review-request`'s equivalent early-return) still
+requires `TWILIO_FROM_NUMBER` to be set even when only
+`TWILIO_MESSAGING_SERVICE_SID` is configured. Since `TWILIO_FROM_NUMBER`
+remains set in Production as the fallback, this has no live effect today,
+but it's worth a separate look if `TWILIO_FROM_NUMBER` is ever retired
+outright -- these gates would then incorrectly report SMS as unconfigured.
+
+### New test (Task 2)
+
+`tests/smoke/twilio-messaging-service.spec.ts` gained one new, deliberately
+generic test: it recursively scans every `.ts`/`.tsx` file under `app/` and
+`lib/`, identifies "Twilio senders" as any file that both imports `twilio`
+and calls `messages.create(` (the import check is what avoids a false
+positive on the *Anthropic* SDK's identically-named
+`client.messages.create()` in `app/api/analyze-photo/route.ts` and
+`app/api/estimates/[id]/analyze-photos/route.ts`), asserts the four known
+senders are exactly what the scan finds (so the scan itself can't silently
+find nothing and pass every assertion vacuously), then asserts none of them
+hardcodes `from: process.env.TWILIO_FROM_NUMBER` and all of them spread
+`...resolveTwilioSendAddress(process.env)`. `lib/twilio-send.ts` (the
+resolver itself) and `lib/notify-error.ts` (Resend email `from`, unrelated)
+are excluded explicitly, matching the instruction, though neither would have
+matched the scan anyway.
+
+**Sanity-checked the guard actually guards:** temporarily reverted
+`review-request/route.ts`'s call site back to the bare-`from` pattern,
+re-ran the new test alone, confirmed it failed with a clear message naming
+the offending file and line, then restored the real fix and re-ran the full
+suite to confirm green again. This wasn't a permanent change -- the working
+tree was clean of it before commit.
+
+### Verification actually run (2026-08-28 09:05 PT)
+
+- `npx tsc --noEmit` -- clean.
+- `npx next build` -- compiled successfully, all routes present, no new
+  warnings, no errors.
+- `npx playwright test --config=playwright.unit.config.ts` -- **388 passed, 0
+  failed** (387 before this change, +1 new generic guard test; the other 7
+  tests already in `twilio-messaging-service.spec.ts` from the prior session
+  are unaffected). Raw output pasted to chat during this session.
+
+No dashboard was touched, no account was created, no Production data was
+touched, no real Twilio call was made during verification (the sanity-check
+revert above never left the working tree, and was never committed or
+deployed).
+
+### Files changed
+
+`app/api/cron/payment-reminders/route.ts`,
+`app/api/estimates/[id]/send-reminder/route.ts`,
+`app/api/estimates/[id]/review-request/route.ts`,
+`tests/smoke/twilio-messaging-service.spec.ts`, `CLAUDE.md` (one line,
+now stating all four routes use the resolver, not three-pending),
+`HANDOFF.md`.
+
+### Next action
+
+None outstanding for this fix. The `smsConfigured`/`TWILIO_FROM_NUMBER`
+gating note above is worth a look only if `TWILIO_FROM_NUMBER` is ever
+retired from Vercel entirely -- not before then.
 
 ## Messaging Service SID for send-sms, domain-migration outcome, HANDOFF corrections (2026-08-28 08:56 PT)
 
