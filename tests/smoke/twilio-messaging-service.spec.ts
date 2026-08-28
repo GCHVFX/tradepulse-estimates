@@ -14,7 +14,7 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { resolveTwilioSendAddress } from "../../lib/twilio-send";
+import { resolveTwilioSendAddress, hasUsableTwilioSender } from "../../lib/twilio-send";
 import {
   isTwilioUnsubscribedError,
   recordSuppressionIfUnsubscribedError,
@@ -95,6 +95,34 @@ test("Twilio never receives both fields at once, for any input", () => {
     const hasFrom = "from" in address;
     expect(hasSid && hasFrom).toBe(false);
   }
+});
+
+test("hasUsableTwilioSender is true when only TWILIO_MESSAGING_SERVICE_SID is set", () => {
+  expect(hasUsableTwilioSender({ TWILIO_MESSAGING_SERVICE_SID: "MGxxxx" })).toBe(true);
+});
+
+test("hasUsableTwilioSender is true when only TWILIO_FROM_NUMBER is set", () => {
+  expect(hasUsableTwilioSender({ TWILIO_FROM_NUMBER: "+15005550006" })).toBe(true);
+});
+
+test("hasUsableTwilioSender is true when both are set", () => {
+  expect(
+    hasUsableTwilioSender({ TWILIO_MESSAGING_SERVICE_SID: "MGxxxx", TWILIO_FROM_NUMBER: "+15005550006" })
+  ).toBe(true);
+});
+
+test("hasUsableTwilioSender is false when neither is set", () => {
+  expect(hasUsableTwilioSender({})).toBe(false);
+  expect(hasUsableTwilioSender({ TWILIO_ACCOUNT_SID: "ACxxxx" })).toBe(false);
+});
+
+test("hasUsableTwilioSender is false when both are empty strings (blank-checked, not nullish-checked)", () => {
+  expect(
+    hasUsableTwilioSender({ TWILIO_MESSAGING_SERVICE_SID: "", TWILIO_FROM_NUMBER: "" })
+  ).toBe(false);
+  expect(
+    hasUsableTwilioSender({ TWILIO_MESSAGING_SERVICE_SID: "   ", TWILIO_FROM_NUMBER: "  " })
+  ).toBe(false);
 });
 
 test("a 21610 (unsubscribed recipient) response from a send-sms send results in a suppression write", async () => {
@@ -182,6 +210,32 @@ test("no route in the repo constructs a Twilio send payload with a hardcoded fro
     );
     expect(source, `${path} must resolve its Twilio send address via resolveTwilioSendAddress`).toContain(
       "...resolveTwilioSendAddress(process.env)"
+    );
+  }
+});
+
+test("no route gates SMS sending on TWILIO_FROM_NUMBER directly outside lib/twilio-send.ts", () => {
+  // Stronger than the scan above: this one doesn't even wait for a route to
+  // call messages.create( -- it fails if the literal string TWILIO_FROM_NUMBER
+  // appears anywhere under app/ at all. resolveTwilioSendAddress() no longer
+  // requires TWILIO_FROM_NUMBER once TWILIO_MESSAGING_SERVICE_SID is set, so
+  // a gate that still checks it directly (smsConfigured, an early-return
+  // "SMS is not configured" guard, or a future variant of either) would
+  // silently stop sending -- no error, nothing in logs -- the moment
+  // TWILIO_FROM_NUMBER is retired from an environment that only has the SID.
+  // Every route must ask hasUsableTwilioSender() instead.
+  const routeFiles = listTsFiles("app");
+
+  // Sanity check on the scan itself: confirms this run actually walked a
+  // non-trivial number of route files, so a change to listTsFiles that
+  // accidentally returns nothing can't make every assertion below pass
+  // vacuously.
+  expect(routeFiles.length).toBeGreaterThan(20);
+
+  for (const path of routeFiles) {
+    const source = readFileSync(path, "utf8");
+    expect(source, `${path} must not reference TWILIO_FROM_NUMBER directly -- use hasUsableTwilioSender()`).not.toContain(
+      "TWILIO_FROM_NUMBER"
     );
   }
 });

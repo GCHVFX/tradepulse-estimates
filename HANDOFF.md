@@ -1,6 +1,97 @@
 # TradePulse handoff
 
-Updated: 2026-08-28 09:05 PT (all four Twilio send paths now use the Messaging Service SID, not just send-sms; repo-wide regression guard added)
+Updated: 2026-08-28 09:20 PT (SMS-configured gates no longer hard-require TWILIO_FROM_NUMBER once TWILIO_MESSAGING_SERVICE_SID is set)
+
+## SMS-configured gates decoupled from TWILIO_FROM_NUMBER (2026-08-28 09:20 PT)
+
+**Status:** fixed on `main`, verified. Commit hash filled in below once
+pushed, matching the two-commit pattern from the prior two sessions (initial
+commit, then one follow-up filling in the hash this same entry references).
+
+### The gap this closes
+
+Flagged at the end of the prior session: `resolveTwilioSendAddress()` no
+longer requires `TWILIO_FROM_NUMBER` once `TWILIO_MESSAGING_SERVICE_SID` is
+set, but three routes' "is SMS configured" gates still hard-required it
+directly --
+
+- `app/api/cron/payment-reminders/route.ts`'s `smsConfigured` check
+- `app/api/estimates/[id]/send-reminder/route.ts`'s `smsConfigured` check
+- `app/api/estimates/[id]/review-request/route.ts`'s early-return
+  `"SMS is not configured."` guard
+
+-- so retiring `TWILIO_FROM_NUMBER` from Vercel entirely (keeping only the
+Messaging Service SID) would have silently stopped all three from ever
+attempting a send. No error, nothing in logs, nothing in Sentry -- the gate
+itself would just decide SMS isn't configured and skip straight to the
+"not configured" branch each route already has for exactly that case.
+`app/api/send-sms/route.ts` was checked for the same pattern and doesn't
+have one (it never gated on `TWILIO_FROM_NUMBER` at all, so nothing to fix
+there).
+
+### The fix (Tasks 1 and 2)
+
+New export in `lib/twilio-send.ts`: `hasUsableTwilioSender(env)`, true when
+either `TWILIO_MESSAGING_SERVICE_SID` or `TWILIO_FROM_NUMBER` is set
+(blank-checked). Implemented by calling `resolveTwilioSendAddress(env)` and
+checking its return value, not a second copy of the blank-check logic -- the
+two literally cannot disagree about what counts as configured, since one is
+built from the other's actual output.
+
+All three gates now call `hasUsableTwilioSender(process.env)` in place of
+the direct `process.env.TWILIO_FROM_NUMBER` check. Nothing else in any of
+the three gates changed -- same `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN`
+conditions, same "SMS is not configured." error text, same behaviour for
+every other input.
+
+### New tests (Task 3)
+
+Added to `tests/smoke/twilio-messaging-service.spec.ts`:
+
+- `hasUsableTwilioSender` is true with only the SID set, only
+  `TWILIO_FROM_NUMBER` set, or both set.
+- False when neither is set, and false when both are empty/whitespace-only
+  strings (proves the blank-check, not just a nullish-check).
+- A new source-level guard, stronger than the existing "no hardcoded from"
+  scan: it fails if the literal string `TWILIO_FROM_NUMBER` appears
+  *anywhere* under `app/` at all (not just inside a `messages.create(`
+  call) -- after this fix, that string genuinely does not appear under
+  `app/` any more, so this is a real, currently-true invariant, not an
+  aspirational one.
+
+**Sanity-checked the new guard the same way as the prior session:**
+temporarily reverted `review-request/route.ts`'s gate back to
+`!process.env.TWILIO_FROM_NUMBER`, ran the test file alone, confirmed the
+new guard failed with a message naming the exact file, then restored the
+real fix and reran the full suite to confirm green. Never left in the
+working tree, never committed.
+
+### Verification actually run (2026-08-28 09:20 PT)
+
+- `npx tsc --noEmit` -- clean.
+- `npx next build` -- compiled successfully, all routes present, no new
+  warnings, no errors.
+- `npx playwright test --config=playwright.unit.config.ts` -- **394 passed,
+  0 failed** (388 before this change, +6 new: 5 `hasUsableTwilioSender`
+  tests + 1 new source-level guard). Raw output pasted to chat during this
+  session.
+
+No dashboard was touched, no account was created, no Production data was
+touched, no real Twilio call was made.
+
+### Files changed
+
+`lib/twilio-send.ts`, `app/api/cron/payment-reminders/route.ts`,
+`app/api/estimates/[id]/send-reminder/route.ts`,
+`app/api/estimates/[id]/review-request/route.ts`,
+`tests/smoke/twilio-messaging-service.spec.ts`, `CLAUDE.md` (Twilio SMS
+section, documenting the gate fix and the second guard test), `HANDOFF.md`.
+
+### Next action
+
+None outstanding. `TWILIO_FROM_NUMBER` can now be retired from any Vercel
+environment that has `TWILIO_MESSAGING_SERVICE_SID` set, whenever that's
+wanted, without silently disabling SMS anywhere in the app.
 
 ## Messaging Service SID extended to the remaining Twilio send paths (2026-08-28 09:05 PT)
 

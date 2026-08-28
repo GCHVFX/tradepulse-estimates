@@ -17,7 +17,7 @@ import {
 import { readEstimateCurrency } from "@/lib/currency-db";
 import { selectManualReminderStage, formatDueDateText } from "@/lib/payment-reminder-stage";
 import { claimDelivery, markDeliverySent } from "@/lib/delivery-claims";
-import { resolveTwilioSendAddress } from "@/lib/twilio-send";
+import { resolveTwilioSendAddress, hasUsableTwilioSender } from "@/lib/twilio-send";
 import { ESTIMATES_FROM } from "@/lib/email-addresses";
 
 type SmsOutcome = "sent" | "suppressed" | "no_phone" | "not_configured" | "failed";
@@ -108,7 +108,7 @@ export async function POST(
   const smsConfigured = Boolean(
     process.env.TWILIO_ACCOUNT_SID &&
     process.env.TWILIO_AUTH_TOKEN &&
-    process.env.TWILIO_FROM_NUMBER
+    hasUsableTwilioSender(process.env)
   );
   const twilioClient = smsConfigured
     ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)

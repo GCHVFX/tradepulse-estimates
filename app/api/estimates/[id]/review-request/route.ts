@@ -10,7 +10,7 @@ import {
   SMS_OPTED_OUT_MESSAGE,
   SMS_OPTED_OUT_CODE,
 } from "@/lib/sms-suppression";
-import { resolveTwilioSendAddress } from "@/lib/twilio-send";
+import { resolveTwilioSendAddress, hasUsableTwilioSender } from "@/lib/twilio-send";
 
 function formatPhone(raw: string): string {
   if (!raw || typeof raw !== "string") throw new Error("Invalid phone number");
@@ -40,7 +40,7 @@ export async function POST(
   if (
     !process.env.TWILIO_ACCOUNT_SID ||
     !process.env.TWILIO_AUTH_TOKEN ||
-    !process.env.TWILIO_FROM_NUMBER
+    !hasUsableTwilioSender(process.env)
   ) {
     return applyTo(NextResponse.json({ error: "SMS is not configured." }, { status: 500 }));
   }

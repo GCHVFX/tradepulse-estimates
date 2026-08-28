@@ -33,3 +33,23 @@ export function resolveTwilioSendAddress(
   if (messagingServiceSid) return { messagingServiceSid };
   return { from: env.TWILIO_FROM_NUMBER };
 }
+
+/**
+ * Whether a usable Twilio sender is configured at all -- either
+ * TWILIO_MESSAGING_SERVICE_SID or TWILIO_FROM_NUMBER, blank-checked like
+ * everything else in this file. Every route's "is SMS configured" gate
+ * should call this instead of checking TWILIO_FROM_NUMBER directly:
+ * resolveTwilioSendAddress() no longer requires TWILIO_FROM_NUMBER once a
+ * Messaging Service SID is set, so a gate that still hard-requires it would
+ * silently stop sending (no error, nothing in logs) the moment
+ * TWILIO_FROM_NUMBER is retired from an environment that only has the SID.
+ *
+ * Derived from resolveTwilioSendAddress()'s own return value, not a second
+ * copy of the blank-check, so the two can never disagree about what counts
+ * as "configured."
+ */
+export function hasUsableTwilioSender(env: Record<string, string | undefined>): boolean {
+  const address = resolveTwilioSendAddress(env);
+  if (address.messagingServiceSid) return true;
+  return Boolean(address.from?.trim());
+}
