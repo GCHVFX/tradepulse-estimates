@@ -1,6 +1,117 @@
 # TradePulse handoff
 
-Updated: 2026-08-27 22:05 PT (share links pinned to canonicalUrl(), never SITE_URL, closing a real risk that a share link could resolve to a Vercel deployment URL)
+Updated: 2026-08-28 07:22 PT (Twilio signature validation made host-tolerant via an explicit allow-list; password-reset redirect pinned to canonicalUrl())
+
+## Twilio signature host-tolerance and password-reset canonical host (2026-08-28 07:22 PT)
+
+**Status:** fixed on `main`, verified, not yet committed.
+
+### The bugs
+
+Two remaining `SITE_URL` usages flagged in the prior session (see "Share links
+pinned to the canonical host" below, which pinned the other two call sites and
+explicitly left these two out of scope):
+
+1. **Twilio signature validation.** `app/api/webhooks/twilio-inbound/route.ts`
+   rebuilt the signed URL from `SITE_URL` and validated against that one URL
+   only. Twilio signs the exact URL it actually POSTed to, which is whatever
+   the Twilio Console webhook configuration says -- not `SITE_URL`, which is
+   env-driven and follows the current deployment. The moment the two
+   disagreed, every inbound STOP/START/HELP failed signature validation with
+   a clean 403, and nothing about that surfaces in logs or Sentry -- a silent
+   compliance failure, not just a broken feature.
+2. **Password reset redirect.** `app/api/send-reset-email/route.ts` built the
+   Supabase recovery link's `redirectTo` from `SITE_URL`. An emailed link, like
+   a share link, is a permanent artifact a user may click hours or days later;
+   it should not depend on `NEXT_PUBLIC_APP_URL` being set correctly in every
+   environment it might be sent from.
+
+### The fix
+
+1. **`lib/site-url.ts`** gained one new exported constant,
+   `TWILIO_SIGNATURE_HOSTS`: `tradepulse-estimates.com`,
+   `www.tradepulse-estimates.com`, `tradepulseestimates.com`,
+   `www.tradepulseestimates.com`, `trytradepulse.com`, `www.trytradepulse.com`,
+   and `tradepulse-estimates.vercel.app` (the project's stable Vercel host).
+   Fixed, code-owned list -- not built from any request data.
+2. **`lib/twilio-inbound-webhook.ts`**: `TwilioInboundDependencies.getWebhookUrl`
+   (single URL) became `getWebhookUrls` (array). The handler now tries the
+   signature against every candidate URL and succeeds if any one matches
+   (`.some(...)`), instead of building or trusting anything from the request
+   itself -- no `x-forwarded-host`, no `request.url`, no client-supplied host
+   of any kind feeds the candidate list. Only the fixed allow-list does.
+3. **`app/api/webhooks/twilio-inbound/route.ts`**: now imports
+   `TWILIO_SIGNATURE_HOSTS` (not `SITE_URL`) and builds
+   `getWebhookUrls: () => TWILIO_SIGNATURE_HOSTS.map((host) => \`https://${host}/api/webhooks/twilio-inbound\`)`.
+4. **`app/api/send-reset-email/route.ts`**: now imports `canonicalUrl` instead
+   of `SITE_URL`, and builds `redirectTo: canonicalUrl('/reset-password')`.
+   `canonicalUrl()` consults no environment variable at all.
+
+Left untouched, per instruction: billing checkout/portal/upgrade stay on
+`SITE_URL` deliberately (those redirects are transient, one Stripe-session
+long, and should follow the request origin so a preview deployment round-trips
+to itself). No dashboards, pricing, copy, layout, or the logo were touched.
+
+### New tests
+
+- **`tests/smoke/twilio-signature-allowlist.spec.ts`** (new), 7 tests: the
+  allow-list contains exactly the 7 expected hosts; a real Twilio signature
+  computed for an alias host (`www.tradepulseestimates.com`) validates
+  successfully; the project's `vercel.app` host also validates; a real
+  signature computed for a host **not** on the allow-list (a branch-preview
+  `*.vercel.app` URL, and a plain attacker-controlled domain) is rejected;
+  the route/lib never reference `x-forwarded-host`, `request.headers.get("host")`,
+  or `request.url`; the route derives its candidate hosts from the single
+  `TWILIO_SIGNATURE_HOSTS` export, not scattered literals. Every signature is
+  computed with the real `twilio` SDK (`getExpectedTwilioSignature` /
+  `validateRequest`) against the real `TWILIO_SIGNATURE_HOSTS` constant --
+  nothing here is mocked.
+- **`tests/smoke/password-reset-canonical-host.spec.ts`** (new), 2 tests,
+  matching `share-link-canonical-host.spec.ts`'s exact pattern: sets
+  `NEXT_PUBLIC_APP_URL`, `VERCEL_URL`, and `NEXT_PUBLIC_VERCEL_URL` to junk
+  deployment-shaped values, dynamically imports `lib/site-url.ts` **after**
+  that mutation, and asserts `canonicalUrl("/reset-password")` is exactly
+  `https://tradepulse-estimates.com/reset-password` regardless; a
+  source-level guard confirms the route imports `canonicalUrl`, contains no
+  `SITE_URL` reference, and builds `redirectTo` with exactly
+  `canonicalUrl('/reset-password')`.
+- **`tests/smoke/twilio-inbound-webhook.spec.ts`** (existing, updated): its
+  `makeDependencies` helper switched from `getWebhookUrl` to
+  `getWebhookUrls: () => [WEBHOOK_URL]` to match the new interface. All 9
+  existing tests in that file still pass unmodified otherwise.
+
+Both new files added to `playwright.unit.config.ts`'s allowlist.
+
+### Verification actually run (2026-08-28 07:22 PT)
+
+- `npx tsc --noEmit` -- clean.
+- `npx next build` -- compiled successfully, all routes present including
+  `/api/webhooks/twilio-inbound` and `/api/send-reset-email`, no new warnings.
+- `npx playwright test --config=playwright.unit.config.ts` -- **380 passed, 0
+  failed** (371 before this change: +9 new in
+  `twilio-signature-allowlist.spec.ts`, +2 new in
+  `password-reset-canonical-host.spec.ts`, existing `twilio-inbound-webhook.spec.ts`
+  suite unaffected). Raw output pasted to chat during this session.
+
+No dashboard was touched, no account was created, no Production data was
+touched, no real Twilio or Supabase call was made -- every test uses fakes or
+pure functions.
+
+### Files changed
+
+`lib/site-url.ts`, `lib/twilio-inbound-webhook.ts`,
+`app/api/webhooks/twilio-inbound/route.ts`, `app/api/send-reset-email/route.ts`,
+`tests/smoke/twilio-signature-allowlist.spec.ts` (new),
+`tests/smoke/password-reset-canonical-host.spec.ts` (new),
+`tests/smoke/twilio-inbound-webhook.spec.ts`, `playwright.unit.config.ts`,
+`HANDOFF.md`.
+
+### Next action
+
+Commit and push once the build passes (per instruction) -- this section will
+need its "not yet committed" status line and the commit hash updated
+immediately after, matching the convention already established for the share-
+link fix below.
 
 ## Share links pinned to the canonical host, not SITE_URL (2026-08-27 22:05 PT)
 

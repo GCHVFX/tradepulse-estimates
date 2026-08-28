@@ -32,11 +32,17 @@ export interface TwilioInboundDependencies {
   validateSignature: (authToken: string, signature: string, url: string, params: Record<string, string>) => boolean;
   getAuthToken: () => string | undefined;
   /**
-   * The exact public URL Twilio is configured to POST this webhook to.
-   * Twilio's signature covers this URL, so it must match Console
-   * configuration exactly (protocol, host, path -- no trailing differences).
+   * Every full webhook URL (protocol + host + path) Twilio might be
+   * configured in Console to POST this webhook to. Twilio's signature
+   * covers the exact URL it posted to, so validation tries each candidate
+   * and succeeds if any one matches -- host-tolerant by design, since
+   * Console configuration doesn't have to agree with this app's current
+   * SITE_URL. Must only ever come from a fixed, code-owned allow-list (see
+   * lib/site-url.ts's TWILIO_SIGNATURE_HOSTS), never from a client-supplied
+   * header -- an attacker-controlled host in the signed string is a
+   * signature bypass.
    */
-  getWebhookUrl: () => string;
+  getWebhookUrls: () => string[];
   store: SmsSuppressionStore;
 }
 
@@ -64,12 +70,12 @@ export function createTwilioInboundWebhookHandler(
 
     const params = Object.fromEntries(new URLSearchParams(rawBody).entries());
 
-    const valid = dependencies.validateSignature(
-      authToken,
-      signature,
-      dependencies.getWebhookUrl(),
-      params
-    );
+    // Host-tolerant: try every allow-listed candidate URL, succeed if any
+    // one matches. This list is fixed and code-owned (see getWebhookUrls'
+    // doc comment) -- never derived from anything in `request`.
+    const valid = dependencies
+      .getWebhookUrls()
+      .some((url) => dependencies.validateSignature(authToken, signature, url, params));
     if (!valid) return new Response("Invalid signature", { status: 403 });
 
     const from = params.From;

@@ -76,3 +76,27 @@ export function canonicalUrl(path: string): string {
 export function siteUrl(path: string): string {
   return path === "/" ? SITE_URL : `${SITE_URL}${path}`;
 }
+
+/**
+ * Every host this app has ever answered inbound Twilio traffic on. Twilio
+ * signs the exact URL it POSTed to, which is whatever the Twilio Console
+ * webhook configuration says -- not SITE_URL, which is env-driven and
+ * follows the current deployment. If those two ever disagree, a signature
+ * built against SITE_URL fails cleanly (a 403) with nothing surfacing in
+ * logs or Sentry. Validation checks the signature against every alias in
+ * this list, not just SITE_URL's current value, so a Console webhook
+ * pointed at any host TradePulse has actually used still validates.
+ *
+ * Deliberately a fixed, code-owned list, never built from a client-supplied
+ * header (e.g. x-forwarded-host) -- that would let an attacker supply their
+ * own signed host and bypass validation entirely.
+ */
+export const TWILIO_SIGNATURE_HOSTS: readonly string[] = [
+  "tradepulse-estimates.com",
+  "www.tradepulse-estimates.com",
+  "tradepulseestimates.com",
+  "www.tradepulseestimates.com",
+  "trytradepulse.com",
+  "www.trytradepulse.com",
+  "tradepulse-estimates.vercel.app",
+];

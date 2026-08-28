@@ -3,7 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase-server';
 import { Resend } from 'resend';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getRequestIp, normalizeEmail } from '@/lib/request-guards';
-import { SITE_URL } from '@/lib/site-url';
+import { canonicalUrl } from '@/lib/site-url';
 import { ESTIMATES_EMAIL } from '@/lib/email-addresses';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
       type: 'recovery',
       email: normalizedEmail,
       options: {
-        redirectTo: `${SITE_URL}/reset-password`,
+        redirectTo: canonicalUrl('/reset-password'),
       },
     });
 

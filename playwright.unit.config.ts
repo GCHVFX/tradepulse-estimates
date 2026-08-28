@@ -35,6 +35,8 @@ export default defineConfig({
     "cost-amplification-guards.spec.ts",
     "estimate-generation-claims.spec.ts",
     "share-link-canonical-host.spec.ts",
+    "twilio-signature-allowlist.spec.ts",
+    "password-reset-canonical-host.spec.ts",
   ],
   fullyParallel: false,
   workers: 1,

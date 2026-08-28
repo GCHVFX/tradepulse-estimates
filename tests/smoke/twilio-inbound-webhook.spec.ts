@@ -57,7 +57,7 @@ function makeDependencies(store: SmsSuppressionStore): TwilioInboundDependencies
   return {
     validateSignature: twilio.validateRequest,
     getAuthToken: () => AUTH_TOKEN,
-    getWebhookUrl: () => WEBHOOK_URL,
+    getWebhookUrls: () => [WEBHOOK_URL],
     store,
   };
 }
