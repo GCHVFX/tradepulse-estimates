@@ -1,10 +1,179 @@
 # TradePulse handoff
 
-Updated: 2026-08-28 07:22 PT (Twilio signature validation made host-tolerant via an explicit allow-list; password-reset redirect pinned to canonicalUrl())
+Updated: 2026-08-28 08:56 PT (send-sms switched to the Twilio Messaging Service SID; domain-migration outcome confirmed; two stale HANDOFF status lines corrected)
+
+## Messaging Service SID for send-sms, domain-migration outcome, HANDOFF corrections (2026-08-28 08:56 PT)
+
+**Status:** fixed on `main`, verified, committed and pushed -- see commit hash under "Files changed" below.
+
+### HANDOFF status-line corrections (Task 1)
+
+This file had two `**Status:** fixed on \`main\`, verified, not yet committed.`
+lines describing work that was actually committed and pushed days/hours
+earlier -- the Twilio signature host-tolerance entry (actually `fac9f76`) and
+the share-links entry (actually `147972f`). Both corrected to state the real
+commit hash and pushed status. `git log --oneline` and `git log origin/main
+--oneline` were both checked to confirm the hashes before writing them in --
+not assumed from memory. This file is the project's durable memory; a false
+"not yet committed" line is exactly the kind of staleness this file exists to
+prevent, so the pattern stops here rather than compounding into a third
+stale line next session.
+
+### The bug (Task 2)
+
+`app/api/send-sms/route.ts` sent every estimate text with a bare `from:
+process.env.TWILIO_FROM_NUMBER`, bypassing the Twilio Messaging Service
+entirely. Two real consequences, not just style: the Messaging Service's
+Advanced Opt-Out management only governs sends made *through* the service,
+and the number's 10DLC campaign registration is tied to the service, not to
+an ad-hoc `from` send. A text sent this way sat outside both protections.
+
+**Every other Twilio send path in the repo checked for the same pattern** (as
+requested, not fixed -- see below): `app/api/cron/payment-reminders/route.ts`,
+`app/api/estimates/[id]/send-reminder/route.ts`, and
+`app/api/estimates/[id]/review-request/route.ts` all still send with a bare
+`from: process.env.TWILIO_FROM_NUMBER`, identical pattern, identical exposure.
+`lib/notify-error.ts` was checked and correctly left alone -- its `from` is an
+email address (Resend), unrelated to Twilio.
+
+### The fix (Task 2)
+
+New `lib/twilio-send.ts`, one exported function,
+`resolveTwilioSendAddress(env)`: returns `{ messagingServiceSid }` when
+`TWILIO_MESSAGING_SERVICE_SID` is set (blank-checked via `?.trim()`, not
+nullish-checked, matching `lib/site-url.ts`'s `cleanEnv` convention -- an env
+var recorded as `""` in Vercel must be treated as absent), otherwise
+`{ from: TWILIO_FROM_NUMBER }`. Twilio rejects a request carrying both
+fields, so the return type is a real either/or, not both-optional.
+`app/api/send-sms/route.ts` now spreads `...resolveTwilioSendAddress(process.env)`
+into `client.messages.create()` instead of a hardcoded `from` field.
+
+**New env var required:** `TWILIO_MESSAGING_SERVICE_SID`, value
+`MGc054dd546b97c9ea33f4836276468516` -- needs to be set in Vercel (all
+environments that send SMS) for `send-sms` to actually pick up the Messaging
+Service. Until it's set there, `send-sms` falls back to `TWILIO_FROM_NUMBER`
+exactly as before -- not a regression, but also not the fix taking effect.
+
+**Only `app/api/send-sms/route.ts` was switched over this task**, matching
+the literal instruction scope (one named route, one line number). The other
+three routes listed above have the identical bare-`from` pattern and are
+ready to adopt `resolveTwilioSendAddress()` trivially -- one import, one
+line -- but that wasn't done here pending an explicit decision to extend it,
+since the review-request and payment-reminder sends are a different feature
+surface than estimate sends and weren't named in this task.
+
+### 21610 handling (Task 3) -- already present everywhere, no code change
+
+Checked all four Twilio send call sites (`send-sms`, `cron/payment-reminders`,
+`estimates/[id]/send-reminder`, `estimates/[id]/review-request`): every one
+already calls `recordSuppressionIfUnsubscribedError()` from
+`lib/sms-suppression.ts` in its catch block, which recognizes Twilio error
+code 21610 and writes `tpe_sms_suppressions` idempotently
+(`store.suppress()`, an UPDATE-then-INSERT compare-and-swap). This was built
+during the SMS opt-out release (see that section further down this file) and
+was not disturbed by anything in this task. No code change was needed for
+Task 3; a new focused test was added anyway per the bugfix-to-smoke-test
+habit (see below), since this task explicitly called it out.
+
+**On the "STOP webhooks pointed at the wrong app" data implication:** no
+manual backfill is needed or was performed. `tpe_sms_suppressions` self-heals
+automatically -- the next time TradePulse tries to text a number Twilio has
+already recorded as unsubscribed, that send fails with 21610, and the
+existing catch-block handling records the suppression then. The gap only
+matters for numbers TradePulse hasn't attempted to text since the webhook
+was pointed correctly; there is no way to backfill those without a Twilio-side
+opt-out export, which wasn't requested and wasn't done.
+
+### Domain migration outcome (Task 6)
+
+Independently verified via `curl -s -o /dev/null -w '%{http_code}
+%{redirect_url}'` against both legacy hosts with a path appended:
+
+```
+trytradepulse.com/share/test123      -> 308 https://tradepulse-estimates.com/share/test123
+www.trytradepulse.com/share/test123  -> 308 https://tradepulse-estimates.com/share/test123
+```
+
+Both 308 (permanent redirect, method-preserving) to the canonical host with
+the path intact -- the domain migration's redirect behavior is confirmed
+working in Production, independent of anything this session changed.
+
+**Reported, not independently verified by this agent (no Twilio Console
+access):** the Twilio Messaging Service's inbound webhook had been pointing
+at `review-request-umber.vercel.app` -- an unrelated app, not TradePulse --
+until it was corrected earlier today. This explains why `tpe_sms_suppressions`
+may be missing opt-outs Twilio already holds (see Task 3 above): inbound
+STOP/START/HELP delivered to the wrong app never reached
+`app/api/webhooks/twilio-inbound/route.ts` at all, regardless of anything in
+this codebase's signature validation. Now that the webhook is corrected,
+Task 3's self-healing on next-send-attempt is the intended recovery path.
+
+### New tests (Task 4)
+
+**`tests/smoke/twilio-messaging-service.spec.ts`** (new), 7 tests, asserting
+on the payload `resolveTwilioSendAddress()` actually returns -- no mocked
+Twilio SDK anywhere in this file:
+
+1. With `TWILIO_MESSAGING_SERVICE_SID` set, the built payload contains
+   `messagingServiceSid` and has no `from` key at all (checked via `"from" in
+   payload`, not just a falsy check).
+2. With it unset, the payload falls back to `from` and has no
+   `messagingServiceSid` key.
+3. An empty/whitespace-only `TWILIO_MESSAGING_SERVICE_SID` is treated as
+   absent (blank-checked, not nullish-checked) -- proves the exact
+   requirement, not just the happy path.
+4. A parametrized check across four env shapes that Twilio never receives
+   both fields at once.
+5. A 21610 response results in a suppression write, using the real
+   `recordSuppressionIfUnsubscribedError()` + a fake `SmsSuppressionStore`
+   (same fake style already established in `sms-suppression-guard.spec.ts`
+   and `twilio-inbound-webhook.spec.ts`).
+6. A non-21610 error does **not** write a suppression, so the 21610 branch
+   is proven selective, not a catch-all.
+7. A source-level guard: `send-sms/route.ts` imports and spreads
+   `resolveTwilioSendAddress`, and no longer contains a hardcoded
+   `from: process.env.TWILIO_FROM_NUMBER` literal.
+
+Added to `playwright.unit.config.ts`'s allowlist.
+
+### Verification actually run (2026-08-28 08:56 PT)
+
+- `npx tsc --noEmit` -- clean. (One real type error surfaced and was fixed
+  during this task: `Pick<NodeJS.ProcessEnv, ...>` doesn't structurally
+  accept a plain `process.env` argument in this project's TS setup --
+  switched `resolveTwilioSendAddress`'s parameter to `Record<string, string |
+  undefined>`, which does.)
+- `npx next build` -- compiled successfully, all routes present including
+  `/api/send-sms`, no new warnings, no errors.
+- `npx playwright test --config=playwright.unit.config.ts` -- **387 passed, 0
+  failed** (380 before this change, +7 new in
+  `twilio-messaging-service.spec.ts`). Raw output pasted to chat during this
+  session.
+
+No dashboard was touched, no account was created, no Production data was
+touched, no real Twilio call was made, no `.env.local` / `.env.vercel.production`
+secret files were edited or committed (both are gitignored and untouched).
+
+### Files changed
+
+`lib/twilio-send.ts` (new), `app/api/send-sms/route.ts`,
+`tests/smoke/twilio-messaging-service.spec.ts` (new),
+`playwright.unit.config.ts`, `CLAUDE.md` (one line, documenting the new env
+var and which routes use it), `HANDOFF.md` (this section, plus the two Task 1
+corrections above).
+
+### Next action
+
+Set `TWILIO_MESSAGING_SERVICE_SID` = `MGc054dd546b97c9ea33f4836276468516` in
+Vercel (all environments sending SMS), redeploy so the `NEXT_PUBLIC_`-free
+server env var takes effect, then decide whether to extend
+`resolveTwilioSendAddress()` to the three remaining bare-`from` routes
+(`cron/payment-reminders`, `estimates/[id]/send-reminder`,
+`estimates/[id]/review-request`) -- flagged above, not done this task.
 
 ## Twilio signature host-tolerance and password-reset canonical host (2026-08-28 07:22 PT)
 
-**Status:** fixed on `main`, verified, not yet committed.
+**Status:** fixed on `main`, verified, committed as `fac9f76` and pushed to `origin/main`.
 
 ### The bugs
 
@@ -108,14 +277,11 @@ pure functions.
 
 ### Next action
 
-Commit and push once the build passes (per instruction) -- this section will
-need its "not yet committed" status line and the commit hash updated
-immediately after, matching the convention already established for the share-
-link fix below.
+None outstanding for this fix -- committed and pushed, see Status above.
 
 ## Share links pinned to the canonical host, not SITE_URL (2026-08-27 22:05 PT)
 
-**Status:** fixed on `main`, verified, not yet committed.
+**Status:** fixed on `main`, verified, committed as `147972f` and pushed to `origin/main`.
 
 ### The bug
 

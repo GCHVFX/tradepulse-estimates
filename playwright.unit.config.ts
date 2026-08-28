@@ -37,6 +37,7 @@ export default defineConfig({
     "share-link-canonical-host.spec.ts",
     "twilio-signature-allowlist.spec.ts",
     "password-reset-canonical-host.spec.ts",
+    "twilio-messaging-service.spec.ts",
   ],
   fullyParallel: false,
   workers: 1,

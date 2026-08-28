@@ -13,6 +13,7 @@ import {
   SMS_OPTED_OUT_CODE,
 } from "@/lib/sms-suppression";
 import { canonicalUrl } from "@/lib/site-url";
+import { resolveTwilioSendAddress } from "@/lib/twilio-send";
 
 function formatPhone(raw: string): string {
   if (!raw || typeof raw !== "string") {
@@ -180,8 +181,8 @@ if (!hasAccess) return applyTo(NextResponse.json({ error: "Subscription required
     try {
       await client.messages.create({
         body: messageBody,
-        from: process.env.TWILIO_FROM_NUMBER!,
         to: formattedPhone,
+        ...resolveTwilioSendAddress(process.env),
       });
     } catch (sendErr) {
       const optedOut = await recordSuppressionIfUnsubscribedError(suppressionStore, suppressionKey, sendErr);
