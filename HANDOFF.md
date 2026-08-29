@@ -4,8 +4,8 @@ Updated: 2026-08-28 20:21 PT (checkout.session.completed now writes subscription
 
 ## Checkout webhook writes subscription_status directly; profile badge corrected (2026-08-28 20:21 PT)
 
-**Status:** fixed on `main`, verified. Commit hash filled in after push, same
-two-commit pattern as recent prior sessions.
+**Status:** fixed on `main`, verified, committed as `bdb00dc` and pushed to
+`origin/main`.
 
 ### Confirmed production bug
 
