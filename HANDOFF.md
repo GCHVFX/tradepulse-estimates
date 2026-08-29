@@ -1,6 +1,723 @@
 # TradePulse handoff
 
-Updated: 2026-08-28 21:07 PT (a spec file can no longer exist without either running or being excluded with a stated reason)
+Updated: 2026-08-29 02:46 PT (FINAL DECISION on the footer mark: Greg rejected Mark C sitewide, Mark A now has a documented small-size treatment and is used at every size everywhere, including the footer -- round 1's "Mark C only under 40px" rule is superseded, see below)
+
+## FINAL: Mark A used at every size sitewide, including the footer (2026-08-29 02:46 PT)
+
+**Status:** done on `main`, verified, not committed yet. **This is the
+final decision on the footer mark -- do not relitigate.** Greg rejected
+the Mark C swap below. Round 1's acceptance criterion ("nothing under
+40px uses Mark A, filled Mark C only") is superseded: Mark A now has a
+documented, implemented small-size treatment and is used at every size,
+every surface, sitewide. `LogoMarkC` still exists as a component (kept
+for an eventual real favicon/app-icon build, which is what it was
+actually designed for) but is no longer referenced by `RowLockup` or
+`StackedLockup`.
+
+### What changed
+
+`app/components/logo-mark.tsx`: `LogoMarkLight` and `LogoMarkOnDark` both
+gained a `markATreatment(size)` helper, applied internally -- callers
+don't pick a size band, the components just handle it:
+
+| Size | Stroke width (rect + pulse) | Gridlines |
+|---|---|---|
+| 40px and up (unchanged) | 2.2 | both present, stroke-width 2 |
+| 24-39px | 2.6 | both present, stroke-width 2 |
+| Under 24px | 3 | **both removed** |
+
+Exact values from the brand reference's own "sizes" row for Mark A,
+supplied directly -- not interpolated or guessed the way Mark C's curve
+was.
+
+`app/components/wordmark.tsx`: `pickMark()` no longer branches on size.
+It's just `variant === "dark" ? LogoMarkOnDark : LogoMarkLight` again --
+the graduation lives inside the mark components now, so the lockup
+components don't need to know or care what size they're rendering at.
+
+### Footer: Mark A at 20/19, re-measured (not assumed to match the Mark C numbers)
+
+`iconSize=20, textSize=19` -- same props as the just-superseded Mark C
+version, but now resolving to `LogoMarkLight`'s under-24px treatment
+(stroke 3, no gridlines) instead of `LogoMarkC`. Predicted this would
+land close to the prior 167px measurement since both icons share the same
+32-unit viewBox; confirmed rather than assumed:
+
+| | Mark C version (superseded) | Mark A version (current, final) |
+|---|---|---|
+| Icon rendered size | 20px | 20px |
+| Icon stroke-width (measured via `getAttribute`) | n/a (Mark C's own curve) | **3** (matches spec exactly) |
+| Gridlines present (measured via `querySelectorAll('line').length`) | n/a | **0** (matches spec exactly) |
+| Lockup rendered width | 167.0px | **167.0px** (identical, as predicted) |
+| Row content-box width (640px, tightest) | 560px | 560px |
+| Margin remaining | 45.7px | **45.7px** (identical) |
+
+### Verified visually, not just numerically
+
+Screenshots at the tightest breakpoint (640px) and mobile (375px, stacked
+layout): the icon reads clearly at 20px with no visual mushing (the
+thicker 3-stroke and dropped gridlines are exactly what keep it legible
+at that size), and it visually matches the same mark as the nav and demo
+widgets -- same bordered-square-with-pulse design, just the simplified
+small-size rendition, not a different logo.
+
+### Confirmed unaffected: nav and demo widgets
+
+Both still resolve through the same `LogoMarkLight`/`LogoMarkOnDark`
+components as before (no separate code path). Measured live:
+
+- Nav (`/login`, 44px icon): stroke-width `2.2`, gridline count `2` --
+  the unchanged default treatment.
+- Demo widget (home page, 44px icon): stroke-width `2.2`, gridline count
+  `2` -- same.
+
+Both are well above the 24px threshold where the treatment changes, so
+neither was at risk, but confirmed rather than assumed.
+
+### Verification actually run (2026-08-29 02:46 PT)
+
+- `npx tsc --noEmit` -- clean.
+- `npx next build` -- compiled successfully, all routes built.
+- Live measurement in the browser: icon size, stroke-width attribute, and
+  gridline count read directly off the rendered SVG (not inferred from
+  source), at the footer (20px), nav (44px), and a demo widget (44px).
+- Fresh screenshots at 640px and 375px confirming visual legibility and
+  that the footer mark matches the nav/demo mark design.
+
+### Next action
+
+Nothing outstanding, and nothing left to decide on this specific
+question -- Mark A at every size, sitewide, is the final state. Same as
+the rest of this session otherwise: review the diff and say go-ahead to
+commit.
+
+## Mark C was missing as a component; footer sizing corrected (2026-08-29 02:37 PT)
+
+**Status:** superseded 2026-08-29 02:46 PT -- Greg rejected Mark C for
+the footer (and sitewide). See "FINAL: Mark A used at every size
+sitewide" above for the current, final state. `LogoMarkC` and the
+`pickMark()` size branch this section built are both described below for
+history; `LogoMarkC` still exists as a component (unreferenced by the
+lockups now), the size branch in `pickMark()` was removed.
+
+The footer fix directly below this section (44/16) fit its width budget
+but looked wrong -- a 44px icon next to 16px text reads as disproportionate,
+confirmed by screenshot. Root cause: round 1's own acceptance criteria
+("nothing under 40px uses Mark A, filled Mark C only") was never actually
+built as a component. Every sub-40px context since then (the marketing
+raster swap, this footer's first pass) worked around that gap by either
+using a raster Mark C image or by forcing Mark A's 44px floor into a
+place too narrow for it -- because there was no live Mark C component to
+reach for instead.
+
+### What was added
+
+- `app/components/logo-mark.tsx` gained `LogoMarkC` -- filled amber tile,
+  dark pulse stroke, same markup as the original brand reference's Mark C
+  (already used for the raster favicon/app-icon files), now as a live SVG
+  component with the same size-dependent stroke-width curve (2.8 at
+  40px+, 3.2 at 24px, 4.0 at 16px and below, interpolated between).
+- `app/components/wordmark.tsx`: `RowLockup` and `StackedLockup` both now
+  pick the icon automatically via a shared `pickMark(variant, size)` --
+  `iconSize < 40` always renders `LogoMarkC` regardless of `variant`
+  (Mark C is surface-agnostic by design), otherwise `LogoMarkLight` /
+  `LogoMarkOnDark` as before. This is centralized once, not per call site,
+  so the sub-40px rule can't be silently skipped again wherever this
+  resurfaces next (the brief's own words: "this same problem will
+  resurface anywhere else something needs to render small").
+
+### Footer re-sized: 44/16 -> 20/19
+
+The previous fix (`iconSize=44, textSize=16`) is superseded -- it fit the
+~189px budget but was the wrong variant, not a sizing problem. Re-sized to
+`iconSize=20, textSize=19`, matching the reference sheet's own small/dense
+pairing (near 1:1 icon-to-text, not an oversized icon shrunk down only in
+its text). Icon now renders as `LogoMarkC` automatically since 20 < 40.
+
+Re-measured against the same footer budget established in the prior
+round:
+
+| | 44/16 (superseded) | 20/19 (current) |
+|---|---|---|
+| Row content-box width (640px, tightest) | 560px | 560px |
+| Nav-links row width | 347.25px | 347.25px |
+| Lockup rendered width | 169.6px | **167.0px** |
+| Margin remaining | 43.2px | **45.7px** |
+
+Narrower than before (icon dropped 24px, text grew 3px, net ~2.6px
+narrower) and, more importantly, no longer disproportionate -- confirmed
+by a fresh screenshot at the same 640px breakpoint plus mobile (375px,
+stacked layout): the icon and text now read as one balanced mark, not a
+big icon next to small text.
+
+### Verification actually run (2026-08-29 02:37 PT)
+
+- `npx tsc --noEmit` -- clean.
+- `npx next build` -- compiled successfully, all routes built.
+- Live measurement in the browser at 640px (tightest breakpoint) --
+  table above.
+- Fresh screenshots at 640px and mobile (375px) confirming visual
+  proportion, not just fit -- reviewed before calling this done, not
+  after.
+- Grepped every `RowLockup` call site afterward: nav and all 5 marketing
+  headers still `44/36`, all 3 demo widgets still `44/28` -- unchanged,
+  and still resolve to Mark A since both are >=40px (the size-aware
+  branch is transparent to callers already at or above the floor).
+
+### Next action
+
+Nothing outstanding. Same as the rest of this session: review the diff
+and say go-ahead to commit.
+
+## Footer logo credit: the "nobody zooms into it" skip was wrong (2026-08-29 02:30 PT)
+
+**Status:** superseded 2026-08-29 02:37 PT -- the sizing below
+(`44/16`) fit the width budget but looked disproportionate (big icon,
+tiny text). See "Mark C was missing as a component; footer sizing
+corrected" above for the actual current state (`20/19`, `LogoMarkC`).
+Kept below for the width-budget measurement and the "confirmed this was
+the same flagged asset" reasoning, which are both still accurate.
+
+Corrects the footer skip made in two prior rounds (the under-40px Mark C
+swap and the wordmark rollout) -- both called it "a footer credit nobody
+zooms into" and left it on the legacy raster. That assumption was wrong,
+confirmed by direct screenshot. Both entries corrected in place further
+down this file.
+
+### Confirmed this was the same flagged asset, not assumed
+
+Grepped for `tradepulse-logo\.png` before touching anything:
+`app/page.tsx:692` was still `<img src="/tradepulse-logo.png" ...
+className="h-7 w-auto" />` -- the exact same legacy raster (bold
+sans-serif "TradePulse" over bold orange "Estimates") flagged and left
+alone in both prior rounds. Confirmed, not assumed.
+
+### Measurement (before) -- a different container shape than the demo widgets
+
+The footer row is `flex flex-col sm:flex-row items-center
+justify-between gap-6` -- not a hard-clipped box like the demo widget's
+card, but a flexible row that can be forced to wrap or overlap if the
+logo grows too wide relative to the nav-links row sharing the space. The
+tightest point is exactly at Tailwind's `sm:` breakpoint (640px), where
+the row first goes horizontal:
+
+| | value |
+|---|---|
+| Row content-box width (640px viewport, padding-adjusted) | 560px |
+| Nav-links row width (measured, not assumed) | ~347px |
+| Row's own `gap` CSS minimum | 24px |
+| **Budget available for the logo credit** | **~189px** |
+
+The original raster at `h-7` measured 89.4px wide (icon+text together) --
+comfortably inside that budget, which is exactly why nobody had seen it
+overflow. The nav's own `44/36` and the demo widgets' `44/28` are both far
+wider than 189px and would not fit here at all.
+
+### The fix, and how the size was chosen
+
+Kept `iconSize={44}` -- same reasoning as every other round: shrinking
+Mark A below 40px reopens the legibility problem it was bumped to 44px to
+solve, and the icon isn't what's tight here anyway (44px alone fits the
+189px budget with room to spare). Tried `textSize={19}` first (matching
+the reference sheet's own "small/dense" anchor value) -- measured it at
+190.85px rendered, which just barely exceeded the ~189px budget with
+zero margin, the same razor-thin-fit mistake as the demo-widget round.
+Dropped to `textSize={16}` and re-measured:
+
+| | value |
+|---|---|
+| Row content-box width (640px, tightest breakpoint) | 560px |
+| Nav-links row width | 347.25px |
+| Lockup rendered width (icon 44 + gap 11 + text@16) | 169.6px |
+| **Gap between logo and nav (actual, via `justify-between`)** | **43.2px** (row's own `gap-6`/24px minimum was never the constraint) |
+
+43.2px margin against a 24px minimum is comfortable, not borderline.
+Re-verified at mobile (375px, stacked `flex-col` layout: 327px available,
+169.6px lockup, no wrap) and desktop (1280px: 427px of free space) --
+same 169.6px lockup width at every size since the fix doesn't depend on
+viewport, only on the fixed props passed to `RowLockup`.
+
+### Verified visually, not just measured
+
+Screenshots at the tightest breakpoint (640px) and mobile (375px) both
+show "TradePulse Estimates" reading completely next to the nav-links row
+and Start Free button, no clipping, no wrapping, no overlap. The footer's
+quick-links row and the legal-links row below it (Support / Terms of
+Service / Privacy Policy) are visually unchanged -- confirmed in the same
+screenshots, not just assumed from not having edited that code.
+
+### Verification actually run (2026-08-29 02:30 PT)
+
+- `npx tsc --noEmit` -- clean.
+- `npx next build` -- compiled successfully, all routes built.
+- Live measurement in the browser (`getBoundingClientRect()` /
+  `getComputedStyle()`) at 640px (tightest), 375px (mobile stacked), and
+  1280px (desktop) -- table above.
+- Screenshots at 640px and 375px confirming the full text reads and nothing
+  else in the footer moved.
+- Grepped `tradepulse-logo\.png` again afterward: only `proxy.ts`'s
+  routing matcher remains (not a rendered usage). The file is no longer
+  referenced by any component.
+- Confirmed nav/marketing `RowLockup` (44/36, 6 locations) and the three
+  demo widgets (44/28) are untouched -- grepped every call site.
+
+### Next action
+
+Nothing outstanding. Same as the rest of this session: review the diff
+and say go-ahead to commit.
+
+## Demo widget wordmark was clipping in its card header (2026-08-29 02:21 PT)
+
+**Status:** done on `main`, verified, not committed yet.
+
+The three demo widgets (`EstimateDemo.tsx`, `EstimateDemoElectrical.tsx`,
+`EstimateDemoTrades.tsx`) got `RowLockup iconSize=44 textSize=36` copied
+straight from the nav in the round above -- but their card header is a
+narrower container than the nav, and at that size "Estimates" was getting
+clipped by the card's `overflow:hidden`. Fixed by measurement, not by
+eyeballing a smaller number.
+
+### Measurement (before)
+
+The card header's own content-box width (320px card - 12px border - 32px
+header padding = 276px, confirmed via `getBoundingClientRect()` /
+`getComputedStyle()` in the browser, not assumed from reading the CSS
+alone) versus the rendered lockup at 44/36:
+
+| | value |
+|---|---|
+| Header content-box width available | 276px |
+| Lockup rendered width (icon 44 + 11px gap + text) | 312.7px |
+| **Overflow** | **+36.7px past the container** |
+
+Note: the wordmark `<span>`'s own `scrollWidth` vs `clientWidth` were
+identical (258/258) at every size tested -- that check alone proves
+nothing here, since the span has no width constraint of its own to
+overflow against. The actual clipping happens one level up, where the
+icon+gap+text flex row exceeds the header's padded content box and gets
+cut by the phone-shell card's `overflow:hidden`. Measured that comparison
+instead: rendered lockup width vs. the header's actual available content
+width.
+
+### The fix
+
+Kept `iconSize={44}` unchanged -- shrinking Mark A below 40px would
+reopen the exact legibility problem that got it bumped to 44px in the
+first place, and the icon isn't what's overflowing (44px fits fine on its
+own). Reduced `textSize` to `28`, which is enough on its own since the
+icon was never the problem:
+
+| | value |
+|---|---|
+| Header content-box width available | 276px |
+| Lockup rendered width (icon 44 + 11px gap + text@28) | 255.5px |
+| **Margin remaining** | **20.5px (~7.4% headroom)** |
+
+Confirmed via the same `getBoundingClientRect()` comparison, live in the
+browser, at both the project's standard mobile breakpoint (375px, via the
+Browser pane's "mobile" preset) and a range of desktop widths
+(700/834/1280px) -- consistent 276px/255.5px/20.5px margin at every one
+tested. (One dead end during measurement, noted for anyone repeating this:
+an early reading showed 0px margin and a `viewportWidth: 0` in the same
+JS payload -- a stale/mid-navigation execution context, not a real
+breakpoint. Re-ran against a freshly-loaded page and it resolved; the
+`candidateCount`/`viewportWidth` sanity fields in the script are there so
+that doesn't get mistaken for a real result again.)
+
+Applied identically to all three widgets, each with a comment explaining
+the 276px/44/28 numbers inline. Nav and marketing-page `RowLockup` calls
+(the ones this fix was explicitly told not to touch) confirmed still at
+`iconSize={44} textSize={36}` in all six locations -- grepped after the
+edit to be sure.
+
+### Verified visually, not just measured
+
+Screenshots of all three widgets after the fix (home page, `/trades`,
+`/electricians`, at the 375px mobile breakpoint) all show "TradePulse
+Estimates" reading completely -- not "Estimat" or any partial string.
+
+### Verification actually run (2026-08-29 02:21 PT)
+
+- `npx tsc --noEmit` -- clean.
+- `npx next build` -- compiled successfully, all routes built.
+- Live measurement in the browser (`getBoundingClientRect()` /
+  `getComputedStyle()`) before and after, at multiple viewport widths --
+  table above.
+- Screenshots of all three widgets post-fix, text reads completely.
+- Grepped all six nav/marketing `RowLockup` call sites -- confirmed still
+  `44/36`, untouched.
+
+### Next action
+
+Nothing outstanding. Same as the rest of this session: review the diff
+and say go-ahead to commit.
+
+## Marketing nav/header corrected: was still the legacy raster mark (2026-08-29 02:07 PT)
+
+**Status:** done on `main`, verified, not committed yet. Corrects the
+"already shows icon+wordmark, not applicable" call made under task 3 of
+the wordmark rollout below -- that was wrong. Full detail in `SPEC.md`'s
+"Correction" section; summarized here.
+
+### What was actually still there
+
+The home page nav and the shared header on `/trades`, `/electricians`,
+`/plumbers`, `/contact`, `/share/[id]` were still rendering the *legacy*
+raster lockup verbatim -- bold sans-serif "TradePulse" stacked over bold
+orange "Estimates" next to a small icon. Not any of the four lockups this
+spec defines. My earlier check only asked "icon-only vs has some text,"
+which the raster passed (it does have text), but that's a different
+question from "does it match the new lockup spec," which it didn't. Greg
+caught this from a live look at the site; I hadn't actually looked past
+"has the new icon + has some wordmark" to check the wordmark itself.
+
+### The fix
+
+All six locations now render `<RowLockup variant="light" iconSize={44}
+textSize={36} />` -- a live component (`LogoMarkLight` + `WordmarkText`
+from last round's `wordmark.tsx`), not a raster image. `app/page.tsx`'s
+nav collapsed from two `<img>` tags (a mobile/desktop split that existed
+specifically to dodge Mark A mushing under 40px on a raster asset) down to
+one `RowLockup` call, since a live 44px Mark A doesn't have that problem
+at any viewport. The five marketing pages each swapped their `next/image`
+`<Image>` call (and its now-unused `Image` import) for the same
+`RowLockup` call.
+
+**Icon size -- asked before implementing, not guessed:** the request
+suggested matching the raster's apparent 26-28px size using the reference
+sheet's literal header spec. That's under the 40px floor round 1's
+acceptance criteria established for Mark A specifically because it mushes
+below that size -- the same reason the dark app nav got bumped 32px->44px
+instead of using Mark A at its original size. Asked Greg directly rather
+than silently either complying with a request that contradicts a
+locked-in decision or silently overriding the request; he confirmed
+44px, matching the dark nav precedent. Text sized 36px, same
+26px-scaled-to-44px-icon reasoning as the dark nav.
+
+**Left alone on purpose:** `app/page.tsx`'s small footer credit (`h-7`,
+~24px icon) -- still the original raster, same as round 2's decision to
+treat it as "a footer credit nobody zooms into." `public/tradepulse-logo.png`
+is still used there. `public/tradepulse-logo-compact.png` is now
+unreferenced by any code (its only 5 usages all moved to `RowLockup`) --
+not deleted, flagging it the same way as the other now-orphaned assets
+from earlier rounds (`public/estimates-logo.png`, `app/favicon-512.png`).
+
+**Correction, 2026-08-29 02:30 PT: the "nobody zooms into" call was
+wrong**, confirmed by direct screenshot -- see the "Footer logo credit"
+section below. `public/tradepulse-logo.png` is no longer used anywhere in
+code as of that fix.
+
+### Verification actually run (2026-08-29 02:07 PT)
+
+- `npx tsc --noEmit` -- clean.
+- `npx next build` -- compiled successfully, all routes built.
+- Grepped for every remaining `tradepulse-logo` reference afterward:
+  only `proxy.ts`'s routing matcher (not a rendered usage) and the
+  intentionally-untouched footer `<img>` remain.
+- Live-checked in the browser: home page nav and `/trades` both render
+  the Instrument Serif lockup (dark ink "TradePulse", muted-grey
+  "Estimates") next to the icon, not the old raster.
+
+### Next action
+
+Nothing outstanding. Same as the rest of this session's work: review the
+diff and say go-ahead to commit.
+
+## Wordmark lockup rollout (2026-08-29 01:59 PT)
+
+**Status:** done on `main`, verified, not committed yet. Spec written to
+`SPEC.md` per this session's brief, now marked Done there with full detail
+-- see that file for the complete writeup, summarized here.
+
+Added the "TradePulse Estimates" text lockup (Instrument Serif, specific
+colours per surface) wherever it was inconsistent with the new typography
+spec, and built a stacked variant for future use without placing it.
+
+### What changed
+
+- New Google Font: `Instrument_Serif` loaded in `app/layout.tsx` as
+  `--font-instrument-serif`, alongside the existing DM Sans (which stays
+  the base app font everywhere else -- this is wordmark-only).
+- New `app/components/wordmark.tsx`: `WordmarkText` (just the text, colour
+  by `variant: "light" | "dark"`), `RowLockup` (icon beside text, 11px
+  gap -- what the app nav and demo widgets use), `StackedLockup` (icon
+  above text, 6px gap -- built and exported, not imported anywhere).
+- `app/components/logo-mark.tsx` gained `LogoMarkLight` (Mark A, light
+  surfaces) alongside the existing `LogoMarkOnDark`, so `StackedLockup`
+  can render either surface later.
+- `app/components/logo.tsx` (`Logo()`) now just returns
+  `<RowLockup variant="dark" iconSize={44} textSize={36} />` instead of
+  hand-rolled icon+text JSX.
+- The three demo widgets (`EstimateDemo.tsx`, `EstimateDemoElectrical.tsx`,
+  `EstimateDemoTrades.tsx`) already had wordmark text next to their icon
+  (contrary to the brief's assumption that the icon swap left them bare) --
+  just with the pre-redesign sans-serif/amber styling. Replaced that block
+  with the same `RowLockup` call so all four dark-surface lockups
+  (app nav + 3 demos) share one implementation.
+
+### Text size: 36px, not 26px
+
+The reference sheet gives 26px for a "normal" header icon and 19px for a
+sub-24px icon, but doesn't cover the 44px icon this app actually uses (it
+was deliberately enlarged from 32px in an earlier round so Mark A's
+outline doesn't mush below 40px -- text has no such constraint). Scaled
+26px by the icon's growth ratio (44/32 = 1.375x) and rounded to 36px.
+Documented in a comment in `logo.tsx`.
+
+### Marketing header: checked, already compliant enough not to need code changes -- **WRONG, corrected 2026-08-29 02:07 PT, see the section above**
+
+`app/page.tsx`'s nav and the raster lockup shared by `/trades`,
+`/electricians`, `/plumbers`, `/contact`, `/share/[id]`
+(`tradepulse-logo.png` / `tradepulse-logo-compact.png`) already show icon
++ wordmark text -- not icon-only, not the old mark. Task 3's trigger
+condition ("if it still shows the old mark or icon-only") didn't apply,
+so nothing there was changed.
+
+*(This determination was wrong -- I'd only checked "has some text," not
+whether that text matched the new lockup spec. It didn't: still the
+legacy bold-sans-serif/orange raster. Fixed in the section above this
+one.)*
+
+**Flagging, not fixing:** that raster wordmark's text is still baked in
+at its original sans-serif styling from before any of this branding work,
+not this spec's Instrument Serif treatment -- because it's pixels in a
+flat PNG, not live text, matching this new typography spec there means
+re-compositing the whole lockup (rebuilding the wordmark as art, not just
+swapping the icon slot the way the last two rounds did). Judged that to be
+a separate, bigger piece of work than "add the wordmark where the icon
+swap left it bare" (the wordmark was never removed there), so left it as
+Greg's call rather than doing it unprompted.
+
+### Verification actually run (2026-08-29 01:59 PT)
+
+- `npx tsc --noEmit` -- clean.
+- `npx next build` -- compiled successfully, all routes built.
+- `git status` confirmed zero changes under estimate generation, preview,
+  or PDF/document export: `lib/generate-pdf.ts`,
+  `app/components/company-estimate-header.tsx`,
+  `app/components/download-pdf-button.tsx`,
+  `app/components/estimate-markdown.tsx`, `app/api/generate-estimate` all
+  untouched.
+- Live-checked in the browser (dev server already running on :3000): the
+  app nav's `/login` header and the demo-widget mockup embedded on the
+  landing page both render the new Instrument Serif lockup correctly,
+  bone/muted-brown colours as specified.
+
+### Next action
+
+Nothing outstanding on this spec. Same as the sections below: review and
+say go-ahead to commit. Separate, un-actioned item for Greg: decide
+whether the marketing raster lockup's wordmark typography should be
+brought in line with the Instrument Serif spec (flagged above, not done).
+
+## tradepulse-logo.png under-40px usages swapped to Mark C (2026-08-29 01:50 PT)
+
+**Status:** done on `main`, verified, not committed yet.
+
+Follow-up to the brand-mark swap below: `public/tradepulse-logo.png` kept
+Mark A's original icon-to-wordmark proportions (icon rendered smaller than
+the lockup's own CSS height -- see that section's "deliberately not
+changed" note), and several of its 8 usages render the icon under 40px,
+where Mark A's outline mushes.
+
+### Every usage found and what happened to each
+
+Icon renders at roughly 87% of the lockup's displayed height (icon slot is
+82px of the 94px-tall composite). Computed against each usage's actual
+box:
+
+| File | Box size | Icon render height | Action |
+|---|---|---|---|
+| `app/page.tsx` nav, mobile (`h-10`) | 40px | ~35px | **Fixed** |
+| `app/page.tsx` nav, `sm:` and up (`h-14`) | 56px | ~49px | Left alone (>=40px) |
+| `app/page.tsx` footer (`h-7`) | 28px | ~24px | Left alone at the time (footer credit, skip per the brief) -- **corrected 2026-08-29 02:30 PT, that call was wrong, see "Footer logo credit" section below** |
+| `app/trades/page.tsx` header | 160x44 | ~38px | **Fixed** |
+| `app/electricians/page.tsx` header | 160x44 | ~38px | **Fixed** |
+| `app/plumbers/page.tsx` header | 160x44 | ~38px | **Fixed** |
+| `app/contact/page.tsx` header | 185x60 | ~52px | Left alone (>=40px) |
+| `app/share/[id]/page.tsx` | 160x44 | ~38px | **Fixed** |
+
+`proxy.ts`'s matcher array also names `tradepulse-logo.png`, but that's a
+middleware-bypass routing rule, not a rendered usage -- not touched.
+
+### The fix
+
+New `public/tradepulse-logo-compact.png`: same 300x94 canvas and the exact
+same wordmark-text pixels as `tradepulse-logo.png` (copied through
+unchanged, same compositing technique as before), with Mark C (filled
+amber tile, stroke-width 3.0 -- tuned for the ~35-44px range these usages
+actually display at, not this file's own 82px internal icon-slot
+resolution) in the icon slot instead of Mark A.
+
+The 4 straightforward usages (`trades`, `electricians`, `plumbers`,
+`share/[id]`) just point `src` at the new file, same `width`/`height`.
+
+The nav bar (`app/page.tsx`) needed splitting into two `<img>` tags since
+one responsive element covered both a sub-40px size (mobile, `h-10`) and
+an at-or-above-40px size (desktop, `sm:h-14`) that the brief said to leave
+alone: `tradepulse-logo-compact.png` at `h-10 w-auto sm:hidden`, and the
+original `tradepulse-logo.png` unchanged at `hidden sm:block sm:h-14
+w-auto`.
+
+### Verification actually run (2026-08-29 01:50 PT)
+
+- `npx tsc --noEmit` -- clean.
+- `npx next build` -- compiled successfully, all routes built.
+- Visually inspected `tradepulse-logo-compact.png` via the Read tool --
+  Mark C badge renders correctly next to the untouched wordmark text.
+- Grepped the whole repo for `tradepulse-logo` again after the edits to
+  confirm every one of the 8 usages landed in the right bucket (table
+  above) and nothing was missed.
+
+### Next action
+
+Nothing outstanding. Same as the section below: review and say go-ahead
+to commit.
+
+## New brand mark applied (2026-08-29 01:23 PT)
+
+**Status:** done on `main`, verified, not committed yet (awaiting Greg's go-ahead to commit/push).
+
+Swapped the old orange gradient clipboard-and-checkmark mark for the new
+three-asset brand system (Mark A light, Mark A on-dark, Mark C filled
+favicon tile) supplied via a Claude Chat planning handoff. Asset swap only,
+no layout/copy/typography changes beyond the mark itself.
+
+### Two spec conflicts resolved with Greg before touching anything
+
+The brief's acceptance criteria ("nothing under 40px uses Mark A or Mark B,
+filled Mark C only") directly contradicted its own Task 1/4 instructions to
+put Mark A / Mark A-on-dark in the header/nav lockup, which rendered at
+32px (34px in the marketing demo mockups) before this change. Also, "Mark
+B" was never a supplied asset. Asked Greg directly rather than guessing:
+
+- **Lockup icon size:** enlarge to 44px everywhere it appears (matches the
+  project's existing 44px minimum-tap-target convention), keeping Mark A /
+  Mark A on-dark as the brief intended.
+- **"Mark B":** a slip, not a real fourth asset. Only Mark A (light),
+  Mark A on-dark, and Mark C exist.
+
+### Key discovery: the in-app shell is dark, not light
+
+Every screen using the shared `Logo()` component (`rates`, `profile`,
+`estimates`, `estimates/[id]` via `new`, `onboarding`, `demo`, `signup`,
+`login`, `reset-password`, `payments`) sits on `bg-zinc-950`. Only the
+public marketing surfaces (landing page, `/trades`, `/electricians`,
+`/plumbers`, `/plumbing-cost`, `/electrical-cost`, `/contact`,
+`/share/[id]`) are light, and those use a static raster lockup
+(`tradepulse-logo.png`), not the `Logo()` component. So `Logo()` now always
+renders the on-dark mark -- no per-page variant prop, no light branch,
+because no current call site is ever light. `app/components/logo-mark.tsx`
+is new: a standalone `<LogoMarkOnDark size>` used by `Logo()` and by the
+three marketing demo-mockup components (`EstimateDemo.tsx`,
+`EstimateDemoElectrical.tsx`, `EstimateDemoTrades.tsx`), which previously
+pointed at a 34px `<img src="/estimates-logo.png">` and now inline the SVG
+at 44px instead.
+
+### Files changed
+
+Live components (inline SVG, resized 32/34px -> 44px, swapped to Mark A
+on-dark): `app/components/logo.tsx`, `app/components/logo-mark.tsx` (new),
+`app/components/EstimateDemo.tsx`, `app/components/EstimateDemoElectrical.tsx`,
+`app/components/EstimateDemoTrades.tsx`.
+
+Regenerated raster assets (via a one-off `sharp` script, not committed --
+originals backed up to the session scratchpad first):
+
+- `public/favicon.png`, `public/apple-touch-icon.png`, `app/favicon-512.png`,
+  `app/favicon.ico` (new multi-size 16/32/48 PNG-ICO) -- all Mark C, stroke
+  width curve per spec (4.0 at 16px, 3.2 at 24px, interpolated 3.0 at 32px,
+  flat 2.8 at 40px and above).
+- `public/estimates-logo.png` -- Mark C. Left in place even though nothing
+  in the app references it anymore post-edit (in case anything external
+  still points at it); regenerating beats leaving a stale mark on disk.
+- `public/tradepulse-logo.png` (300x94 marketing lockup) -- composited:
+  original wordmark-text pixels (x >= 82) copied through byte-for-byte,
+  only the 82x94 icon slot on the left replaced with Mark A light
+  (rendered 82x82, vertically centered rather than stretched to the
+  slot's non-square aspect).
+- `public/social-card.png` (1202x639 OG image) -- same compositing
+  approach: old icon's ~77x90 badge region erased back to the card's own
+  navy (#0D1B2E, sampled from the untouched background, not a new palette
+  value) and replaced with Mark A on-dark.
+
+### Deliberately not changed, and why
+
+- **Estimate PDF header** (`lib/generate-pdf.ts`, `company-estimate-header.tsx`):
+  shows the *contractor's own uploaded* `logo_url`, never a TradePulse
+  mark. Task 3 doesn't apply -- there was nothing to swap.
+- **Stacked/vertical lockup** (Task 2): no such usage exists anywhere in
+  the app. Every current lockup is the horizontal icon-then-wordmark
+  pattern. Nothing to swap.
+- **manifest.json PWA icons** (part of Task 6): no manifest.json or
+  app/manifest.ts exists in this repo, so there's no PWA icon list to
+  update. `app/favicon-512.png` was regenerated anyway since it already
+  existed (unreferenced) with the old mark.
+- **`public/tradepulse-logo.png`'s internal icon-to-text proportions**:
+  kept exactly as before (icon still smaller than 40px at some of this
+  asset's smaller CSS-scaled usages, e.g. the `h-7` footer instance in
+  `app/page.tsx`). Resizing the icon within that flat composite would mean
+  redesigning its layout, which the brief explicitly put out of scope;
+  Greg's 44px sign-off was scoped to the live nav/demo lockups, not this
+  raster asset. Flagging this rather than silently deciding either way.
+  **Update:** the under-40px usages this created a Mark A legibility problem
+  for a different, standalone `tradepulse-logo-compact.png` (Mark C in the
+  same icon slot) was added for -- see the section above, dated
+  2026-08-29 01:50 PT. The `h-7` footer instance itself stayed on the
+  original file (skipped as a footer credit per that follow-up's brief).
+  **Second update, 2026-08-29 02:30 PT:** that "skip the footer" call was
+  itself wrong -- see the "Footer logo credit" section near the top of
+  this file. The footer no longer uses `tradepulse-logo.png` at all.
+
+### AI Control Centre note -- fixed in a follow-up session (2026-08-29 01:43 PT)
+
+The stale-path issue flagged above is resolved. Root cause: AICC's
+`configured_roots` table only listed `C:\Work\websites` and
+`C:\Work\web-apps` -- the latter no longer exists, which is why this
+project (and 5 others: ai-control-centre, ai-supervisor, lead-auditor,
+routebuddy, sweepstakes) all moved to `C:\Work\tools` without AICC's
+filesystem-authoritative refresh ever noticing. Added `C:\Work\tools` as a
+configured root and re-ran the registration walk from the AI Control
+Centre repo; all 6 paths corrected by matching each project's stable
+`project.json` id. Verified with a live `session start`/`session complete`
+round-trip against this project's corrected path -- both the earlier
+branding-swap handoff and this fix session are now recorded in
+`.ai-control-centre/activity.jsonl`. Full detail is in the AI Control
+Centre repo's own `HANDOFF.md`, since the actual change (a new
+`configured_roots` row, corrected `projects.path` values) lives in that
+repo's database, not in this one.
+
+### Verification actually run (2026-08-29 01:23 PT)
+
+- `npx tsc --noEmit` -- clean.
+- `npx next build` -- compiled successfully, all routes built (confirmed
+  via background task output; exit code 0).
+- Grepped the repo for the old mark's gradient hex values
+  (`f7b251`, `b26513`, `f19913`, `e6811d`, `f4b252`, `9f5c23`, `ee9611`,
+  `9a541c`) and its SVG viewBox (`673.5 764.25`) -- zero remaining
+  references anywhere.
+- Visually inspected every regenerated PNG via the Read tool (favicon,
+  apple-touch-icon, tradepulse-logo composite, social-card composite,
+  estimates-logo, favicon-512) -- mark renders correctly, wordmark/text
+  pixels in the composited assets are untouched.
+- `curl localhost:3000/login` (an already-running dev server) confirmed
+  the live page HTML contains the new mark's `viewBox="0 0 32 32"` and
+  `#F7F2E9` on-dark stroke color. The in-session Browser-pane preview tool
+  itself was flaky in this sandbox (server started but not reachable via
+  navigate/read_page), so this curl check plus the build/tsc/visual checks
+  above stood in for it.
+
+### Next action
+
+Nothing outstanding on the branding swap itself. Two items for Greg:
+
+1. Review the diff (`git status` shows exactly the files listed above,
+   nothing else touched) and say go-ahead to commit/push.
+2. Decide whether/how to fix the stale AICC project path noted above --
+   separate from this task, flagging it rather than silently working
+   around it.
+
+## Unit-suite completeness guard (2026-08-28 21:07 PT)
 
 ## Unit-suite completeness guard (2026-08-28 21:07 PT)
 

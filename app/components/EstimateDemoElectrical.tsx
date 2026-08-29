@@ -2,10 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CANONICAL_URL } from "@/lib/site-url";
+import { RowLockup } from "@/app/components/wordmark";
 
 // ─── Assets ───────────────────────────────────────────────────────────────────
-
-const TP_LOGO = '/estimates-logo.png';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -315,13 +314,9 @@ export function EstimateDemoElectrical() {
         }}>
 
           {/* App header */}
-          <div style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 16px 10px', background:'#09090b', flexShrink:0 }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={TP_LOGO} alt="" width={34} height={34} style={{ flexShrink:0, objectFit:'contain' }} />
-            <div>
-              <div style={{ color:'#fff', fontWeight:700, fontSize:15, lineHeight:1.2 }}>TradePulse</div>
-              <div style={{ color:'#f59e0b', fontSize:11 }}>Estimates</div>
-            </div>
+          <div style={{ display:'flex', alignItems:'center', padding:'14px 16px 10px', background:'#09090b', flexShrink:0 }}>
+            {/* Card header content box is 276px (320 card - 12 border - 32 padding). iconSize kept at 44 (the nav's Mark A floor still applies here); textSize reduced to 28 so "TradePulse Estimates" fits with margin -- see HANDOFF.md for the measurement. */}
+            <RowLockup variant="dark" iconSize={44} textSize={28} />
           </div>
 
           {/* Screens */}

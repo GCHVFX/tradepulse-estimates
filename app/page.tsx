@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient, supabaseAdmin } from "@/lib/supabase-server";
 import { EstimateDemo } from "@/app/components/EstimateDemo";
+import { RowLockup } from "@/app/components/wordmark";
 import { TradeExamples } from "@/app/components/TradeExamples";
 import { STARTER_MONTHLY_PRICE_CAD } from "@/lib/plan-pricing";
 import { headers } from "next/headers";
@@ -272,7 +273,7 @@ export default async function LandingPage() {
         {/* Nav */}
         <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-2 sm:py-4 sm:px-10"
           style={{ background: "rgba(255,255,255,0.85)", backdropFilter: "blur(12px)", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
-          <img src="/tradepulse-logo.png" alt="TradePulse Estimates" className="h-10 w-auto sm:h-14" />
+          <RowLockup variant="light" iconSize={44} textSize={36} />
           <div className="flex items-center gap-3 sm:gap-6">
             <Link href="#how-it-works" className="hidden sm:block text-sm text-slate-600 hover:text-slate-900 transition-colors">How it works</Link>
             <Link href="#pricing" className="hidden sm:block text-sm text-slate-600 hover:text-slate-900 transition-colors">Pricing</Link>
@@ -688,7 +689,8 @@ export default async function LandingPage() {
         {/* Footer */}
         <footer className="border-t border-slate-100 py-10 bg-white">
           <div className="mx-auto max-w-5xl px-6 sm:px-10 flex flex-col sm:flex-row items-center justify-between gap-6">
-            <img src="/tradepulse-logo.png" alt="TradePulse Estimates" className="h-7 w-auto" />
+            {/* Mark A at every size, per Greg's call -- LogoMarkLight applies its own small-size treatment (thicker stroke, gridlines dropped) under 24px, no Mark C swap. 20/19 matches the reference sheet's own small/dense pairing (near 1:1, not an oversized icon shrunk-down in text only). Comfortably inside this row's ~189px budget at its tightest breakpoint (sm:, 640px) -- see HANDOFF.md for the measurement. */}
+            <RowLockup variant="light" iconSize={20} textSize={19} />
             <nav className="flex flex-wrap items-center justify-center gap-6">
               <Link href="#how-it-works" className="text-sm text-slate-500 hover:text-slate-800 transition-colors">How it works</Link>
               <Link href="#pricing" className="text-sm text-slate-500 hover:text-slate-800 transition-colors">Pricing</Link>

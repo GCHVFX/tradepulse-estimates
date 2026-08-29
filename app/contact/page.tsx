@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
+import { RowLockup } from "@/app/components/wordmark";
 import {
   ArrowLeft,
   ChevronRight,
@@ -77,14 +77,7 @@ export default function ContactPage() {
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-2.5 sm:px-8 sm:py-3">
           <Link href="/" aria-label="TradePulse home" className="inline-flex min-h-11 items-center">
-            <Image
-              src="/tradepulse-logo.png"
-              alt="TradePulse Estimates"
-              width={185}
-              height={60}
-              className="h-10 w-auto"
-              priority
-            />
+            <RowLockup variant="light" iconSize={44} textSize={36} />
           </Link>
           <div className="flex items-center gap-2 sm:gap-4">
             <Link

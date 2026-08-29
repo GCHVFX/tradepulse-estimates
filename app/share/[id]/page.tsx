@@ -1,5 +1,5 @@
-import Image from "next/image";
 import { EstimateMarkdown } from "@/app/components/estimate-markdown";
+import { RowLockup } from "@/app/components/wordmark";
 import { DownloadPdfButton } from "@/app/components/download-pdf-button";
 import { CompanyEstimateHeader } from "@/app/components/company-estimate-header";
 import { loadCustomerPricingView } from "@/lib/estimate-pricing-server";
@@ -26,14 +26,7 @@ export default async function ShareEstimatePage({
   if (!estimate) {
     return (
       <div className="min-h-dvh bg-slate-50 flex flex-col items-center justify-center gap-4 px-5 text-center">
-        <Image
-          src="/tradepulse-logo.png"
-          alt="TradePulse Estimates"
-          width={160}
-          height={44}
-          className="object-contain"
-          unoptimized
-        />
+        <RowLockup variant="light" iconSize={44} textSize={36} />
         <p className="text-slate-400 text-base mt-6">Estimate not found.</p>
       </div>
     );

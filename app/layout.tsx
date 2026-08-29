@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { DM_Sans } from "next/font/google";
+import { DM_Sans, Instrument_Serif } from "next/font/google";
 import "./globals.css";
 import { TrialBanner } from "@/app/components/trial-banner";
 import { Analytics } from "@vercel/analytics/next";
@@ -13,6 +13,14 @@ const dmSans = DM_Sans({
   subsets: ["latin"],
   variable: "--font-dm-sans",
   weight: ["300", "400", "500", "600", "700"],
+});
+
+// Wordmark lockup only (see app/components/wordmark.tsx) -- the app's base
+// font stays DM Sans everywhere else.
+const instrumentSerif = Instrument_Serif({
+  subsets: ["latin"],
+  variable: "--font-instrument-serif",
+  weight: ["400"],
 });
 
 export const metadata: Metadata = {
@@ -33,7 +41,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${dmSans.variable} h-full antialiased`}
+      className={`${dmSans.variable} ${instrumentSerif.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <PostHogProvider>

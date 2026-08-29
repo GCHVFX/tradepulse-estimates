@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import Image from "next/image";
 import { EstimateDemo } from "@/app/components/EstimateDemo";
 import { EstimateDemoElectrical } from "@/app/components/EstimateDemoElectrical";
+import { RowLockup } from "@/app/components/wordmark";
 import { JsonLd } from "@/app/components/json-ld";
 import { STARTER_MONTHLY_PRICE_CAD } from "@/lib/plan-pricing";
 import { CANONICAL_URL, CANONICAL_DOMAIN } from "@/lib/site-url";
@@ -50,14 +50,7 @@ export default function ElectriciansPage() {
 
       {/* Header */}
       <header className="flex items-center justify-between px-6 pt-6 pb-2 max-w-lg mx-auto w-full">
-        <Image
-          src="/tradepulse-logo.png"
-          alt="TradePulse Estimates"
-          width={160}
-          height={44}
-          className="object-contain"
-          unoptimized
-        />
+        <RowLockup variant="light" iconSize={44} textSize={36} />
         <Link
           href="/login"
           className="text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors"
