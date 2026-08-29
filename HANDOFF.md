@@ -4,7 +4,7 @@ Updated: 2026-08-28 21:07 PT (a spec file can no longer exist without either run
 
 ## Unit-suite completeness guard (2026-08-28 21:07 PT)
 
-**Status:** fixed on `main`, verified. Commit hash filled in after push.
+**Status:** fixed on `main`, verified, committed as `1e7742a` and pushed to `origin/main`.
 
 Closes the follow-up flagged in the section below, where
 `pro-payments-entitlement.spec.ts` was found sitting unrun because nothing
