@@ -20,6 +20,15 @@ export type StripeWebhookSubscriptionUpdate = {
   trial_ends_at?: string | null;
 };
 
+export type StripeWebhookLinkCheckoutUpdate = {
+  stripe_subscription_id: string;
+  plan: StripeWebhookPlan;
+  /** Omitted from the write entirely when null -- see toBusinessSubscriptionStatus's
+   * doc comment for why a Stripe status can legitimately have no mapping. */
+  subscription_status?: TradePulseSubscriptionStatus;
+  trial_ends_at?: string | null;
+};
+
 export function toWebhookPlan(
   priceIds: readonly string[],
   configuredPrices: {
@@ -47,6 +56,24 @@ export interface StripeWebhookStore {
     expectedSubscriptionId: string | null;
     subscriptionId: string;
     plan: StripeWebhookPlan;
+    /**
+     * The Stripe subscription's current status, already mapped by
+     * toBusinessSubscriptionStatus() -- null when Stripe reports a status
+     * this app has no equivalent for (see that function's doc comment).
+     * A checkout's own subscription_status write used to be skipped
+     * entirely, relying on a paired customer.subscription.created/updated
+     * event to set it -- but webhook delivery order isn't guaranteed, so
+     * that event can arrive (and be rejected, see handleSubscriptionChanged's
+     * expectedSubscriptionId guard) before this one runs, leaving
+     * subscription_status permanently stuck at whatever it was before this
+     * checkout (e.g. a Starter trial's "trial", even after a completed,
+     * paid Pro checkout). Writing it here too closes that gap.
+     */
+    subscriptionStatus: TradePulseSubscriptionStatus | null;
+    /** Same semantics as StripeWebhookSubscriptionUpdate's field: undefined
+     * means "don't touch trial_ends_at", present (including null) means set
+     * it to this value. */
+    trialEndsAt?: string | null;
   }): Promise<boolean>;
   syncSubscription(input: {
     customerId: string;
@@ -162,12 +189,29 @@ async function handleCheckoutCompleted(
     return;
   }
 
+  // Set subscription_status (and, when trialing, trial_ends_at) directly from
+  // the subscription this handler already retrieved above -- not dependent
+  // on a separate customer.subscription.created/updated event to arrive and
+  // be accepted. See linkCheckout's doc comment for why that dependency was
+  // the actual bug.
+  const subscriptionStatus = toBusinessSubscriptionStatus(subscription.status);
+  if (!subscriptionStatus) {
+    console.warn("[webhook] checkout completed with an unsupported Stripe subscription status", {
+      status: subscription.status,
+    });
+  }
+  const trialEndsAt = subscription.status === "trialing"
+    ? (subscription.trial_end ? new Date(subscription.trial_end * 1000).toISOString() : null)
+    : undefined;
+
   const linked = await dependencies.store.linkCheckout({
     customerId,
     ownerUserId,
     expectedSubscriptionId: business.stripeSubscriptionId,
     subscriptionId,
     plan: recognizedPlan,
+    subscriptionStatus,
+    trialEndsAt,
   });
 
   if (!linked) {
@@ -198,6 +242,17 @@ async function handleCheckoutCompleted(
   }
 }
 
+/**
+ * Maps every Stripe Subscription.status value to a TradePulse
+ * subscription_status. Stripe's status enum has exactly eight values
+ * (incomplete, incomplete_expired, trialing, active, past_due, canceled,
+ * unpaid, paused) and all eight are mapped below -- there is currently no
+ * Stripe status this app lacks an equivalent for. The `default: return null`
+ * branch exists purely as a defensive fallback for a future Stripe status
+ * this mapping hasn't been updated for yet, not because a real gap exists
+ * today. A null result means "don't touch subscription_status", never an
+ * invented value.
+ */
 export function toBusinessSubscriptionStatus(
   status: string
 ): TradePulseSubscriptionStatus | null {

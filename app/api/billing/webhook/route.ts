@@ -3,6 +3,7 @@ import { stripe } from "@/lib/stripe";
 import {
   createStripeWebhookHandler,
   type StripeWebhookStore,
+  type StripeWebhookLinkCheckoutUpdate,
 } from "@/lib/stripe-webhook";
 
 const store: StripeWebhookStore = {
@@ -28,10 +29,16 @@ const store: StripeWebhookStore = {
     expectedSubscriptionId,
     subscriptionId,
     plan,
+    subscriptionStatus,
+    trialEndsAt,
   }) {
+    const update: StripeWebhookLinkCheckoutUpdate = { stripe_subscription_id: subscriptionId, plan };
+    if (subscriptionStatus) update.subscription_status = subscriptionStatus;
+    if (trialEndsAt !== undefined) update.trial_ends_at = trialEndsAt;
+
     const query = supabaseAdmin
       .from("tpe_businesses")
-      .update({ stripe_subscription_id: subscriptionId, plan })
+      .update(update)
       .eq("stripe_customer_id", customerId)
       .eq("owner_user_id", ownerUserId);
     const { data, error } = expectedSubscriptionId

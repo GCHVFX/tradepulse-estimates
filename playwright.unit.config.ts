@@ -38,6 +38,7 @@ export default defineConfig({
     "twilio-signature-allowlist.spec.ts",
     "password-reset-canonical-host.spec.ts",
     "twilio-messaging-service.spec.ts",
+    "billing-status-sync.spec.ts",
   ],
   fullyParallel: false,
   workers: 1,

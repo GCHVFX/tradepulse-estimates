@@ -1,6 +1,239 @@
 # TradePulse handoff
 
-Updated: 2026-08-28 09:20 PT (SMS-configured gates no longer hard-require TWILIO_FROM_NUMBER once TWILIO_MESSAGING_SERVICE_SID is set)
+Updated: 2026-08-28 20:21 PT (checkout.session.completed now writes subscription_status directly, closing the race that left a paying Pro customer stuck showing "Free trial"; profile badge corrected)
+
+## Checkout webhook writes subscription_status directly; profile badge corrected (2026-08-28 20:21 PT)
+
+**Status:** fixed on `main`, verified. Commit hash filled in after push, same
+two-commit pattern as recent prior sessions.
+
+### Confirmed production bug
+
+A real Pro checkout completed on the live site: Stripe showed the
+subscription Active, the Pro product has no trial configured, the $59
+charge succeeded. Read the actual row via the Supabase MCP (read-only,
+project `fctequqcwxyhmnjgxixg`) to ground-truth this before touching
+anything:
+
+```
+id: 2578ba02-58a6-4ca1-bec2-555b55b485d8
+plan: pro
+subscription_status: trial
+trial_ends_at: 2026-09-12 02:54:25+00
+stripe_subscription_id: sub_1U9cU7Q45KFNqa8xBHKwUxEU
+created_at: 2026-08-29 02:54:26.544544+00
+updated_at: 2026-08-29 02:54:26.544544+00   (tpe_businesses has no update
+                                              trigger, so this is not proof
+                                              nothing wrote to the row after
+                                              creation -- plan alone tells us
+                                              something did)
+```
+
+### Task 1 -- diagnosis, verified against the code (not assumed)
+
+Every place `subscription_status` is written:
+
+1. **Signup** (`app/api/auth/signup/route.ts` and `app/auth/callback/route.ts`,
+   both via `lib/account-provisioning.ts`): Starter signup writes `"trial"`
+   with a real 14-day `trial_ends_at`. **A direct Pro signup writes
+   `"incomplete"`, never `"trial"`** -- account-provisioning.ts's own
+   comment: "Pro is paid up front. No trial and no subscription yet." This
+   already contradicts a literal reading of "the signup path wrote trial for
+   this Pro row" -- the actual mechanism is more specific, below.
+2. **`app/api/billing/webhook/route.ts`** (the only other writer):
+   - `linkCheckout()` (`checkout.session.completed`) -- **wrote only `plan`
+     and `stripe_subscription_id`. Never touched `subscription_status` at
+     all.** This is the bug.
+   - `syncSubscription()` (`customer.subscription.created` /
+     `.updated`) -- writes `subscription_status`, mapped via
+     `toBusinessSubscriptionStatus()`. Correct, but gated by
+     `expectedSubscriptionId` matching the row's *current*
+     `stripe_subscription_id` in the DB at the moment this specific webhook
+     runs.
+   - `updateCurrentSubscriptionStatus()` (`customer.subscription.deleted` →
+     `"cancelled"`; `invoice.payment_succeeded` → `"active"`;
+     `invoice.payment_failed` → `"past_due"`) -- writes it directly, correct.
+
+**The actual mechanism, confirmed by tracing `app/api/billing/upgrade/route.ts`
+and `lib/stripe-webhook.ts` together:** this business started as Starter
+(`subscription_status = "trial"`, a real 14-day trial), then upgraded to Pro
+through `/api/billing/upgrade`'s Checkout flow. That flow's `checkout.session.completed`
+event only ever wrote `plan` + `stripe_subscription_id` via `linkCheckout()`
+-- never `subscription_status`. Meanwhile Stripe does **not** guarantee
+webhook delivery order: if the paired `customer.subscription.created`/
+`.updated` event for the *same* upgrade arrived and was processed *before*
+`checkout.session.completed` ran, `handleSubscriptionChanged`'s own guard
+(`business.stripeSubscriptionId !== subscription.id`) saw the row's
+still-OLD (pre-upgrade) subscription id, didn't match the new one, and
+returned early -- silently dropping that event's sync (Stripe still got a
+200, so no retry). `checkout.session.completed` then ran afterward, updated
+`plan` (matching the observed `plan: "pro"`) via its own
+`expectedSubscriptionId`-gated match against the OLD id (which still
+matched, since nothing had changed it yet), but never wrote
+`subscription_status` at all -- leaving it stuck at the original `"trial"`.
+This exactly matches the observed row: `plan` correct, `subscription_status`
+stale, `updated_at` unchanged because nothing on this table ever sets it
+explicitly (no DB trigger either, confirmed via
+`information_schema.triggers`).
+
+### Task 2 -- the fix
+
+`handleCheckoutCompleted` already retrieves the Stripe subscription object
+(to detect its price/plan). It now also maps that subscription's `.status`
+via the *existing* `toBusinessSubscriptionStatus()` and passes it into the
+*same* `linkCheckout()` call, so `subscription_status` can no longer depend
+on a second, possibly-rejected webhook event to ever get set.
+`linkCheckout`'s store implementation (`app/api/billing/webhook/route.ts`)
+now includes `subscription_status` in its `.update()` when a mapped status
+is available, and `trial_ends_at` when the subscription is `"trialing"` --
+same conditional-write semantics `syncSubscription` already used.
+
+**Stripe status coverage (Task 2's "at minimum" list, verified against
+`toBusinessSubscriptionStatus()`):** this mapping already existed and
+already covered every real Stripe `Subscription.status` value -- all eight
+of them (`active`, `trialing`, `past_due`, `unpaid`, `incomplete`, `paused`,
+`incomplete_expired`, `canceled`). **There is no Stripe status this app
+currently lacks an equivalent for.** The bug was never a missing mapping --
+it was one write path (`linkCheckout`) never calling the mapping at all.
+Documented this directly in the function's own doc comment so it doesn't
+need re-verifying next time.
+
+### Task 3 -- every read of subscription_status / trial_ends_at, and the priority-fix question
+
+**Yes, this lockout path exists, and it is not closed by anything in this
+session.** `proxy.ts` (the app-wide middleware every route is gated by) has
+its own inline copy of the exact `isActive || isTrialing || complimentary`
+check, keyed on `subscription_status === "trial" && trial_ends_at > now`.
+The identical pattern is independently duplicated in: `lib/auth.ts`
+(`checkUserSubscriptionAccess`, `hasProPaymentsAccess`),
+`app/api/generate-estimate/route.ts`, `app/api/price-book/route.ts`,
+`app/api/price-book-items/route.ts`, `app/api/price-book-items/import/route.ts`,
+and `app/api/estimates/[id]/analyze-photos/route.ts` -- seven independent
+copies of the same logic, all sharing the same trial-expiry cliff. This
+session's fix reduces how often a Pro business ends up stuck at
+`subscription_status = "trial"` in the first place, but does **not** change
+what happens if one does: once `trial_ends_at` passes on any row still
+reading `"trial"` (for any reason -- a future bug, a webhook that never
+arrives, manual DB drift), `proxy.ts` redirects that signed-in, paying
+customer to `/subscribe` exactly like an expired Starter trial. For the
+account above, `trial_ends_at` is 2026-09-12 -- not an immediate cliff, but
+the mechanism is real and would affect any account in the same stuck state
+regardless of runway.
+
+**This was flagged, not fixed, in this session.** Hardening the access-check
+logic itself (e.g. never letting a Pro-plan business's access depend on
+`trial_ends_at` at all) was not one of the seven tasks given, would touch
+several of the files listed above (most of which don't even currently
+`select` the `plan` column needed to make that distinction), and risked
+exceeding this session's scope without an explicit decision. **Recommend a
+follow-up task specifically to harden or consolidate these seven duplicated
+access checks** -- happy to scope that whenever it's prioritized.
+
+### Task 4 -- profile badge
+
+New `lib/subscription-display.ts`, deliberately separate from `lib/auth.ts`
+(display logic must never get imported into an access decision, or vice
+versa): `resolveDisplaySubscriptionStatus(subscriptionStatus, plan)` treats
+`plan === "pro" && subscriptionStatus === "trial"` as `"active"` for display
+purposes only (Pro is paid up front and never has a real trial, per
+account-provisioning.ts's own comment -- this is reading the existing
+contract correctly, not inventing a state), and
+`resolveProfileBadge(subscriptionStatus, plan)` returns the badge label +
+colour for trial / active / past_due / cancelled / complimentary, or `null`
+for an unrecognized status.
+
+`app/profile/page.tsx` now computes both once and reuses them: the header
+badge renders from `resolveProfileBadge()` (replacing two separate hardcoded
+conditionals, and adding visible states for `past_due` and `cancelled` that
+didn't render anything before), and the *corrected* status is passed into
+`ProfileForm`'s `subscriptionStatus` prop -- so the larger "Free Trial"
+upgrade card in `profile-form.tsx` (which shows Starter's $29 price and a
+day-countdown, and would have been just as wrong for this account) picks up
+the same correction automatically, with zero changes to that file. A Pro
+business stuck at "trial" now falls into that component's existing
+`subscriptionStatus === "active"` branch instead, which correctly offers the
+billing portal link rather than an "Upgrade to Pro" button or a stale
+trial countdown.
+
+### New tests (Task 5)
+
+`tests/smoke/billing-status-sync.spec.ts` (new), 9 tests:
+
+- A `checkout.session.completed` for an active Pro subscription (with the
+  business's stored `stripe_subscription_id` still pointing at the OLD
+  Starter trial subscription, reproducing the exact reported scenario)
+  writes `subscription_status: "active"`, not `"trial"`.
+- A `customer.subscription.updated` for an active Pro subscription also
+  writes `"active"`.
+- Every Stripe status Task 2 named (plus the two others that exist) maps
+  explicitly; an unrecognized value maps to `null`, never an invented
+  status.
+- A Pro business with `subscription_status: "active"` is never treated as
+  trial-expired regardless of `trial_ends_at` (exercised via
+  `hasProPaymentsAccess`, the one instance of the duplicated access-check
+  pattern that's actually exported and importable -- `proxy.ts`'s own copy
+  isn't unit-testable without extracting it first, which wasn't in scope).
+- `resolveDisplaySubscriptionStatus()` corrects Pro+trial to active and
+  leaves every other plan/status combination unchanged.
+- The profile badge renders correctly for trial, active, past_due, and
+  cancelled.
+- The exact production scenario, asserted directly: a `plan: "pro"`,
+  `subscription_status: "trial"` badge never says "Free trial".
+- A genuine Starter trial still says "Free trial" -- the fix is scoped to
+  `plan === "pro"` only, not a blanket removal of the trial badge.
+
+Also updated one existing test in `tests/smoke/stripe-webhook.spec.ts`
+("checkout completion links only the expected TradePulse owner and
+subscription") whose exact-`toEqual` assertion on the captured
+`linkCheckout` input needed the new `subscriptionStatus: "active"` field
+added -- confirmed this is the only existing test with an exact-equality
+assertion on that object; every other existing `linkCheckout` test
+destructures only the fields it needs and was unaffected.
+
+### Verification actually run (2026-08-28 20:21 PT)
+
+- `npx tsc --noEmit` -- clean.
+- `npx next build` -- compiled successfully, all routes present including
+  `/profile` and `/api/billing/webhook`, no new warnings, no errors.
+- `npx playwright test --config=playwright.unit.config.ts` -- **403 passed,
+  0 failed** (394 before this change, +9 new in
+  `billing-status-sync.spec.ts`). Raw output pasted to chat during this
+  session.
+
+No dashboard was touched, no account was created or modified, no Production
+data was written -- the only Production access this session was one
+read-only SQL query (via the Supabase MCP) to ground-truth the reported bug
+before diagnosing it, plus a read-only `information_schema.triggers` query.
+No migration was written and no backfill was performed, per instruction.
+
+### Backfill needed (not performed -- reported per instruction)
+
+The one confirmed-affected row (`2578ba02-58a6-4ca1-bec2-555b55b485d8`) still
+has `subscription_status = "trial"` today; this session's fix only prevents
+*future* checkouts from landing in this state, it does not correct existing
+rows. A backfill would need to, for every business where
+`stripe_subscription_id` is set: call `stripe.subscriptions.retrieve()`,
+map `.status` through the *existing* `toBusinessSubscriptionStatus()`, and
+write `subscription_status` (and `trial_ends_at` when trialing) --
+literally the same logic this session added to `handleCheckoutCompleted`,
+just run once across existing rows instead of on the next webhook. Whether
+to scope that to just this one known-affected business or run it broadly
+(in case other rows are silently affected by the same race) is a decision
+for Greg, not made here.
+
+### Files changed
+
+`lib/stripe-webhook.ts`, `app/api/billing/webhook/route.ts`,
+`lib/subscription-display.ts` (new), `app/profile/page.tsx`,
+`tests/smoke/billing-status-sync.spec.ts` (new),
+`tests/smoke/stripe-webhook.spec.ts`, `playwright.unit.config.ts`,
+`HANDOFF.md`.
+
+### Next action
+
+Decide on the backfill (see above), and decide whether to prioritize
+hardening the seven duplicated trial-expiry access checks named in Task 3 --
+that is the actual lockout risk and remains open.
 
 ## SMS-configured gates decoupled from TWILIO_FROM_NUMBER (2026-08-28 09:20 PT)
 

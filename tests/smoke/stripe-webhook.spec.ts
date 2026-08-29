@@ -217,6 +217,7 @@ test("checkout completion links only the expected TradePulse owner and subscript
     expectedSubscriptionId: string | null;
     subscriptionId: string;
     plan: "starter" | "pro";
+    subscriptionStatus: string | null;
   }> = [];
   const store: StripeWebhookStore = {
     ...noOpStore,
@@ -250,6 +251,7 @@ test("checkout completion links only the expected TradePulse owner and subscript
     expectedSubscriptionId: null,
     subscriptionId: "sub_new",
     plan: "starter",
+    subscriptionStatus: "active",
   }]);
 });
 

@@ -5,6 +5,22 @@ import { Logo } from "@/app/components/logo";
 import { BottomNav } from "@/app/components/bottom-nav";
 import { DeleteAccountSection } from "@/app/components/delete-account-section";
 import { ProfileForm } from "@/app/components/profile-form";
+import {
+  resolveDisplaySubscriptionStatus,
+  resolveProfileBadge,
+  type ProfileBadgeCopy,
+} from "@/lib/subscription-display";
+
+// Tailwind needs each class name to appear literally for its build-time
+// scanner to pick it up -- string-interpolating "text-${colorClass}-400"
+// would silently produce no styling in production, so this maps to full
+// static class strings instead.
+const BADGE_COLOR_CLASSES: Record<ProfileBadgeCopy["colorClass"], { dot: string; text: string }> = {
+  emerald: { dot: "bg-emerald-400", text: "text-emerald-400" },
+  amber: { dot: "bg-amber-400", text: "text-amber-400" },
+  red: { dot: "bg-red-400", text: "text-red-400" },
+  zinc: { dot: "bg-zinc-400", text: "text-zinc-400" },
+};
 
 export default async function ProfilePage({
   searchParams,
@@ -36,6 +52,14 @@ export default async function ProfilePage({
 
   const nextPath = typeof next === "string" && next.startsWith("/") ? next : null;
 
+  // A Pro business's subscription_status is corrected to "active" here when
+  // it's still stored as "trial" -- Pro is paid up front and never has a
+  // real trial (see lib/subscription-display.ts). Used for both the header
+  // badge below and passed into ProfileForm, so the "Free Trial" upgrade
+  // card there (which checks this same value) can't disagree with the badge.
+  const displaySubscriptionStatus = resolveDisplaySubscriptionStatus(data?.subscription_status, data?.plan);
+  const badge = resolveProfileBadge(data?.subscription_status, data?.plan);
+
   return (
     <div className="min-h-dvh bg-zinc-950 text-white flex flex-col">
       <header className="px-5 pt-10 pb-3 shrink-0">
@@ -47,16 +71,10 @@ export default async function ProfilePage({
         {user.email && (
           <p className="text-zinc-400 text-xs mt-1">Signed in as {user.email}</p>
         )}
-        {data?.subscription_status === "active" && (
-          <span className="inline-flex items-center gap-1.5 text-xs text-emerald-400 mt-0.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
-            Subscription active
-          </span>
-        )}
-        {data?.subscription_status === "trial" && (
-          <span className="inline-flex items-center gap-1.5 text-xs text-amber-400 mt-0.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
-            Free trial
+        {badge && (
+          <span className={`inline-flex items-center gap-1.5 text-xs mt-0.5 ${BADGE_COLOR_CLASSES[badge.colorClass].text}`}>
+            <span className={`w-1.5 h-1.5 rounded-full inline-block ${BADGE_COLOR_CLASSES[badge.colorClass].dot}`} />
+            {badge.label}
           </span>
         )}
       </header>
@@ -66,7 +84,7 @@ export default async function ProfilePage({
           profile={profile}
           userId={user.id}
           nextPath={nextPath}
-          subscriptionStatus={data?.subscription_status ?? "trial"}
+          subscriptionStatus={displaySubscriptionStatus ?? "trial"}
           trialEndsAt={data?.trial_ends_at ?? null}
           plan={data?.plan ?? "starter"}
           openSection={section ?? undefined}
