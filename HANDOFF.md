@@ -1,6 +1,113 @@
 # TradePulse handoff
 
-Updated: 2026-08-28 21:01 PT (an incomplete access select is now a compile error, not a silent denial; found and wired in an orphaned spec that never ran)
+Updated: 2026-08-28 21:07 PT (a spec file can no longer exist without either running or being excluded with a stated reason)
+
+## Unit-suite completeness guard (2026-08-28 21:07 PT)
+
+**Status:** fixed on `main`, verified. Commit hash filled in after push.
+
+Closes the follow-up flagged in the section below, where
+`pro-payments-entitlement.spec.ts` was found sitting unrun because nothing
+required a new spec to be wired into `playwright.unit.config.ts`.
+
+### The gap
+
+`tests/smoke/` holds two kinds of test: unit-safe ones listed individually in
+`testMatch`, and ones needing live services that are run deliberately. Nothing
+enforced which bucket a new file landed in. A spec left out of `testMatch`
+still type-checks, still reads like coverage, and never executes -- which is
+exactly how the Pro Payments entitlement rule went untested.
+
+### The guard
+
+`tests/smoke/unit-suite-completeness.spec.ts` (new, 4 tests). It parses
+`testMatch` out of the config, lists `tests/smoke/*.spec.ts` from disk, and
+requires every file to be in one list or the other:
+
+1. **Unaccounted files fail**, named individually in the message.
+2. **A stale exclusion fails** -- an entry naming a file no longer on disk is
+   an error, so the list cannot rot into a place where a
+   deleted-and-recreated spec would be silently excused.
+3. **The guard asserts itself into `testMatch`**, since otherwise it could be
+   added and left out the same way, which is the failure it exists to catch.
+4. **A file cannot be both** listed and excluded -- that contradiction now
+   fails rather than resolving silently in `testMatch`'s favour.
+
+Reasons must be substantive (>40 chars), so a placeholder cannot wave a file
+through.
+
+### The 16 exclusions, each with its own reason
+
+Named individually in the same style as `ACCESS_DECISION_EXEMPT` in
+`subscription-access.spec.ts`, with reasons derived from reading each file
+rather than assumed:
+
+- **Browser only, no live account (2):** `logged-out-redirect`,
+  `public-pages-load` -- need a running dev server and the `page` fixture.
+- **Need a real Supabase account via `helpers.ts` (13):**
+  `billing-gate-no-deadend`, `estimate-actions-no-nav-gap`,
+  `generate-estimate`, `line-item-qty-clear-does-not-lock`,
+  `new-circle-no-button-overlap`, `payments-no-direct-stripe`,
+  `payments-pro-enforced`, `photo-delete-uses-storage-path`,
+  `photo-monthly-cap-server-enforced`, `photo-monthly-cap-ui`,
+  `photos-persist-after-generate`, `signup-lands-on-new`, `signup-rate-limit`.
+- **Needs service-role Supabase plus a browser (1):**
+  `share-link-canonical-domain`.
+
+Two of these note where their unit-safe counterpart lives
+(`payments-pro-enforced` -> `pro-payments-entitlement`,
+`share-link-canonical-domain` -> `share-link-canonical-host`), so a reader
+can see the split rather than assume the behaviour is untested.
+
+### Sanity-checked both failure branches
+
+**Unaccounted file.** Added a throwaway
+`tests/smoke/throwaway-never-wired.spec.ts` in neither list:
+
+```
+Error: these spec files exist but never run: they are not in
+playwright.unit.config.ts's testMatch and not on CANNOT_RUN_IN_UNIT_CONFIG.
+Add each to testMatch if it is unit-safe, or to the exclusion list with the
+reason it cannot run there. A spec that never runs still type-checks, so
+nothing else will tell you.
++   "throwaway-never-wired.spec.ts",
+```
+
+Incidentally proving the point: that throwaway contained
+`expect(true).toBe(false)` and never ran -- only the guard's own 4 tests
+executed. Deleted; `git status` confirms nothing left behind.
+
+**Stale exclusion.** Added a bogus `deleted-long-ago.spec.ts` entry:
+
+```
+Error: CANNOT_RUN_IN_UNIT_CONFIG names "deleted-long-ago.spec.ts", which no
+longer exists in tests/smoke. Remove the stale entry -- left in place it
+would silently excuse a future file of the same name.
+```
+
+Removed; suite green again.
+
+### Verification actually run (2026-08-28 21:07 PT)
+
+- `npx tsc --noEmit` -- clean.
+- `npx next build` -- compiled successfully in 26.9s, no errors.
+- `npx playwright test --config=playwright.unit.config.ts` -- **430 passed, 0
+  failed** (426 before, +4 from the new guard). Raw output pasted to chat.
+
+No production data was read or written this session.
+
+### Files changed
+
+`tests/smoke/unit-suite-completeness.spec.ts` (new),
+`playwright.unit.config.ts`, `HANDOFF.md`.
+
+### Next action
+
+None outstanding from this thread of work. The subscription-status backfill
+noted further below remains open and is still data hygiene rather than a
+lockout risk.
+
+## Access columns enforced by the type system (2026-08-28 21:01 PT)
 
 ## Access columns enforced by the type system (2026-08-28 21:01 PT)
 

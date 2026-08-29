@@ -41,6 +41,7 @@ export default defineConfig({
     "billing-status-sync.spec.ts",
     "subscription-access.spec.ts",
     "pro-payments-entitlement.spec.ts",
+    "unit-suite-completeness.spec.ts",
   ],
   fullyParallel: false,
   workers: 1,
