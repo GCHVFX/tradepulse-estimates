@@ -177,10 +177,20 @@ test("a Pro business with subscription_status active is never treated as trial-e
   const farPastTrialEnd = new Date("2020-01-01T00:00:00.000Z").toISOString();
 
   expect(
-    hasProPaymentsAccess({ plan: "pro", subscription_status: "active", trial_ends_at: farPastTrialEnd })
+    hasProPaymentsAccess({
+      plan: "pro",
+      subscription_status: "active",
+      trial_ends_at: farPastTrialEnd,
+      stripe_subscription_id: LIVE_SUB,
+    })
   ).toBe(true);
   expect(
-    hasProPaymentsAccess({ plan: "pro", subscription_status: "active", trial_ends_at: null })
+    hasProPaymentsAccess({
+      plan: "pro",
+      subscription_status: "active",
+      trial_ends_at: null,
+      stripe_subscription_id: LIVE_SUB,
+    })
   ).toBe(true);
 });
 

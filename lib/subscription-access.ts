@@ -66,15 +66,28 @@ export function resolveSubscriptionStatus(
 }
 
 /**
- * Shape needed to decide access. Deliberately loose (all optional, all
- * nullable) so every call site can pass its own business row straight in
- * without reshaping it, and so a missing row is simply `null`.
+ * Shape needed to decide access.
+ *
+ * Every field is **required but nullable**, and that distinction is the whole
+ * point. Nullable, because any of these columns can genuinely be NULL in the
+ * database and the predicate has a defined answer for each. Required, because
+ * a *missing key* means something entirely different from a null value: it
+ * means the caller's `.select()` never fetched that column. That used to be
+ * invisible -- `stripe_subscription_id` would silently read `undefined`,
+ * resolve to "no live subscription", and deny a paying Pro customer with
+ * nothing logged anywhere. With the keys required, that same omission is a
+ * compile error naming the exact call site and column.
+ *
+ * Practically: select via SUBSCRIPTION_ACCESS_COLUMNS and a row satisfies
+ * this automatically. In a test fixture, write `stripe_subscription_id: null`
+ * rather than leaving the key out -- every degenerate state is still
+ * expressible, it just has to be stated rather than implied.
  */
 export interface SubscriptionAccessBusiness {
-  plan?: string | null;
-  subscription_status?: string | null;
-  trial_ends_at?: string | null;
-  stripe_subscription_id?: string | null;
+  plan: string | null;
+  subscription_status: string | null;
+  trial_ends_at: string | null;
+  stripe_subscription_id: string | null;
 }
 
 /** Every column hasSubscriptionAccess() reads. Call sites select this string

@@ -91,10 +91,16 @@ test("complimentary: access granted, with or without any trial date", () => {
   // Preserved exactly as it worked before the consolidation -- no date is
   // consulted for a complimentary account.
   expect(
-    hasSubscriptionAccess({ plan: "starter", subscription_status: "complimentary", trial_ends_at: PAST }, NOW)
+    hasSubscriptionAccess(
+      { plan: "starter", subscription_status: "complimentary", trial_ends_at: PAST, stripe_subscription_id: null },
+      NOW
+    )
   ).toBe(true);
   expect(
-    hasSubscriptionAccess({ plan: "pro", subscription_status: "complimentary", trial_ends_at: null }, NOW)
+    hasSubscriptionAccess(
+      { plan: "pro", subscription_status: "complimentary", trial_ends_at: null, stripe_subscription_id: null },
+      NOW
+    )
   ).toBe(true);
 });
 
@@ -120,9 +126,27 @@ test("past_due, canceled, cancelled, unpaid, and incomplete are all denied -- to
 test("a missing business, a missing status, and an unrecognized status are all denied", () => {
   expect(hasSubscriptionAccess(null, NOW)).toBe(false);
   expect(hasSubscriptionAccess(undefined, NOW)).toBe(false);
-  expect(hasSubscriptionAccess({}, NOW)).toBe(false);
-  expect(hasSubscriptionAccess({ plan: "pro" }, NOW)).toBe(false);
-  expect(hasSubscriptionAccess({ subscription_status: "something_new" }, NOW)).toBe(false);
+  expect(
+    hasSubscriptionAccess(
+      { plan: null, subscription_status: null, trial_ends_at: null, stripe_subscription_id: null },
+      NOW
+    ),
+    "every field null"
+  ).toBe(false);
+  expect(
+    hasSubscriptionAccess(
+      { plan: "pro", subscription_status: null, trial_ends_at: null, stripe_subscription_id: null },
+      NOW
+    ),
+    "pro with no status"
+  ).toBe(false);
+  expect(
+    hasSubscriptionAccess(
+      { plan: null, subscription_status: "something_new", trial_ends_at: null, stripe_subscription_id: null },
+      NOW
+    ),
+    "unrecognized status"
+  ).toBe(false);
 });
 
 test("a trial grants access right up to trial_ends_at and not past it", () => {
@@ -130,6 +154,7 @@ test("a trial grants access right up to trial_ends_at and not past it", () => {
     plan: "starter",
     subscription_status: "trial",
     trial_ends_at: "2026-08-28T20:00:00.000Z",
+    stripe_subscription_id: null,
   };
   expect(hasSubscriptionAccess(business, new Date("2026-08-28T19:59:00.000Z")), "before expiry").toBe(true);
   expect(hasSubscriptionAccess(business, new Date("2026-08-28T20:01:00.000Z")), "after expiry").toBe(false);
@@ -334,25 +359,32 @@ test("all nine former call sites now go through the shared predicate", () => {
 // Column-completeness guard
 //
 // hasSubscriptionAccess() reads four columns. A caller whose select omits one
-// gets `undefined` for it, which resolves to "no live subscription" and denies
-// a paying Pro customer with no error logged anywhere -- the silent failure
-// mode this whole consolidation exists to prevent.
+// would get `undefined` for it, which resolves to "no live subscription" and
+// denies a paying Pro customer with no error logged anywhere -- the silent
+// failure mode this whole consolidation exists to prevent.
 //
-// WHAT THIS GUARD CANNOT DO, stated plainly: it is file-scoped, not
-// call-site-scoped. It cannot follow a specific variable from a specific
-// `.select()` into a specific predicate call. Concretely, it would NOT catch a
-// file that queries tpe_businesses selecting no subscription columns at all
-// (`.select("id, name")`) and passes that row to the predicate -- there is no
-// column name in that select for a regex to match on.
+// THE TYPE SYSTEM IS NOW THE PRIMARY GUARD. SubscriptionAccessBusiness
+// declares all four fields required-but-nullable, so a select that omits one
+// no longer compiles:
 //
-// What would actually catch that: making the four fields REQUIRED (still
-// nullable) on SubscriptionAccessBusiness. Verified by experiment during this
-// review -- with the fields required, an incomplete select fails `tsc` with
-// "Property 'stripe_subscription_id' is missing ... but required in type
-// 'SubscriptionAccessBusiness'", pointing at the exact call site. It breaks
-// zero production code (every current select is already complete); its whole
-// cost is 21 terse test fixtures across three spec files that pass partial
-// objects like `{ plan: "pro" }`. Proposed, not applied -- see HANDOFF.md.
+//   proxy.ts(117,30): error TS2345: Argument of type '{ plan: any;
+//   subscription_status: any; trial_ends_at: any; }' is not assignable to
+//   parameter of type 'SubscriptionAccessBusiness'.
+//     Property 'stripe_subscription_id' is missing ... but required in type
+//     'SubscriptionAccessBusiness'.
+//
+// That closes the hole this comment previously described as out of reach for
+// a regex: a file selecting no subscription columns at all
+// (`.select("id, name")`) and passing the row to the predicate is now a
+// compile error naming the exact call site and column, with no column name
+// needed for anything to match on.
+//
+// The tests below are kept as a second, cheaper layer. They still earn their
+// place: `tsc` proves the object *has* the keys, while these prove the select
+// is written the maintainable way (via the shared constant) and that a
+// hand-spelled select in one of these files carries the full set. They also
+// fail faster and with a more actionable message than a type error when
+// someone adds a narrower second business query to an existing route.
 // ---------------------------------------------------------------------------
 
 /** Every `.select(...)` argument in a source file, as raw text. */

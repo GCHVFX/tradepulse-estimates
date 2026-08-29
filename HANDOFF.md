@@ -1,6 +1,119 @@
 # TradePulse handoff
 
-Updated: 2026-08-28 20:50 PT (verification pass on the access consolidation: both rewritten guards proven to still guard, column-completeness audited and guarded)
+Updated: 2026-08-28 21:01 PT (an incomplete access select is now a compile error, not a silent denial; found and wired in an orphaned spec that never ran)
+
+## Access columns enforced by the type system (2026-08-28 21:01 PT)
+
+**Status:** fixed on `main`, verified. Commit hash filled in after push.
+
+Applies the fix proposed at the end of the verification pass below.
+
+### The change
+
+`SubscriptionAccessBusiness`'s four fields are now **required but nullable**:
+
+```ts
+export interface SubscriptionAccessBusiness {
+  plan: string | null;
+  subscription_status: string | null;
+  trial_ends_at: string | null;
+  stripe_subscription_id: string | null;
+}
+```
+
+The required/nullable distinction is the whole point. Nullable, because any of
+these columns can genuinely be NULL and the predicate has a defined answer for
+each. Required, because a *missing key* means something different from a null
+value: it means the caller's `.select()` never fetched that column. That used
+to be invisible -- `stripe_subscription_id` read `undefined`, resolved to "no
+live subscription", and denied a paying Pro customer with nothing logged.
+
+### Proven, not assumed
+
+`proxy.ts`'s select was changed to omit `stripe_subscription_id`. It no longer
+compiles:
+
+```
+proxy.ts(117,30): error TS2345: Argument of type '{ plan: any;
+subscription_status: any; trial_ends_at: any; }' is not assignable to
+parameter of type 'SubscriptionAccessBusiness'.
+  Property 'stripe_subscription_id' is missing in type '{ plan: any;
+  subscription_status: any; trial_ends_at: any; }' but required in type
+  'SubscriptionAccessBusiness'.
+```
+
+Exact file, line, and missing column. `proxy.ts` restored and confirmed
+byte-identical to committed.
+
+### The 21 fixtures
+
+13 in `pro-payments-entitlement.spec.ts`, 6 in `subscription-access.spec.ts`,
+2 in `billing-status-sync.spec.ts` -- exactly the count predicted. Zero
+production files needed changing; every real select was already complete.
+
+Fixture-only, and confirmed so mechanically: the diff adds and removes only
+formatting, with 5 `.toBe(false)` and 2 `.toBe(true)` single-line assertions
+reformatted to multi-line, same expected value on each. No assertion outcome
+changed.
+
+**`stripe_subscription_id: null` is load-bearing in several of them, not
+filler.** A live id resolves a Pro trial to "active", so putting one on the
+`pro` + `trial` + expired fixtures would have inverted their assertions from
+false to true. Those fixtures state `null` explicitly, with a comment saying
+why, rather than defaulting through a helper that a future edit could
+silently override.
+
+### Found while verifying: a spec that never ran
+
+`tests/smoke/pro-payments-entitlement.spec.ts` -- the file holding 13 of the
+21 fixtures -- was **not in `playwright.unit.config.ts`'s `testMatch`**. Its
+6 tests had never executed in the unit suite, and could not even be run
+standalone through that config ("No tests found"). `tsc` type-checked it,
+which is the only reason its fixtures surfaced as errors at all, but nothing
+was checking its assertions.
+
+Pre-existing, not caused by this work -- but it meant the 13 fixture edits
+could not honestly be called verified. It is now wired into `testMatch`. All
+6 tests pass with no pre-existing failures, so nothing was being hidden;
+they simply were not running. Worth noting that this file covers the Pro
+Payments entitlement rule for invoicing, mark-paid, and the reminder cron.
+
+**Worth a follow-up:** nothing prevents the next spec file from being added
+and silently left out of `testMatch` the same way. A guard that every
+`tests/smoke/*.spec.ts` is either listed or explicitly excluded would catch
+it. Not done here -- out of scope for this task.
+
+### The limitation note was updated
+
+The comment in `subscription-access.spec.ts` documenting what the file-scoped
+regex guard could not do now records that the type system covers that case,
+quotes the actual compiler error, and explains why the regex tests are kept
+as a cheaper second layer (they prove the select is written the maintainable
+way via the shared constant, and fail faster with a more actionable message).
+
+### Verification actually run (2026-08-28 21:01 PT)
+
+- `npx tsc --noEmit` -- clean.
+- `npx next build` -- compiled successfully in 22.5s, no errors.
+- `npx playwright test --config=playwright.unit.config.ts` -- **426 passed, 0
+  failed** (420 before, +6 from the newly-wired spec). Raw output pasted to
+  chat.
+
+No production data was read or written this session.
+
+### Files changed
+
+`lib/subscription-access.ts`, `tests/smoke/pro-payments-entitlement.spec.ts`,
+`tests/smoke/subscription-access.spec.ts`,
+`tests/smoke/billing-status-sync.spec.ts`, `playwright.unit.config.ts`,
+`HANDOFF.md`.
+
+### Next action
+
+Consider the `testMatch` completeness guard noted above. The backfill further
+below remains open and is still data hygiene rather than a lockout risk.
+
+## Verification pass on the access consolidation (2026-08-28 20:50 PT)
 
 ## Verification pass on the access consolidation (2026-08-28 20:50 PT)
 

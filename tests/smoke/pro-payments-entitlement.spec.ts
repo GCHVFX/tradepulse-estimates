@@ -22,20 +22,52 @@ import { hasProPaymentsAccess } from "../../lib/auth";
 const FUTURE = "2099-01-01T00:00:00.000Z";
 const PAST = "2020-01-01T00:00:00.000Z";
 
+// SubscriptionAccessBusiness requires all four keys (nullable), so that a
+// route whose `.select()` omits a column fails to compile instead of silently
+// denying a paying customer -- see lib/subscription-access.ts. Fixtures state
+// every field explicitly rather than defaulting through a helper, because in
+// several cases below `stripe_subscription_id: null` is load-bearing: a live
+// id would resolve a Pro trial to "active" and invert the assertion.
+const NO_SUBSCRIPTION = null;
+
 test("Starter is never entitled, whatever the subscription status", () => {
   for (const subscription_status of ["active", "trial", "complimentary", "past_due", "cancelled"]) {
     expect(
-      hasProPaymentsAccess({ plan: "starter", subscription_status, trial_ends_at: FUTURE }),
+      hasProPaymentsAccess({
+        plan: "starter",
+        subscription_status,
+        trial_ends_at: FUTURE,
+        stripe_subscription_id: NO_SUBSCRIPTION,
+      }),
       `starter + ${subscription_status} must be refused`
     ).toBe(false);
   }
 });
 
 test("Pro with a live subscription is entitled", () => {
-  expect(hasProPaymentsAccess({ plan: "pro", subscription_status: "active" })).toBe(true);
-  expect(hasProPaymentsAccess({ plan: "pro", subscription_status: "complimentary" })).toBe(true);
   expect(
-    hasProPaymentsAccess({ plan: "pro", subscription_status: "trial", trial_ends_at: FUTURE })
+    hasProPaymentsAccess({
+      plan: "pro",
+      subscription_status: "active",
+      trial_ends_at: null,
+      stripe_subscription_id: NO_SUBSCRIPTION,
+    })
+  ).toBe(true);
+  expect(
+    hasProPaymentsAccess({
+      plan: "pro",
+      subscription_status: "complimentary",
+      trial_ends_at: null,
+      stripe_subscription_id: NO_SUBSCRIPTION,
+    })
+  ).toBe(true);
+  expect(
+    hasProPaymentsAccess({
+      plan: "pro",
+      subscription_status: "trial",
+      trial_ends_at: FUTURE,
+      stripe_subscription_id: NO_SUBSCRIPTION,
+    })
   ).toBe(true);
 });
 
@@ -43,19 +75,39 @@ test("Pro with a dead subscription is not entitled", () => {
   // The reason this half of the rule exists: reminders go to the business's
   // customers, so a lapsed account must stop generating them.
   expect(
-    hasProPaymentsAccess({ plan: "pro", subscription_status: "trial", trial_ends_at: PAST }),
+    hasProPaymentsAccess({
+      plan: "pro",
+      subscription_status: "trial",
+      trial_ends_at: PAST,
+      stripe_subscription_id: NO_SUBSCRIPTION,
+    }),
     "expired trial"
   ).toBe(false);
   expect(
-    hasProPaymentsAccess({ plan: "pro", subscription_status: "trial", trial_ends_at: null }),
+    hasProPaymentsAccess({
+      plan: "pro",
+      subscription_status: "trial",
+      trial_ends_at: null,
+      stripe_subscription_id: NO_SUBSCRIPTION,
+    }),
     "trial with no end date"
   ).toBe(false);
   expect(
-    hasProPaymentsAccess({ plan: "pro", subscription_status: "cancelled" }),
+    hasProPaymentsAccess({
+      plan: "pro",
+      subscription_status: "cancelled",
+      trial_ends_at: null,
+      stripe_subscription_id: NO_SUBSCRIPTION,
+    }),
     "cancelled"
   ).toBe(false);
   expect(
-    hasProPaymentsAccess({ plan: "pro", subscription_status: "past_due" }),
+    hasProPaymentsAccess({
+      plan: "pro",
+      subscription_status: "past_due",
+      trial_ends_at: null,
+      stripe_subscription_id: NO_SUBSCRIPTION,
+    }),
     "past due"
   ).toBe(false);
 });
@@ -63,12 +115,33 @@ test("Pro with a dead subscription is not entitled", () => {
 test("missing or unknown business data is refused, never defaulted to allowed", () => {
   expect(hasProPaymentsAccess(null)).toBe(false);
   expect(hasProPaymentsAccess(undefined)).toBe(false);
-  expect(hasProPaymentsAccess({})).toBe(false);
-  expect(hasProPaymentsAccess({ plan: "pro" }), "pro with no subscription status").toBe(false);
+  expect(
+    hasProPaymentsAccess({
+      plan: null,
+      subscription_status: null,
+      trial_ends_at: null,
+      stripe_subscription_id: null,
+    }),
+    "every field null"
+  ).toBe(false);
+  expect(
+    hasProPaymentsAccess({
+      plan: "pro",
+      subscription_status: null,
+      trial_ends_at: null,
+      stripe_subscription_id: null,
+    }),
+    "pro with no subscription status"
+  ).toBe(false);
 });
 
 test("trial expiry is evaluated against the supplied clock", () => {
-  const business = { plan: "pro", subscription_status: "trial", trial_ends_at: "2026-07-30T12:00:00.000Z" };
+  const business = {
+    plan: "pro",
+    subscription_status: "trial",
+    trial_ends_at: "2026-07-30T12:00:00.000Z",
+    stripe_subscription_id: NO_SUBSCRIPTION,
+  };
   expect(hasProPaymentsAccess(business, new Date("2026-07-30T11:59:00.000Z")), "before expiry").toBe(true);
   expect(hasProPaymentsAccess(business, new Date("2026-07-30T12:01:00.000Z")), "after expiry").toBe(false);
 });
@@ -78,11 +151,11 @@ test("reminder selection: the cron's business filter keeps only entitled busines
   // builds businessMap. Any business missing from the result is skipped by the
   // loop and receives no reminder.
   const businesses = [
-    { id: "pro-active", plan: "pro", subscription_status: "active", trial_ends_at: null },
-    { id: "pro-trial-live", plan: "pro", subscription_status: "trial", trial_ends_at: FUTURE },
-    { id: "pro-trial-dead", plan: "pro", subscription_status: "trial", trial_ends_at: PAST },
-    { id: "pro-cancelled", plan: "pro", subscription_status: "cancelled", trial_ends_at: null },
-    { id: "starter-active", plan: "starter", subscription_status: "active", trial_ends_at: null },
+    { id: "pro-active", plan: "pro", subscription_status: "active", trial_ends_at: null, stripe_subscription_id: NO_SUBSCRIPTION },
+    { id: "pro-trial-live", plan: "pro", subscription_status: "trial", trial_ends_at: FUTURE, stripe_subscription_id: NO_SUBSCRIPTION },
+    { id: "pro-trial-dead", plan: "pro", subscription_status: "trial", trial_ends_at: PAST, stripe_subscription_id: NO_SUBSCRIPTION },
+    { id: "pro-cancelled", plan: "pro", subscription_status: "cancelled", trial_ends_at: null, stripe_subscription_id: NO_SUBSCRIPTION },
+    { id: "starter-active", plan: "starter", subscription_status: "active", trial_ends_at: null, stripe_subscription_id: NO_SUBSCRIPTION },
   ];
 
   const eligible = businesses.filter((b) => hasProPaymentsAccess(b)).map((b) => b.id);
