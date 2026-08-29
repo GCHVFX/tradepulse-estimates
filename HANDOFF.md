@@ -4,8 +4,9 @@ Updated: 2026-08-29 02:46 PT (FINAL DECISION on the footer mark: Greg rejected M
 
 ## FINAL: Mark A used at every size sitewide, including the footer (2026-08-29 02:46 PT)
 
-**Status:** done on `main`, verified, not committed yet. **This is the
-final decision on the footer mark -- do not relitigate.** Greg rejected
+**Status:** done on `main`, verified, committed as `d76d834` (not pushed
+yet). **This is the final decision on the footer mark -- do not
+relitigate.** Greg rejected
 the Mark C swap below. Round 1's acceptance criterion ("nothing under
 40px uses Mark A, filled Mark C only") is superseded: Mark A now has a
 documented, implemented small-size treatment and is used at every size,
@@ -93,7 +94,8 @@ commit.
 
 ## Mark C was missing as a component; footer sizing corrected (2026-08-29 02:37 PT)
 
-**Status:** superseded 2026-08-29 02:46 PT -- Greg rejected Mark C for
+**Status:** superseded 2026-08-29 02:46 PT (committed as part of `d76d834`
+along with its own supersession) -- Greg rejected Mark C for
 the footer (and sitewide). See "FINAL: Mark A used at every size
 sitewide" above for the current, final state. `LogoMarkC` and the
 `pickMark()` size branch this section built are both described below for
@@ -268,7 +270,8 @@ and say go-ahead to commit.
 
 ## Demo widget wordmark was clipping in its card header (2026-08-29 02:21 PT)
 
-**Status:** done on `main`, verified, not committed yet.
+**Status:** done on `main`, verified, committed as `d76d834` (not pushed
+yet).
 
 The three demo widgets (`EstimateDemo.tsx`, `EstimateDemoElectrical.tsx`,
 `EstimateDemoTrades.tsx`) got `RowLockup iconSize=44 textSize=36` copied
@@ -354,7 +357,8 @@ and say go-ahead to commit.
 
 ## Marketing nav/header corrected: was still the legacy raster mark (2026-08-29 02:07 PT)
 
-**Status:** done on `main`, verified, not committed yet. Corrects the
+**Status:** done on `main`, verified, committed as `d76d834` (not pushed
+yet). Corrects the
 "already shows icon+wordmark, not applicable" call made under task 3 of
 the wordmark rollout below -- that was wrong. Full detail in `SPEC.md`'s
 "Correction" section; summarized here.
@@ -425,7 +429,8 @@ diff and say go-ahead to commit.
 
 ## Wordmark lockup rollout (2026-08-29 01:59 PT)
 
-**Status:** done on `main`, verified, not committed yet. Spec written to
+**Status:** done on `main`, verified, committed as `d76d834` (not pushed
+yet). Spec written to
 `SPEC.md` per this session's brief, now marked Done there with full detail
 -- see that file for the complete writeup, summarized here.
 
@@ -512,7 +517,8 @@ brought in line with the Instrument Serif spec (flagged above, not done).
 
 ## tradepulse-logo.png under-40px usages swapped to Mark C (2026-08-29 01:50 PT)
 
-**Status:** done on `main`, verified, not committed yet.
+**Status:** done on `main`, verified, committed as `d76d834` (not pushed
+yet).
 
 Follow-up to the brand-mark swap below: `public/tradepulse-logo.png` kept
 Mark A's original icon-to-wordmark proportions (icon rendered smaller than
@@ -576,7 +582,7 @@ to commit.
 
 ## New brand mark applied (2026-08-29 01:23 PT)
 
-**Status:** done on `main`, verified, not committed yet (awaiting Greg's go-ahead to commit/push).
+**Status:** done on `main`, verified, committed as `d76d834` (not pushed yet).
 
 Swapped the old orange gradient clipboard-and-checkmark mark for the new
 three-asset brand system (Mark A light, Mark A on-dark, Mark C filled
