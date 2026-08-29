@@ -42,7 +42,7 @@ export async function POST(
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("id, name, payment_link, plan, subscription_status, trial_ends_at")
+    .select("id, name, payment_link, plan, subscription_status, trial_ends_at, stripe_subscription_id")
     .eq("owner_user_id", user.id)
     .maybeSingle();
 

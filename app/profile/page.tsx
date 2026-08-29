@@ -5,11 +5,8 @@ import { Logo } from "@/app/components/logo";
 import { BottomNav } from "@/app/components/bottom-nav";
 import { DeleteAccountSection } from "@/app/components/delete-account-section";
 import { ProfileForm } from "@/app/components/profile-form";
-import {
-  resolveDisplaySubscriptionStatus,
-  resolveProfileBadge,
-  type ProfileBadgeCopy,
-} from "@/lib/subscription-display";
+import { resolveProfileBadge, type ProfileBadgeCopy } from "@/lib/subscription-display";
+import { resolveSubscriptionStatus } from "@/lib/subscription-access";
 
 // Tailwind needs each class name to appear literally for its build-time
 // scanner to pick it up -- string-interpolating "text-${colorClass}-400"
@@ -36,7 +33,7 @@ export default async function ProfilePage({
 
   const { data } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("id, name, phone, email, logo_url, prepared_by, google_review_link, payment_link, subscription_status, trial_ends_at, plan")
+    .select("id, name, phone, email, logo_url, prepared_by, google_review_link, payment_link, subscription_status, trial_ends_at, plan, stripe_subscription_id")
     .eq("owner_user_id", user.id)
     .maybeSingle();
 
@@ -52,13 +49,17 @@ export default async function ProfilePage({
 
   const nextPath = typeof next === "string" && next.startsWith("/") ? next : null;
 
-  // A Pro business's subscription_status is corrected to "active" here when
-  // it's still stored as "trial" -- Pro is paid up front and never has a
-  // real trial (see lib/subscription-display.ts). Used for both the header
-  // badge below and passed into ProfileForm, so the "Free Trial" upgrade
-  // card there (which checks this same value) can't disagree with the badge.
-  const displaySubscriptionStatus = resolveDisplaySubscriptionStatus(data?.subscription_status, data?.plan);
-  const badge = resolveProfileBadge(data?.subscription_status, data?.plan);
+  // The corrected status comes from lib/subscription-access.ts -- the same
+  // function every access gate decides from, so this page cannot show a
+  // state the gate disagrees with. Used for both the header badge below and
+  // passed into ProfileForm, so the "Free Trial" upgrade card there (which
+  // checks this same value) can't disagree with the badge either.
+  const displaySubscriptionStatus = resolveSubscriptionStatus(
+    data?.subscription_status,
+    data?.plan,
+    data?.stripe_subscription_id
+  );
+  const badge = resolveProfileBadge(data?.subscription_status, data?.plan, data?.stripe_subscription_id);
 
   return (
     <div className="min-h-dvh bg-zinc-950 text-white flex flex-col">

@@ -33,10 +33,13 @@ import {
   type StripeWebhookStore,
 } from "../../lib/stripe-webhook";
 import { hasProPaymentsAccess } from "../../lib/auth";
-import {
-  resolveDisplaySubscriptionStatus,
-  resolveProfileBadge,
-} from "../../lib/subscription-display";
+import { resolveProfileBadge } from "../../lib/subscription-display";
+import { resolveSubscriptionStatus } from "../../lib/subscription-access";
+
+// A stored Stripe subscription id, i.e. this business actually has a
+// subscription on record. The Pro-stuck-at-trial correction only applies
+// when one is present -- see lib/subscription-access.ts.
+const LIVE_SUB = "sub_1U9cU7Q45KFNqa8xBHKwUxEU";
 
 const WEBHOOK_SECRET = "whsec_unit_test_only";
 const stripe = new Stripe("sk_test_unit_test_only", { apiVersion: "2026-03-25.dahlia" });
@@ -167,13 +170,10 @@ test("every Stripe status Task 2 named has an explicit TradePulse mapping, none 
 });
 
 test("a Pro business with subscription_status active is never treated as trial-expired, regardless of a stale trial_ends_at", () => {
-  // Exercises the same isActive/isTrialing/hasAccess logic pattern
-  // duplicated in proxy.ts, lib/auth.ts's checkUserSubscriptionAccess, and
-  // every route listed in this session's Task 3 read-audit (report attached
-  // to this fix, not repeated here). hasProPaymentsAccess is the one
-  // instance of that pattern actually exported and importable for a direct
-  // test; proxy.ts's own inline copy is not unit-testable without
-  // extracting it first, which this task did not ask for.
+  // The isActive/isTrialing/hasAccess pattern this exercised in eight
+  // separate places now lives once in lib/subscription-access.ts; see
+  // subscription-access.spec.ts for the full behaviour matrix. This test
+  // stays here as the billing-side regression check.
   const farPastTrialEnd = new Date("2020-01-01T00:00:00.000Z").toISOString();
 
   expect(
@@ -184,39 +184,39 @@ test("a Pro business with subscription_status active is never treated as trial-e
   ).toBe(true);
 });
 
-test("resolveDisplaySubscriptionStatus corrects a Pro business stuck at trial to active, and leaves every other combination unchanged", () => {
-  expect(resolveDisplaySubscriptionStatus("trial", "pro")).toBe("active");
-  expect(resolveDisplaySubscriptionStatus("trial", "starter")).toBe("trial");
-  expect(resolveDisplaySubscriptionStatus("active", "pro")).toBe("active");
-  expect(resolveDisplaySubscriptionStatus("past_due", "pro")).toBe("past_due");
-  expect(resolveDisplaySubscriptionStatus("cancelled", "pro")).toBe("cancelled");
-  expect(resolveDisplaySubscriptionStatus("complimentary", "pro")).toBe("complimentary");
-  expect(resolveDisplaySubscriptionStatus(null, "pro")).toBeNull();
-  expect(resolveDisplaySubscriptionStatus(undefined, undefined)).toBeUndefined();
+test("resolveSubscriptionStatus corrects a Pro business stuck at trial to active, and leaves every other combination unchanged", () => {
+  expect(resolveSubscriptionStatus("trial", "pro", LIVE_SUB)).toBe("active");
+  expect(resolveSubscriptionStatus("trial", "starter", LIVE_SUB)).toBe("trial");
+  expect(resolveSubscriptionStatus("active", "pro", LIVE_SUB)).toBe("active");
+  expect(resolveSubscriptionStatus("past_due", "pro", LIVE_SUB)).toBe("past_due");
+  expect(resolveSubscriptionStatus("cancelled", "pro", LIVE_SUB)).toBe("cancelled");
+  expect(resolveSubscriptionStatus("complimentary", "pro", LIVE_SUB)).toBe("complimentary");
+  expect(resolveSubscriptionStatus(null, "pro", LIVE_SUB)).toBeNull();
+  expect(resolveSubscriptionStatus(undefined, undefined, undefined)).toBeUndefined();
 });
 
 test("the profile badge renders correctly for trial, active, past_due, and cancelled", () => {
-  expect(resolveProfileBadge("trial", "starter")).toEqual({ label: "Free trial", colorClass: "amber" });
-  expect(resolveProfileBadge("active", "starter")).toEqual({ label: "Subscription active", colorClass: "emerald" });
-  expect(resolveProfileBadge("past_due", "pro")).toEqual({ label: "Payment issue", colorClass: "red" });
-  expect(resolveProfileBadge("cancelled", "pro")).toEqual({ label: "Subscription cancelled", colorClass: "zinc" });
+  expect(resolveProfileBadge("trial", "starter", null)).toEqual({ label: "Free trial", colorClass: "amber" });
+  expect(resolveProfileBadge("active", "starter", LIVE_SUB)).toEqual({ label: "Subscription active", colorClass: "emerald" });
+  expect(resolveProfileBadge("past_due", "pro", LIVE_SUB)).toEqual({ label: "Payment issue", colorClass: "red" });
+  expect(resolveProfileBadge("cancelled", "pro", LIVE_SUB)).toEqual({ label: "Subscription cancelled", colorClass: "zinc" });
 });
 
 test("a paying (plan pro) subscriber whose stored status is still trial never sees the Free trial badge", () => {
   // The exact production scenario, asserted directly against the badge
   // function's output.
-  const badge = resolveProfileBadge("trial", "pro");
+  const badge = resolveProfileBadge("trial", "pro", LIVE_SUB);
   expect(badge).toEqual({ label: "Subscription active", colorClass: "emerald" });
   expect(badge?.label).not.toBe("Free trial");
 });
 
 test("a Starter customer genuinely mid-trial still sees Free trial -- the fix is scoped to plan pro only", () => {
-  const badge = resolveProfileBadge("trial", "starter");
+  const badge = resolveProfileBadge("trial", "starter", null);
   expect(badge?.label).toBe("Free trial");
 });
 
 test("complimentary and unrecognized statuses render sensibly, never a blank badge for a known status", () => {
-  expect(resolveProfileBadge("complimentary", "pro")).toEqual({ label: "Complimentary", colorClass: "emerald" });
-  expect(resolveProfileBadge("something_unrecognized", "pro")).toBeNull();
-  expect(resolveProfileBadge(null, null)).toBeNull();
+  expect(resolveProfileBadge("complimentary", "pro", LIVE_SUB)).toEqual({ label: "Complimentary", colorClass: "emerald" });
+  expect(resolveProfileBadge("something_unrecognized", "pro", LIVE_SUB)).toBeNull();
+  expect(resolveProfileBadge(null, null, null)).toBeNull();
 });

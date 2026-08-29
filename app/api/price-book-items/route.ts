@@ -1,20 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
+import { hasSubscriptionAccess, SUBSCRIPTION_ACCESS_COLUMNS } from "@/lib/subscription-access";
 
+// Returns null for both "no business row" and "no access", so every caller
+// answers with the same 403 for either -- unchanged from before the
+// consolidation, where this helper collapsed the two cases the same way.
 async function getBusinessWithAccess(userId: string) {
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("id, subscription_status, trial_ends_at")
+    .select(`id, ${SUBSCRIPTION_ACCESS_COLUMNS}`)
     .eq("owner_user_id", userId)
     .maybeSingle();
 
-  if (!business) return null;
-
-  const isActive = business.subscription_status === "active";
-  const isTrialing = business.subscription_status === "trial" && business.trial_ends_at && new Date(business.trial_ends_at) > new Date();
-  const hasAccess = isActive || isTrialing || business.subscription_status === "complimentary";
-
-  return hasAccess ? business : null;
+  return hasSubscriptionAccess(business) ? business : null;
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {

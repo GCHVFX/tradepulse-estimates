@@ -14,7 +14,7 @@ export async function PATCH(
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("id, plan, subscription_status, trial_ends_at")
+    .select("id, plan, subscription_status, trial_ends_at, stripe_subscription_id")
     .eq("owner_user_id", user.id)
     .maybeSingle();
 

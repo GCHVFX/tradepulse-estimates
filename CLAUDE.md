@@ -48,13 +48,40 @@ Feature access must use:
 business.plan === "pro"
 ```
 
-Subscription access (can they use the app at all) uses:
+Subscription access (can they use the app at all) uses the one shared
+predicate in `lib/subscription-access.ts`. Never rewrite the rule inline — it
+was independently duplicated across nine files until 2026-08-28, which is how
+the gate and the profile badge ended up disagreeing:
 
 ```ts
-const isActive = business.subscription_status === "active";
-const isTrialing = business.subscription_status === "trial" && new Date(business.trial_ends_at) > new Date();
-const hasAccess = isActive || isTrialing || business.subscription_status === "complimentary";
+import { hasSubscriptionAccess, SUBSCRIPTION_ACCESS_COLUMNS } from "@/lib/subscription-access";
+
+const { data: business } = await supabaseAdmin
+  .from("tpe_businesses")
+  .select(SUBSCRIPTION_ACCESS_COLUMNS) // plan, subscription_status, trial_ends_at, stripe_subscription_id
+  .eq("owner_user_id", user.id)
+  .maybeSingle();
+
+if (!hasSubscriptionAccess(business)) { /* this route's own denial response */ }
 ```
+
+Always select via `SUBSCRIPTION_ACCESS_COLUMNS`: the predicate reads `plan`
+and `stripe_subscription_id` as well, and a route that omits them still
+compiles while silently denying a paying Pro customer.
+
+`hasSubscriptionAccess()` grants access for a resolved status of `active` or
+`complimentary`, and for `trial` only while `trial_ends_at` is in the future.
+The *resolved* status comes from `resolveSubscriptionStatus()` in that same
+file, which treats `plan === "pro"` + `subscription_status === "trial"` + a
+live `stripe_subscription_id` as `active` (Pro is paid up front and never has
+a real trial). The profile badge reads the same resolver, so the gate and the
+UI cannot disagree. `tests/smoke/subscription-access.spec.ts` fails the build
+if any file outside the helper compares `subscription_status` or does
+`trial_ends_at` date math for an access decision.
+
+Pro Payments entitlement is `hasProPaymentsAccess()` in `lib/auth.ts` — the
+`plan === "pro"` check *composed with* the predicate above, not a second copy
+of it.
 
 ---
 

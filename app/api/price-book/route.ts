@@ -1,12 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
-
-const subSelect = "subscription_status, trial_ends_at";
-function checkAccess(sub: { subscription_status?: string; trial_ends_at?: string | null } | null) {
-  const isActive = sub?.subscription_status === "active";
-  const isTrialing = sub?.subscription_status === "trial" && sub?.trial_ends_at && new Date(sub.trial_ends_at) > new Date();
-  return isActive || isTrialing || sub?.subscription_status === "complimentary";
-}
+import { hasSubscriptionAccess, SUBSCRIPTION_ACCESS_COLUMNS } from "@/lib/subscription-access";
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const { supabase, applyTo } = createApiClient(request);
@@ -15,11 +9,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("id, subscription_status, trial_ends_at, labour_rate, markup_percent, deposit_percent, deposit_threshold, tax_label, tax_rate")
+    .select(`id, ${SUBSCRIPTION_ACCESS_COLUMNS}, labour_rate, markup_percent, deposit_percent, deposit_threshold, tax_label, tax_rate`)
     .eq("owner_user_id", user.id)
     .maybeSingle();
 
-  if (!checkAccess(business)) return applyTo(NextResponse.json({ error: "Subscription required" }, { status: 403 }));
+  if (!hasSubscriptionAccess(business)) return applyTo(NextResponse.json({ error: "Subscription required" }, { status: 403 }));
 
   const { data: items } = await supabaseAdmin
     .from("tpe_pricebook_items")
@@ -53,11 +47,11 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("id, subscription_status, trial_ends_at")
+    .select(`id, ${SUBSCRIPTION_ACCESS_COLUMNS}`)
     .eq("owner_user_id", user.id)
     .maybeSingle();
 
-  if (!checkAccess(business)) return applyTo(NextResponse.json({ error: "Subscription required" }, { status: 403 }));
+  if (!hasSubscriptionAccess(business)) return applyTo(NextResponse.json({ error: "Subscription required" }, { status: 403 }));
 
   let body: { labour_rate?: unknown; markup_percent?: unknown; deposit_percent?: unknown; deposit_threshold?: unknown; tax_label?: unknown; tax_rate?: unknown };
   try {

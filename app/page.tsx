@@ -8,6 +8,7 @@ import { STARTER_MONTHLY_PRICE_CAD } from "@/lib/plan-pricing";
 import { headers } from "next/headers";
 import { currencyFromCountry, currencyPrefix, formatMonthlyPlanPrice, planMonthlyPrice } from "@/lib/currency";
 import { CANONICAL_URL } from "@/lib/site-url";
+import { hasSubscriptionAccess, SUBSCRIPTION_ACCESS_COLUMNS } from "@/lib/subscription-access";
 
 export const metadata: Metadata = {
   title: "Estimate Software for Contractors & Trades | TradePulse",
@@ -188,18 +189,13 @@ export default async function LandingPage() {
   if (user) {
     const { data: business } = await supabaseAdmin
       .from("tpe_businesses")
-      .select("subscription_status, trial_ends_at")
+      .select(SUBSCRIPTION_ACCESS_COLUMNS)
       .eq("owner_user_id", user.id)
       .maybeSingle();
 
     if (!business) redirect("/onboarding");
 
-    const isTrialing = business.subscription_status === "trial" &&
-      business.trial_ends_at &&
-      new Date(business.trial_ends_at) > new Date();
-    const isActive = business.subscription_status === "active";
-    const isComplimentary = business.subscription_status === "complimentary";
-    hasAccess = isTrialing || isActive || isComplimentary;
+    hasAccess = hasSubscriptionAccess(business);
 
     // Logged-in users never see the marketing homepage. Send them to the app
     // or the paywall depending on their account state. An incomplete profile

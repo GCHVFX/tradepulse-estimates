@@ -4,6 +4,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
+import { hasSubscriptionAccess, SUBSCRIPTION_ACCESS_COLUMNS } from "@/lib/subscription-access";
 
 const client = new Anthropic();
 
@@ -25,16 +26,15 @@ export async function POST(
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("id, subscription_status, trial_ends_at")
+    .select(`id, ${SUBSCRIPTION_ACCESS_COLUMNS}`)
     .eq("owner_user_id", user.id)
     .maybeSingle();
 
+  // A missing business row keeps its own distinct 404 here, checked before
+  // access -- unchanged from before the consolidation.
   if (!business) return applyTo(NextResponse.json({ error: "Business not found" }, { status: 404 }));
 
-  const isActive = business.subscription_status === "active";
-  const isTrialing = business.subscription_status === "trial" && business.trial_ends_at && new Date(business.trial_ends_at) > new Date();
-  const hasAccess = isActive || isTrialing || business.subscription_status === "complimentary";
-  if (!hasAccess) return applyTo(NextResponse.json({ error: "Subscription required" }, { status: 403 }));
+  if (!hasSubscriptionAccess(business)) return applyTo(NextResponse.json({ error: "Subscription required" }, { status: 403 }));
 
   const { allowed } = await checkRateLimit(supabaseAdmin, user.id, "analyze-quote-photos", 10, 3600);
   if (!allowed) {

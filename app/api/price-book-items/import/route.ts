@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
+import { hasSubscriptionAccess, SUBSCRIPTION_ACCESS_COLUMNS } from "@/lib/subscription-access";
 
 interface ImportItem {
   name: string;
@@ -18,16 +19,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("id, subscription_status, trial_ends_at")
+    .select(`id, ${SUBSCRIPTION_ACCESS_COLUMNS}`)
     .eq("owner_user_id", user.id)
     .maybeSingle();
 
+  // A missing business row keeps its own distinct 404 here, checked before
+  // access -- unchanged from before the consolidation, and deliberately
+  // different from the routes that fold both cases into one 403.
   if (!business) return applyTo(NextResponse.json({ error: "Business not found" }, { status: 404 }));
 
-  const isActive = business.subscription_status === "active";
-  const isTrialing = business.subscription_status === "trial" && business.trial_ends_at && new Date(business.trial_ends_at) > new Date();
-  const hasAccess = isActive || isTrialing || business.subscription_status === "complimentary";
-  if (!hasAccess) return applyTo(NextResponse.json({ error: "Subscription required" }, { status: 403 }));
+  if (!hasSubscriptionAccess(business)) return applyTo(NextResponse.json({ error: "Subscription required" }, { status: 403 }));
 
   let body: { items?: unknown };
   try {

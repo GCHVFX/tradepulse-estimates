@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
 import { isSupabaseAuthCookie } from "@/lib/auth-session";
+import { hasSubscriptionAccess, SUBSCRIPTION_ACCESS_COLUMNS } from "@/lib/subscription-access";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -90,7 +91,7 @@ export async function proxy(request: NextRequest) {
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("subscription_status, trial_ends_at")
+    .select(SUBSCRIPTION_ACCESS_COLUMNS)
     .eq("owner_user_id", user.id)
     .maybeSingle();
 
@@ -113,16 +114,7 @@ export async function proxy(request: NextRequest) {
     return redirect;
   }
 
-  const isActive = business.subscription_status === "active";
-  const isTrialing =
-    business.subscription_status === "trial" &&
-    business.trial_ends_at &&
-    new Date(business.trial_ends_at) > new Date();
-
-  const hasAccess =
-    isActive || isTrialing || business.subscription_status === "complimentary";
-
-  if (!hasAccess && pathname !== "/subscribe") {
+  if (!hasSubscriptionAccess(business) && pathname !== "/subscribe") {
     return withSessionCookies(NextResponse.redirect(new URL("/subscribe", request.url)), response);
   }
 

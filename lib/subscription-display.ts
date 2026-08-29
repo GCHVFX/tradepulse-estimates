@@ -1,10 +1,19 @@
 /**
  * Customer-facing DISPLAY of subscription state -- badges, upgrade prompts.
- * Deliberately separate from lib/auth.ts's access-decision logic
- * (hasProPaymentsAccess, checkUserSubscriptionAccess): a display bug and an
- * access bug are different classes of risk, and this file should never be
- * imported by anything that decides whether a request is allowed through.
+ *
+ * The corrected status these render from is NOT computed here: it comes from
+ * resolveSubscriptionStatus() in lib/subscription-access.ts, the same
+ * function every access gate decides from. That sharing is deliberate and is
+ * the point of this file's existence. An earlier version of this comment
+ * said display logic "should never be imported by anything that decides
+ * whether a request is allowed through", and keeping the two apart is
+ * exactly what produced the bug they were split to avoid: a Pro business
+ * stuck at subscription_status "trial" past trial_ends_at rendered an
+ * "Active" badge while every gate redirected it to /subscribe. Display and
+ * access must agree on *what state the business is in*; they may still
+ * differ freely on what to do about it, which is what this file owns.
  */
+import { resolveSubscriptionStatus } from "@/lib/subscription-access";
 
 export type DisplaySubscriptionStatus =
   | "trial"
@@ -13,33 +22,6 @@ export type DisplaySubscriptionStatus =
   | "cancelled"
   | "complimentary";
 
-/**
- * The subscription_status value to use for display, correcting one specific
- * data state that is never legitimate: a Pro-plan business whose stored
- * subscription_status still reads "trial".
- *
- * Pro is paid up front and has no real trial -- lib/account-provisioning.ts
- * sets subscriptionStatus to "incomplete" for a Pro signup, never "trial".
- * So plan === "pro" with subscription_status === "trial" only happens when a
- * business started as Starter (a real 14-day trial) and then upgraded to
- * Pro, and the webhook's plan update landed before (or without) its
- * subscription_status update -- exactly the 2026-08-29 production bug this
- * function was added for: a completed, paid, Stripe-active Pro checkout
- * left a paying customer's profile reading "Free trial". Treating that
- * specific combination as "active" for display is reading the existing
- * plan/subscription_status contract correctly, not inventing a new state --
- * a Pro business cannot actually be mid-trial.
- *
- * Every other combination passes through unchanged.
- */
-export function resolveDisplaySubscriptionStatus(
-  subscriptionStatus: string | null | undefined,
-  plan: string | null | undefined
-): string | null | undefined {
-  if (plan === "pro" && subscriptionStatus === "trial") return "active";
-  return subscriptionStatus;
-}
-
 export interface ProfileBadgeCopy {
   label: string;
   colorClass: "emerald" | "amber" | "red" | "zinc";
@@ -47,15 +29,16 @@ export interface ProfileBadgeCopy {
 
 /**
  * What the Profile page's status badge should say, given the raw stored
- * subscription_status and plan. Pure and directly testable -- no JSX, no
- * database access -- so "does a paying Pro subscriber ever see Free trial"
- * is a question a unit test can ask directly.
+ * business fields. Pure and directly testable -- no JSX, no database access
+ * -- so "does a paying Pro subscriber ever see Free trial" is a question a
+ * unit test can ask directly.
  */
 export function resolveProfileBadge(
   subscriptionStatus: string | null | undefined,
-  plan: string | null | undefined
+  plan: string | null | undefined,
+  stripeSubscriptionId: string | null | undefined
 ): ProfileBadgeCopy | null {
-  const status = resolveDisplaySubscriptionStatus(subscriptionStatus, plan);
+  const status = resolveSubscriptionStatus(subscriptionStatus, plan, stripeSubscriptionId);
   switch (status) {
     case "active":
       return { label: "Subscription active", colorClass: "emerald" };

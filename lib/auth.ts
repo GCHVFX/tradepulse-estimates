@@ -1,16 +1,17 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
+import {
+  hasSubscriptionAccess,
+  SUBSCRIPTION_ACCESS_COLUMNS,
+  type SubscriptionAccessBusiness,
+} from "@/lib/subscription-access";
 
 /**
  * Shape needed to decide Pro Payments entitlement. Deliberately loose so both
  * a route's own business lookup and the reminder cron's batched lookup can
  * pass their row straight in without reshaping it.
  */
-export interface ProPaymentsBusiness {
-  plan?: string | null;
-  subscription_status?: string | null;
-  trial_ends_at?: string | null;
-}
+export type ProPaymentsBusiness = SubscriptionAccessBusiness;
 
 /**
  * Whether a business may use the Pro Payments feature (invoicing, marking
@@ -25,9 +26,13 @@ export interface ProPaymentsBusiness {
  * Both matter here. Checking only the plan would keep sending automated
  * reminders on behalf of a Pro business whose subscription lapsed months ago,
  * and those reminders go to that business's customers, not to the business
- * itself. The subscription half mirrors checkUserSubscriptionAccess() below
- * and the identical inline check in /api/price-book; this is the one place
- * the combined rule lives, so the three Payments call sites cannot drift.
+ * itself.
+ *
+ * The subscription half is delegated to hasSubscriptionAccess() rather than
+ * reimplemented -- this function is the Pro-plan gate composed with the app's
+ * one access rule, not a second copy of that rule. That composition is the
+ * genuine difference between this and every other former call site, and is
+ * why it stayed a separate function through the consolidation.
  *
  * `now` is injectable so trial-expiry behaviour is testable without waiting.
  */
@@ -37,13 +42,7 @@ export function hasProPaymentsAccess(
 ): boolean {
   if (!business) return false;
   if (business.plan !== "pro") return false;
-
-  const status = business.subscription_status;
-  if (status === "active" || status === "complimentary") return true;
-  if (status === "trial" && business.trial_ends_at) {
-    return new Date(business.trial_ends_at) > now;
-  }
-  return false;
+  return hasSubscriptionAccess(business, now);
 }
 
 export async function checkUserSubscriptionAccess(
@@ -52,17 +51,13 @@ export async function checkUserSubscriptionAccess(
 ): Promise<{ hasAccess: boolean; status: string }> {
   const { data: sub } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("subscription_status, trial_ends_at")
+    .select(SUBSCRIPTION_ACCESS_COLUMNS)
     .eq("owner_user_id", userId)
     .maybeSingle();
 
-  const isActive = sub?.subscription_status === "active";
-  const isTrialing =
-    sub?.subscription_status === "trial" &&
-    sub?.trial_ends_at &&
-    new Date(sub.trial_ends_at) > new Date();
-  const hasAccess =
-    isActive || isTrialing || sub?.subscription_status === "complimentary";
-
-  return { hasAccess, status: sub?.subscription_status ?? "none" };
+  // `status` reports the raw stored value, unchanged from before this
+  // consolidation. No caller reads it today (send-sms and send-email both
+  // destructure only `hasAccess`), so it is left exactly as it was rather
+  // than quietly redefined to mean the resolved status.
+  return { hasAccess: hasSubscriptionAccess(sub), status: sub?.subscription_status ?? "none" };
 }

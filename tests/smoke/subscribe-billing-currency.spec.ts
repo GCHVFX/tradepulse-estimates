@@ -215,11 +215,14 @@ test("the escape path signs out and grants no access", () => {
 test("the subscription gate itself is unchanged", () => {
   const proxy = code("proxy.ts");
 
-  // The rule that redirects to /subscribe must still be exactly this. Nothing
-  // in this task may widen it.
-  expect(proxy).toContain('const isActive = business.subscription_status === "active";');
-  expect(proxy).toMatch(/isActive \|\| isTrialing \|\| business\.subscription_status === "complimentary"/);
-  expect(proxy).toMatch(/if \(!hasAccess && pathname !== "\/subscribe"\)/);
+  // The rule that redirects to /subscribe must still be exactly this, and
+  // nothing in a billing/currency task may widen it. The rule's *body* moved
+  // to lib/subscription-access.ts during the access-gate consolidation (it
+  // was one of nine copies of the same formula), so this pins the delegation
+  // and the redirect condition rather than the inline arithmetic. The rule's
+  // semantics are pinned case by case in subscription-access.spec.ts.
+  expect(proxy).toContain('from "@/lib/subscription-access"');
+  expect(proxy).toMatch(/if \(!hasSubscriptionAccess\(business\) && pathname !== "\/subscribe"\)/);
 });
 
 // ── Recovery block placement and mobile spacing ─────────────────────────────

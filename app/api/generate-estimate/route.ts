@@ -8,6 +8,7 @@ import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
 import { convertEstimateToStructuredItems } from "@/lib/estimate-item-migration";
 import { notifyInternalError } from "@/lib/notify-error";
 import { estimateCurrencyPatch, readBusinessEstimateCurrency } from "@/lib/currency-db";
+import { hasSubscriptionAccess, SUBSCRIPTION_ACCESS_COLUMNS } from "@/lib/subscription-access";
 import {
   claimEstimateGeneration,
   releaseEstimateGenerationClaim,
@@ -86,18 +87,13 @@ export async function POST(request: NextRequest) {
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("id, name, prepared_by, subscription_status, trial_ends_at, labour_rate, markup_percent, deposit_percent, deposit_threshold, tax_label, tax_rate")
+    .select(`id, name, prepared_by, ${SUBSCRIPTION_ACCESS_COLUMNS}, labour_rate, markup_percent, deposit_percent, deposit_threshold, tax_label, tax_rate`)
     .eq("owner_user_id", user.id)
     .maybeSingle();
 
-  const isActive = business?.subscription_status === "active";
-  const isTrialing =
-    business?.subscription_status === "trial" &&
-    business?.trial_ends_at &&
-    new Date(business.trial_ends_at) > new Date();
-  const hasAccess = isActive || isTrialing || business?.subscription_status === "complimentary";
-
-  if (!hasAccess) return applyTo(NextResponse.json({ error: "Subscription required" }, { status: 403 }));
+  // A missing business row is denied here with the same 403 it always
+  // returned, rather than a 404 -- unchanged from before the consolidation.
+  if (!hasSubscriptionAccess(business)) return applyTo(NextResponse.json({ error: "Subscription required" }, { status: 403 }));
 
   const contentTypeError = validateContentType(request);
   if (contentTypeError) return applyTo(contentTypeError);

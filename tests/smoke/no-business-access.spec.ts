@@ -105,9 +105,16 @@ test("the redirect destination is public, so the no-business redirect cannot loo
 test("an existing business user keeps the unchanged access rules", () => {
   const source = readFileSync("proxy.ts", "utf8");
 
-  expect(source).toContain('const isActive = business.subscription_status === "active"');
-  expect(source).toContain('business.subscription_status === "complimentary"');
-  expect(source).toContain('if (!hasAccess && pathname !== "/subscribe")');
+  // This used to assert proxy.ts's own inline
+  // `isActive || isTrialing || complimentary` formula literally. That formula
+  // was one of nine independent copies and now lives once in
+  // lib/subscription-access.ts, so the assertion moved with it: proxy must
+  // delegate to the shared predicate, and the redirect condition around it
+  // must still be exactly the same. What now counts as access is pinned by
+  // the behaviour matrix in subscription-access.spec.ts, which covers
+  // strictly more cases than these three string checks did.
+  expect(source).toContain('from "@/lib/subscription-access"');
+  expect(source).toContain('if (!hasSubscriptionAccess(business) && pathname !== "/subscribe")');
 });
 
 // ── Google callback branches ─────────────────────────────────────────────────

@@ -1,6 +1,208 @@
 # TradePulse handoff
 
-Updated: 2026-08-28 20:21 PT (checkout.session.completed now writes subscription_status directly, closing the race that left a paying Pro customer stuck showing "Free trial"; profile badge corrected)
+Updated: 2026-08-28 20:37 PT (the subscription access gate is now one shared predicate instead of nine duplicated copies; the gate and the profile badge can no longer disagree)
+
+## Subscription access gate consolidated into one predicate (2026-08-28 20:37 PT)
+
+**Status:** fixed on `main`, verified. Commit hash filled in after push, same
+two-commit pattern as recent prior sessions.
+
+This closes the Task 3 item flagged as unresolved in the session below.
+
+### Task 1 -- audit of the call sites before changing anything
+
+The task named eight. **There were nine.** All were read in full first:
+
+**Genuinely identical (7)** -- byte-for-byte the same
+`isActive || isTrialing || complimentary` rule, differing only in variable
+names and null-handling style:
+
+1. `proxy.ts`
+2. `lib/auth.ts` -> `checkUserSubscriptionAccess()`
+3. `app/api/generate-estimate/route.ts`
+4. `app/api/price-book/route.ts` (a local `checkAccess()` helper, used twice)
+5. `app/api/price-book-items/route.ts` (a local `getBusinessWithAccess()`)
+6. `app/api/price-book-items/import/route.ts`
+7. `app/api/estimates/[id]/analyze-photos/route.ts`
+
+**Genuinely different, NOT flattened (1):**
+
+8. `lib/auth.ts` -> `hasProPaymentsAccess()`. This is `plan === "pro"`
+   **composed with** the subscription rule, not another copy of it. It is now
+   `if (plan !== "pro") return false; return hasSubscriptionAccess(...)` --
+   the composition is preserved as a distinct function, exactly as it was.
+
+**A ninth site the task's list missed, found during the audit:**
+
+9. `app/page.tsx` (lines 197-202 before this change) computed the identical
+   formula into a local `hasAccess` and used it for
+   `redirect(hasAccess ? "/estimates" : "/subscribe")`. That is the same
+   decision `proxy.ts` makes. Leaving it would have **recreated the exact bug
+   this task exists to remove** -- a Pro business stuck at "trial" would have
+   been let in by the proxy and bounced by the homepage. Converted too.
+
+**Real differences preserved, not flattened.** The nine did not agree on what
+to do when the business row is missing, and each keeps its own behaviour:
+
+- `proxy.ts` -- redirect to `/signup?error=setup_required` **and clear the
+  session cookies** (checked before the access rule; untouched).
+- `app/page.tsx` -- `redirect("/onboarding")` (checked before; untouched).
+- `generate-estimate`, `price-book`, `price-book-items` -- fold "no business"
+  into the same **403 "Subscription required"** the access denial returns.
+  Preserved by passing the possibly-null row straight to the predicate, which
+  returns false for null.
+- `price-book-items/import`, `analyze-photos` -- return a distinct **404
+  "Business not found"** *before* the access check. Preserved as separate
+  early returns, with a comment at each saying so.
+
+No route's denial response, status code, or ordering changed.
+
+### Task 2 -- the shared predicate
+
+New `lib/subscription-access.ts`:
+
+- `resolveSubscriptionStatus(subscriptionStatus, plan, stripeSubscriptionId)`
+  -- the corrected status **both** the gate and the badge now read. Returns
+  `"active"` for `plan === "pro"` + status `"trial"` + a live
+  `stripe_subscription_id`; everything else passes through unchanged.
+- `hasSubscriptionAccess(business, now?)` -- grants access when the resolved
+  status is `"active"` or `"complimentary"`, or `"trial"` with
+  `trial_ends_at` still in the future. Declared as a TypeScript *type
+  predicate* (`business is T`) because granting access implies the row
+  exists; that preserves the null-narrowing `generate-estimate` and
+  `price-book` previously got from their inline checks, instead of pushing
+  `!` assertions into callers.
+- `hasLiveSubscriptionId()` -- blank-checked (`?.trim()`), not
+  nullish-checked, matching `lib/site-url.ts` and `lib/twilio-send.ts`.
+- `SUBSCRIPTION_ACCESS_COLUMNS` -- the exact select string every call site
+  now uses, so no route can omit a column the predicate depends on and
+  silently get a different answer.
+
+**Complimentary is preserved exactly**: still granted, still with no date
+consulted. Pinned by test.
+
+**Why `stripe_subscription_id` is in the rule.** The task specified it, and it
+keeps the Pro rescue narrow: a Pro-plan row with *no* subscription on record
+has not paid for anything and is not rescued. It is a stored-field check, not
+a Stripe API call -- this runs in `proxy.ts` on every authenticated
+navigation, where a network round trip per request is not acceptable.
+
+**Consequence worth flagging:** `lib/subscription-display.ts`'s resolver
+previously keyed on `plan === "pro"` alone. It now also requires the live
+subscription id, so a Pro row with no subscription now shows "Free trial"
+rather than "Subscription active". That is the more accurate label *and* is
+what makes badge/gate agreement possible at all -- but it is a behaviour
+change to yesterday's fix, not purely a refactor.
+
+### Task 3 -- call sites replaced
+
+All nine, plus the four `hasProPaymentsAccess` **callers** whose selects were
+widened by one column (`stripe_subscription_id`) so the Pro rule can actually
+fire there: `estimates/[id]/invoice`, `estimates/[id]/mark-paid`,
+`estimates/[id]/send-reminder`, `cron/payment-reminders`. Without that, those
+routes would have kept denying a stuck Pro business while every other route
+admitted it -- a new disagreement of the same class. No logic in those four
+changed; only the column list.
+
+`app/profile/page.tsx` now passes `stripe_subscription_id` into both the badge
+and the status handed to `ProfileForm`.
+
+### Task 4 -- source guard
+
+`tests/smoke/subscription-access.spec.ts` scans every `.ts`/`.tsx` under
+`app/` and `lib/` plus `proxy.ts` and fails if any file compares
+`subscription_status` directly or does `new Date(...trial_ends_at)` math.
+Five files are exempted, each named individually with its reason (the
+convention from `twilio-messaging-service.spec.ts`): the helper itself,
+`app/subscribe/page.tsx` (the paywall a denied customer lands on -- it picks
+which plan cards and countdown to render, it admits nobody),
+`app/api/billing/checkout` and `app/api/billing/upgrade` (which Stripe flow to
+start), and `app/components/trial-banner.tsx` (a days-remaining countdown). A
+companion test asserts every exemption still actually reads those fields, so
+a stale entry cannot quietly widen the hole.
+
+**Sanity-checked, as in recent sessions:** temporarily reverted
+`price-book/route.ts` to `business?.subscription_status === "active"`, ran the
+spec, confirmed it failed naming that exact file and line, restored the fix,
+re-ran the full suite green. Never committed.
+
+### Task 5 -- behaviour tests
+
+Sixteen tests in the same file, including every case the task listed:
+Pro/trial/past/live-sub granted; the same without a subscription id denied;
+Starter/trial/past denied; Starter/trial/future granted; `past_due`,
+`canceled`, `cancelled`, `unpaid`, `incomplete` all denied for both plans
+(today's behaviour, pinned); complimentary granted with and without a date;
+trial boundary checked either side of `trial_ends_at`.
+
+The badge/gate agreement test enumerates **all 96 combinations** (2 plans x 8
+statuses x 3 trial dates x 2 subscription-id states) and asserts that a badge
+reading "Subscription active" or "Complimentary" always coincides with access
+granted, that "Payment issue"/"Subscription cancelled" always coincides with
+access denied, and that "Free trial" tracks exactly whether the trial is still
+running.
+
+### Two existing tests updated, deliberately
+
+`no-business-access.spec.ts` ("an existing business user keeps the unchanged
+access rules") and `subscribe-billing-currency.spec.ts` ("the subscription
+gate itself is unchanged") were source-shape guards written by earlier
+sessions that asserted `proxy.ts` contained the inline formula *literally*.
+Both were re-pointed at the new shape (delegation + the unchanged redirect
+condition) rather than deleted, and each carries a comment explaining that
+the rule's semantics are now pinned case-by-case in
+`subscription-access.spec.ts` -- which covers strictly more than the three
+string matches they replaced. Flagging this because those tests existed
+specifically to stop the gate changing, and this session changed it on
+purpose.
+
+`billing-status-sync.spec.ts` was updated for the new 3-argument signatures.
+
+### Verification actually run (2026-08-28 20:37 PT)
+
+- `npx tsc --noEmit` -- clean.
+- `npx next build` -- compiled successfully in 21.9s, all routes present, no
+  errors, no new warnings.
+- `npx playwright test --config=playwright.unit.config.ts` -- **419 passed, 0
+  failed** (403 before this change, +16 new). Raw output pasted to chat.
+
+No dashboard was touched, no account was created or modified, no Production
+data was read or written this session.
+
+### Still open
+
+The confirmed-affected production row
+(`2578ba02-58a6-4ca1-bec2-555b55b485d8`) still has `subscription_status =
+"trial"` stored. It is no longer locked out and no longer mislabelled --
+both the gate and the badge now resolve it as active, because it has
+`plan = "pro"` and a live `stripe_subscription_id` -- so **the backfill is no
+longer urgent**, but the stored value is still wrong and the backfill
+described in the section below remains the way to correct it.
+
+### Files changed
+
+`lib/subscription-access.ts` (new), `lib/subscription-display.ts`,
+`lib/auth.ts`, `proxy.ts`, `app/page.tsx`, `app/profile/page.tsx`,
+`app/api/generate-estimate/route.ts`, `app/api/price-book/route.ts`,
+`app/api/price-book-items/route.ts`,
+`app/api/price-book-items/import/route.ts`,
+`app/api/estimates/[id]/analyze-photos/route.ts`,
+`app/api/estimates/[id]/invoice/route.ts`,
+`app/api/estimates/[id]/mark-paid/route.ts`,
+`app/api/estimates/[id]/send-reminder/route.ts`,
+`app/api/cron/payment-reminders/route.ts`,
+`tests/smoke/subscription-access.spec.ts` (new),
+`tests/smoke/billing-status-sync.spec.ts`,
+`tests/smoke/no-business-access.spec.ts`,
+`tests/smoke/subscribe-billing-currency.spec.ts`,
+`playwright.unit.config.ts`, `CLAUDE.md`, `HANDOFF.md`.
+
+### Next action
+
+Decide on the backfill (see the section below -- now a data-hygiene item
+rather than a lockout risk).
+
+## Checkout webhook writes subscription_status directly; profile badge corrected (2026-08-28 20:21 PT)
 
 ## Checkout webhook writes subscription_status directly; profile badge corrected (2026-08-28 20:21 PT)
 
