@@ -330,28 +330,97 @@ test("all nine former call sites now go through the shared predicate", () => {
   }
 });
 
-test("every call site selects the columns the predicate reads", () => {
-  // A route that forgot stripe_subscription_id or plan would still compile
-  // and would silently deny a paying Pro customer, which is the bug this
-  // whole consolidation exists to prevent. Selecting via the shared constant
-  // is what makes that impossible.
+// ---------------------------------------------------------------------------
+// Column-completeness guard
+//
+// hasSubscriptionAccess() reads four columns. A caller whose select omits one
+// gets `undefined` for it, which resolves to "no live subscription" and denies
+// a paying Pro customer with no error logged anywhere -- the silent failure
+// mode this whole consolidation exists to prevent.
+//
+// WHAT THIS GUARD CANNOT DO, stated plainly: it is file-scoped, not
+// call-site-scoped. It cannot follow a specific variable from a specific
+// `.select()` into a specific predicate call. Concretely, it would NOT catch a
+// file that queries tpe_businesses selecting no subscription columns at all
+// (`.select("id, name")`) and passes that row to the predicate -- there is no
+// column name in that select for a regex to match on.
+//
+// What would actually catch that: making the four fields REQUIRED (still
+// nullable) on SubscriptionAccessBusiness. Verified by experiment during this
+// review -- with the fields required, an incomplete select fails `tsc` with
+// "Property 'stripe_subscription_id' is missing ... but required in type
+// 'SubscriptionAccessBusiness'", pointing at the exact call site. It breaks
+// zero production code (every current select is already complete); its whole
+// cost is 21 terse test fixtures across three spec files that pass partial
+// objects like `{ plan: "pro" }`. Proposed, not applied -- see HANDOFF.md.
+// ---------------------------------------------------------------------------
+
+/** Every `.select(...)` argument in a source file, as raw text. */
+function selectArguments(source: string): string[] {
+  return [...source.matchAll(/\.select\(([^)]*)\)/g)].map((m) => m[1]);
+}
+
+/** Files that both query tpe_businesses and decide access from the result. */
+function businessAccessCallers(): string[] {
+  const files = [...listSourceFiles("app"), ...listSourceFiles("lib"), "proxy.ts"];
+  return files.filter((path) => {
+    const source = readFileSync(path, "utf8");
+    const queriesBusinesses = source.includes('.from("tpe_businesses")');
+    const decidesAccess =
+      source.includes("hasSubscriptionAccess(") ||
+      source.includes("hasProPaymentsAccess(") ||
+      source.includes("resolveSubscriptionStatus(");
+    return queriesBusinesses && decidesAccess;
+  });
+}
+
+test("every file that queries tpe_businesses and decides access selects all four columns", () => {
   expect(SUBSCRIPTION_ACCESS_COLUMNS).toBe(
     "plan, subscription_status, trial_ends_at, stripe_subscription_id"
   );
 
-  for (const path of [
-    "proxy.ts",
-    "lib/auth.ts",
-    "app/page.tsx",
-    "app/api/generate-estimate/route.ts",
-    "app/api/price-book/route.ts",
-    "app/api/price-book-items/route.ts",
-    "app/api/price-book-items/import/route.ts",
-    "app/api/estimates/[id]/analyze-photos/route.ts",
-  ]) {
+  const callers = businessAccessCallers();
+
+  // Discovered, not hardcoded, so a NEW route that queries businesses and
+  // gates on the result is covered the day it is written. The floor guards
+  // against the discovery itself silently returning nothing.
+  expect(callers.length, "expected to discover the known access call sites").toBeGreaterThanOrEqual(13);
+
+  for (const path of callers) {
     const source = readFileSync(path, "utf8");
-    expect(source, `${path} must select via SUBSCRIPTION_ACCESS_COLUMNS`).toContain(
-      "SUBSCRIPTION_ACCESS_COLUMNS"
-    );
+
+    expect(
+      source,
+      `${path} queries tpe_businesses and gates on the result, so it must select via SUBSCRIPTION_ACCESS_COLUMNS`
+    ).toContain("SUBSCRIPTION_ACCESS_COLUMNS");
+
+    // Belt and braces: even a hand-spelled select in one of these files must
+    // carry all four, so adding a second, narrower business query to a file
+    // that already imports the constant cannot quietly reintroduce the bug.
+    for (const argument of selectArguments(source)) {
+      if (!argument.includes("subscription_status")) continue;
+      if (argument.includes("SUBSCRIPTION_ACCESS_COLUMNS")) continue;
+      for (const column of ["plan", "subscription_status", "trial_ends_at", "stripe_subscription_id"]) {
+        expect(
+          argument,
+          `${path} has a hand-spelled select missing "${column}" -- use SUBSCRIPTION_ACCESS_COLUMNS`
+        ).toContain(column);
+      }
+    }
+  }
+});
+
+test("the four Pro Payments call sites are among the files that guard covers", () => {
+  // hasProPaymentsAccess receives its business row from its callers, so those
+  // callers -- not lib/auth.ts -- are where an incomplete select would bite.
+  const callers = businessAccessCallers();
+  for (const path of [
+    "app/api/estimates/[id]/invoice/route.ts",
+    "app/api/estimates/[id]/mark-paid/route.ts",
+    "app/api/estimates/[id]/send-reminder/route.ts",
+    "app/api/cron/payment-reminders/route.ts",
+    "app/profile/page.tsx",
+  ]) {
+    expect(callers, `${path} must be discovered by the column guard`).toContain(path);
   }
 });

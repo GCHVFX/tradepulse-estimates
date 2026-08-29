@@ -3,6 +3,7 @@ import twilio from "twilio";
 import { Resend } from "resend";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { hasProPaymentsAccess } from "@/lib/auth";
+import { SUBSCRIPTION_ACCESS_COLUMNS } from "@/lib/subscription-access";
 import {
   normalizePhoneE164,
   createSupabaseSmsSuppressionStore,
@@ -54,7 +55,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const businessIds = [...new Set(estimates.map((e) => e.business_id).filter((id): id is string => Boolean(id)))];
   const { data: businesses } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("id, name, payment_link, plan, subscription_status, trial_ends_at, stripe_subscription_id")
+    .select(`id, name, payment_link, ${SUBSCRIPTION_ACCESS_COLUMNS}`)
     .in("id", businessIds);
 
   // Payments is Pro-only, so only entitled businesses get reminders sent on

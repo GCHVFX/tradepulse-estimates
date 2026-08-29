@@ -113,8 +113,20 @@ test("an existing business user keeps the unchanged access rules", () => {
   // must still be exactly the same. What now counts as access is pinned by
   // the behaviour matrix in subscription-access.spec.ts, which covers
   // strictly more cases than these three string checks did.
-  expect(source).toContain('from "@/lib/subscription-access"');
-  expect(source).toContain('if (!hasSubscriptionAccess(business) && pathname !== "/subscribe")');
+  expect(
+    source,
+    "proxy.ts must decide access via the shared predicate in @/lib/subscription-access"
+  ).toContain('from "@/lib/subscription-access"');
+
+  // Asserted as an exact substring, closing paren included, so that ADDING a
+  // condition (the realistic way this gate gets widened -- an extra
+  // `&& pathname !== "/estimates"` exemption, say) breaks it just as loudly
+  // as removing the check altogether.
+  expect(
+    source,
+    'proxy.ts must redirect on exactly `!hasSubscriptionAccess(business) && pathname !== "/subscribe"` -- ' +
+      "no extra path exemptions, no weakened condition. Widening who gets past this gate is the regression this test exists to stop."
+  ).toContain('if (!hasSubscriptionAccess(business) && pathname !== "/subscribe")');
 });
 
 // ── Google callback branches ─────────────────────────────────────────────────

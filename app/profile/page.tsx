@@ -6,7 +6,7 @@ import { BottomNav } from "@/app/components/bottom-nav";
 import { DeleteAccountSection } from "@/app/components/delete-account-section";
 import { ProfileForm } from "@/app/components/profile-form";
 import { resolveProfileBadge, type ProfileBadgeCopy } from "@/lib/subscription-display";
-import { resolveSubscriptionStatus } from "@/lib/subscription-access";
+import { resolveSubscriptionStatus, SUBSCRIPTION_ACCESS_COLUMNS } from "@/lib/subscription-access";
 
 // Tailwind needs each class name to appear literally for its build-time
 // scanner to pick it up -- string-interpolating "text-${colorClass}-400"
@@ -33,7 +33,7 @@ export default async function ProfilePage({
 
   const { data } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("id, name, phone, email, logo_url, prepared_by, google_review_link, payment_link, subscription_status, trial_ends_at, plan, stripe_subscription_id")
+    .select(`id, name, phone, email, logo_url, prepared_by, google_review_link, payment_link, ${SUBSCRIPTION_ACCESS_COLUMNS}`)
     .eq("owner_user_id", user.id)
     .maybeSingle();
 

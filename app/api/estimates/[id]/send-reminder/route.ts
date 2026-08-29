@@ -3,6 +3,7 @@ import twilio from "twilio";
 import { Resend } from "resend";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
 import { hasProPaymentsAccess } from "@/lib/auth";
+import { SUBSCRIPTION_ACCESS_COLUMNS } from "@/lib/subscription-access";
 import {
   normalizePhoneE164,
   createSupabaseSmsSuppressionStore,
@@ -42,7 +43,7 @@ export async function POST(
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("id, name, payment_link, plan, subscription_status, trial_ends_at, stripe_subscription_id")
+    .select(`id, name, payment_link, ${SUBSCRIPTION_ACCESS_COLUMNS}`)
     .eq("owner_user_id", user.id)
     .maybeSingle();
 

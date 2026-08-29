@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
 import { hasProPaymentsAccess } from "@/lib/auth";
+import { SUBSCRIPTION_ACCESS_COLUMNS } from "@/lib/subscription-access";
 
 export async function PATCH(
   request: NextRequest,
@@ -14,7 +15,7 @@ export async function PATCH(
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("id, plan, subscription_status, trial_ends_at, stripe_subscription_id")
+    .select(`id, ${SUBSCRIPTION_ACCESS_COLUMNS}`)
     .eq("owner_user_id", user.id)
     .maybeSingle();
 

@@ -1,6 +1,152 @@
 # TradePulse handoff
 
-Updated: 2026-08-28 20:37 PT (the subscription access gate is now one shared predicate instead of nine duplicated copies; the gate and the profile badge can no longer disagree)
+Updated: 2026-08-28 20:50 PT (verification pass on the access consolidation: both rewritten guards proven to still guard, column-completeness audited and guarded)
+
+## Verification pass on the access consolidation (2026-08-28 20:50 PT)
+
+**Status:** verified on `main`. Commit hash filled in after push.
+
+A review of the consolidation in the section below. Two gaps were raised; the
+findings on each are below, including one that came back **clean**.
+
+### Task 1 -- the two rewritten guards were proven, not assumed
+
+The previous session rewrote two existing guard tests that existed to stop the
+access gate being widened, and flagged that as sensitive. Both were put under
+the same regression proof used for new guards.
+
+**Method.** `proxy.ts`'s redirect condition was widened the realistic way --
+by *adding* an exemption rather than removing the check:
+
+```diff
+- if (!hasSubscriptionAccess(business) && pathname !== "/subscribe") {
++ if (!hasSubscriptionAccess(business) && pathname !== "/estimates" ...) {
+```
+
+That is a genuine hole: an expired-trial user reaches `/estimates`.
+
+**Result: both failed, so both are still real guards.** But their first-pass
+failure output only printed "Expected substring" above a 130-line dump of
+`proxy.ts` -- it proved a difference without naming the problem. Both were
+given explicit assertion messages, and re-run against the same widening:
+
+```
+no-business-access.spec.ts:105 -- an existing business user keeps the unchanged access rules
+  Error: proxy.ts must redirect on exactly `!hasSubscriptionAccess(business) &&
+  pathname !== "/subscribe"` -- no extra path exemptions, no weakened condition.
+  Widening who gets past this gate is the regression this test exists to stop.
+
+subscribe-billing-currency.spec.ts:215 -- the subscription gate itself is unchanged
+  Error: proxy.ts must redirect on exactly `!hasSubscriptionAccess(business) &&
+  pathname !== "/subscribe"` -- a billing or currency change must never widen
+  who gets past the paywall.
+```
+
+Both assertions deliberately include the closing paren, which is what makes an
+*added* condition fail them as loudly as a removed one. `proxy.ts` was restored
+and confirmed byte-identical to the committed version.
+
+### Task 2 -- column audit came back clean; the gap was elsewhere
+
+**Audit result: no bug found.** All 14 subscription-bearing selects that reach
+`hasSubscriptionAccess`, `hasProPaymentsAccess`, or `resolveSubscriptionStatus`
+already selected all four columns. Nothing was silently denying anyone.
+
+**But five spelled the column list out by hand** -- the four Pro Payments
+callers (`invoice`, `mark-paid`, `send-reminder`, `cron/payment-reminders`)
+and `app/profile/page.tsx`. Correct today, maintained by hand, and the exact
+shape the bug would take. All five now build their select from
+`SUBSCRIPTION_ACCESS_COLUMNS`, so the list lives in one place.
+
+**The hole is real, and was measured rather than asserted.** Two experiments:
+
+- *Is it reachable today?* `proxy.ts`'s select was temporarily changed to omit
+  `stripe_subscription_id`. **`tsc` passed clean** -- confirming an incomplete
+  select compiles silently and would deny a paying Pro customer with nothing
+  logged.
+- *What would actually catch it?* The four fields on
+  `SubscriptionAccessBusiness` were temporarily made **required (still
+  nullable)**. The same incomplete select then failed compilation, naming the
+  exact call site and column:
+  `proxy.ts(117,30): error TS2345: ... Property 'stripe_subscription_id' is
+  missing in type '{ subscription_status: any; trial_ends_at: any; plan: any; }'
+  but required in type 'SubscriptionAccessBusiness'.`
+
+**Cost of that fix, measured exactly: zero production changes, 21 test-fixture
+errors** across three spec files (13 in `pro-payments-entitlement.spec.ts`, 6 in
+`subscription-access.spec.ts`, 2 in `billing-status-sync.spec.ts`) which pass
+terse partial objects like `{ plan: "pro" }`. Required-but-nullable keeps every
+degenerate case testable -- a fixture writes `stripe_subscription_id: null`
+rather than omitting the key.
+
+**Proposed, not applied.** It means rewriting 13 fixtures in
+`pro-payments-entitlement.spec.ts`, a file this work has not otherwise touched,
+during a verification session -- and the previous session's test rewrites are
+precisely what this review was called to check. Worth doing as its own task,
+with the fixture churn visible in its own diff.
+
+### The guard that was added, and what it cannot do
+
+`tests/smoke/subscription-access.spec.ts` gained a column-completeness guard
+that **discovers** its own targets (every file that both queries
+`tpe_businesses` and calls one of the three functions -- 13 files today), so a
+new route is covered the day it is written rather than when someone remembers
+to add it to a list. It asserts each such file selects via the constant, and
+that any hand-spelled select mentioning `subscription_status` in those files
+carries all four columns.
+
+**Stated plainly in the test file itself: this guard is file-scoped, not
+call-site-scoped.** It cannot follow a specific variable from a specific
+`.select()` into a specific predicate call. Concretely it would **not** catch a
+file that selects no subscription columns at all (`.select("id, name")`) and
+passes that row to the predicate -- there is no column name for a regex to
+match. That residual hole is exactly what the type-level fix above closes, which
+is why it is documented in the test rather than papered over.
+
+**Sanity-checked against both failure modes it does claim:**
+
+```
+REGRESSION A: hand-spelled select dropping a column
+  Error: app/api/estimates/[id]/invoice/route.ts has a hand-spelled select
+  missing "stripe_subscription_id" -- use SUBSCRIPTION_ACCESS_COLUMNS
+
+REGRESSION B: file stops using the constant entirely
+  Error: app/api/price-book-items/route.ts queries tpe_businesses and gates on
+  the result, so it must select via SUBSCRIPTION_ACCESS_COLUMNS
+```
+
+Both files restored and confirmed unchanged afterward.
+
+### Verification actually run (2026-08-28 20:50 PT)
+
+- `npx tsc --noEmit` -- clean.
+- `npx next build` -- compiled successfully in 17.1s, no errors.
+- `npx playwright test --config=playwright.unit.config.ts` -- **420 passed, 0
+  failed** (419 before, +1 net: two new column-guard tests, one prior
+  hardcoded-list test replaced by the discovery-based one). Raw output pasted
+  to chat.
+
+No production data was read or written this session.
+
+### Files changed
+
+`app/api/cron/payment-reminders/route.ts`,
+`app/api/estimates/[id]/invoice/route.ts`,
+`app/api/estimates/[id]/mark-paid/route.ts`,
+`app/api/estimates/[id]/send-reminder/route.ts`, `app/profile/page.tsx`
+(all five: hand-spelled select -> `SUBSCRIPTION_ACCESS_COLUMNS`),
+`tests/smoke/subscription-access.spec.ts`,
+`tests/smoke/no-business-access.spec.ts`,
+`tests/smoke/subscribe-billing-currency.spec.ts`, `HANDOFF.md`.
+
+### Next action
+
+Decide on making `SubscriptionAccessBusiness`'s four fields required (see Task
+2 above) -- the only thing that closes the residual hole, zero production
+churn, 21 fixture updates. The backfill noted further below remains open and
+is still data hygiene rather than a lockout risk.
+
+## Subscription access gate consolidated into one predicate (2026-08-28 20:37 PT)
 
 ## Subscription access gate consolidated into one predicate (2026-08-28 20:37 PT)
 

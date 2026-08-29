@@ -221,8 +221,18 @@ test("the subscription gate itself is unchanged", () => {
   // was one of nine copies of the same formula), so this pins the delegation
   // and the redirect condition rather than the inline arithmetic. The rule's
   // semantics are pinned case by case in subscription-access.spec.ts.
-  expect(proxy).toContain('from "@/lib/subscription-access"');
-  expect(proxy).toMatch(/if \(!hasSubscriptionAccess\(business\) && pathname !== "\/subscribe"\)/);
+  expect(
+    proxy,
+    "proxy.ts must decide access via the shared predicate in @/lib/subscription-access"
+  ).toContain('from "@/lib/subscription-access"');
+
+  // The trailing \) is load-bearing: it makes an added exemption (e.g.
+  // `&& pathname !== "/estimates"`) fail this, not just a removed check.
+  expect(
+    proxy,
+    'proxy.ts must redirect on exactly `!hasSubscriptionAccess(business) && pathname !== "/subscribe"` -- ' +
+      "a billing or currency change must never widen who gets past the paywall."
+  ).toMatch(/if \(!hasSubscriptionAccess\(business\) && pathname !== "\/subscribe"\)/);
 });
 
 // ── Recovery block placement and mobile spacing ─────────────────────────────
