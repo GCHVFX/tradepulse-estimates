@@ -4,7 +4,7 @@ Updated: 2026-08-28 20:50 PT (verification pass on the access consolidation: bot
 
 ## Verification pass on the access consolidation (2026-08-28 20:50 PT)
 
-**Status:** verified on `main`. Commit hash filled in after push.
+**Status:** verified on `main`, committed as `a53e44b` and pushed to `origin/main`.
 
 A review of the consolidation in the section below. Two gaps were raised; the
 findings on each are below, including one that came back **clean**.
