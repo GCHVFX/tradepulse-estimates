@@ -4,7 +4,7 @@ Updated: 2026-08-28 21:01 PT (an incomplete access select is now a compile error
 
 ## Access columns enforced by the type system (2026-08-28 21:01 PT)
 
-**Status:** fixed on `main`, verified. Commit hash filled in after push.
+**Status:** fixed on `main`, verified, committed as `4b239ef` and pushed to `origin/main`.
 
 Applies the fix proposed at the end of the verification pass below.
 
