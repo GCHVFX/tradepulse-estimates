@@ -4,8 +4,8 @@ Updated: 2026-08-28 20:37 PT (the subscription access gate is now one shared pre
 
 ## Subscription access gate consolidated into one predicate (2026-08-28 20:37 PT)
 
-**Status:** fixed on `main`, verified. Commit hash filled in after push, same
-two-commit pattern as recent prior sessions.
+**Status:** fixed on `main`, verified, committed as `71d1550` and pushed to
+`origin/main`.
 
 This closes the Task 3 item flagged as unresolved in the session below.
 
