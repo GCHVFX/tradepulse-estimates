@@ -652,7 +652,7 @@ export default async function LandingPage() {
         </section>
 
         {/* Final CTA */}
-        <section className="py-12 sm:py-16" style={{ background: "linear-gradient(135deg, #0D1B2E 0%, #1a2e47 100%)" }}>
+        <section className="py-12 sm:py-16" style={{ background: "#26211B" }}>
           <div className="relative mx-auto max-w-2xl px-6 text-center">
             <div className="dot-grid absolute inset-0 opacity-30" />
             <div className="relative">

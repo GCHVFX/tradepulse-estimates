@@ -1,6 +1,59 @@
 # TradePulse handoff
 
-Updated: 2026-08-29 22:04 PT (four more fixes on `redesign/hero-photo-kraft`: mobile nav rebuilt with a hamburger, mobile hero photo re-positioned, eyebrow labels removed sitewide, "How it works" de-carded -- still NOT merged to main)
+Updated: 2026-08-29 22:40 PT (Final CTA band was still the old navy gradient, never migrated to the #26211B ink token -- fixed, still NOT merged to main)
+
+## Final CTA band was still the old navy, not the ink token (2026-08-29 22:40 PT)
+
+**Status:** implemented on branch `redesign/hero-photo-kraft`, not merged to
+main. Full detail (exact computed values, the full contrast table) is in
+`SPEC.md`'s addendum; summarized here.
+
+Checked via computed-style readback (not a class-name guess): the "Quote
+faster. / Win more jobs." section resolved to
+`linear-gradient(135deg, rgb(13,27,46) 0%, rgb(26,46,71) 100%)` --
+`#0D1B2E`/`#1A2E47`, the pre-redesign navy. Not close to `#26211B`, not a
+rounding difference -- a different hue entirely (cool navy vs. warm
+near-black). It had never been touched by any of this branch's work because
+nobody had explicitly scoped it in. Fixed to a solid `#26211B` (confirmed
+by re-reading the computed style afterward: `rgb(38, 33, 27)`, exact).
+
+**One correction made along the way:** the question that started this
+check assumed the demo widget also used `#26211B`. It doesn't -- the demo
+widget's own background is `#09090b`, a separate value, untouched, unrelated
+to the kraft/ink tokens. Only the hero scrim actually matches `#26211B`.
+Said so plainly rather than letting the premise stand uncorrected.
+
+Computed exact contrast ratios (not estimated) for all 5 text elements in
+the section, before and after. Every element that passed before still
+passes with more margin after. One pre-existing failure was found and is
+**not fixed**, since it wasn't part of what was asked: the "14-day free
+trial" line at 30% white opacity measures 2.60:1 against the old
+background and 2.70:1 against the new one -- both well under the 4.5
+needed for 14px text. Not a regression from this change; flagged for a
+separate decision.
+
+Screenshotted the full page before and after (tall-viewport workaround for
+the same scrolled-capture bug noted in the previous session) -- the band
+visibly shifts from navy-blue to warm near-black, matching the hero and
+footer.
+
+### Verification actually run (2026-08-29 22:40 PT)
+
+- `npx tsc --noEmit` -- exit 0.
+- `npx next build` -- exit 0.
+- Computed-style readback before and after.
+- Exact WCAG contrast computed for all 5 text elements, before/after.
+- Full-page screenshots before and after.
+- Demo widget re-hashed identical to baseline; `git diff main` on all
+  three `EstimateDemo*.tsx` files still empty.
+
+### Next action
+
+Same as before: review the Vercel preview, merge only after sign-off.
+Separately, Greg should decide what to do about the pre-existing 14-day
+trial line contrast failure noted above -- not fixed here, flagged only.
+
+
 
 ## Four fixes on the hero/kraft branch: nav, mobile photo, eyebrows, de-carding (2026-08-29 22:04 PT)
 

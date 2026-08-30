@@ -268,3 +268,79 @@ untouched.
 `public/trades-van.png` (flagged last session as safe to delete) is gone
 from the working tree as of this session -- not deleted by this work,
 presumably handled separately.
+
+## Addendum: Final CTA band still on the old navy, not the ink token (2026-08-29 22:40 PT)
+
+Checked, not assumed. Computed-style readback (`getComputedStyle(section)`
+on the live page, not a class-name guess) on the "Quote faster. / Win more
+jobs." section:
+
+```
+backgroundImage: "linear-gradient(135deg, rgb(13, 27, 46) 0%, rgb(26, 46, 71) 100%)"
+```
+
+`rgb(13,27,46)` is `#0D1B2E`, `rgb(26,46,71)` is `#1A2E47`. Neither is
+`#26211B`. This is not a close variant or a rounding difference -- `#0D1B2E`
+is a cool navy blue (hue ~210), `#26211B` is a warm near-black (hue ~40).
+It's the old brand's navy, used before this redesign existed, and it was
+never migrated to the ink token. It read cooler in earlier screenshots than
+the hero for a real reason, not a display artifact.
+
+One correction to the premise this check started from: the demo widget
+does **not** use `#26211B` -- it's `#09090b`, a separate near-black that's
+part of the demo widget's own untouched design system, unrelated to the
+kraft/ink token set. Only the hero scrim actually resolves to `#26211B`
+(confirmed earlier this session: `rgba(38,33,27,...)` at various alphas).
+Worth being precise about since the two dark values look similar in a
+screenshot but aren't the same number.
+
+### The fix
+
+`background: "linear-gradient(135deg, #0D1B2E 0%, #1a2e47 100%)"` ->
+`background: "#26211B"`. Went solid rather than keeping a two-stop
+gradient, since the token system has no established "lighter ink" partner
+color to gradient toward, and inventing one would reintroduce exactly the
+kind of stray hex this whole redesign has been removing. Confirmed via
+computed-style readback after the change: `rgb(38, 33, 27)` -- exactly
+`#26211B`.
+
+### Contrast re-verified, not just the background swapped and assumed fine
+
+Computed exact WCAG contrast (not estimated) for every text element in the
+section, against both the old gradient's two stops and the new solid
+value:
+
+| Element | Old (worst of 2 stops) | New (#26211B) | Needs |
+|---|---|---|---|
+| "Quote faster. / Win more jobs." (white, large) | 13.76 | 15.96 | 3.0 |
+| "Win more jobs." (orange span, large) | 6.41 | 7.43 | 3.0 |
+| Subhead (60% white, 20px) | 5.96 | 6.59 | 4.5 |
+| "Already have an account?" (50% white, 16px) | 4.62 | 5.02 | 4.5 |
+| "14-day free trial..." (30% white, 14px) | **2.60 FAIL** | **2.70 FAIL** | 4.5 |
+
+Every element that passed before still passes, with a slightly larger
+margin. One element -- the 14-day trial line at 30% white opacity --
+**already failed contrast before this change** (2.60:1 against the old
+navy) and still fails after (2.70:1). Not a regression introduced by this
+fix; not fixed either, since it's a pre-existing issue outside what was
+asked here. Flagging it rather than quietly leaving it undocumented: that
+line's opacity would need raising (or the token darkened further) to pass,
+and that's a separate call for Greg to make.
+
+Screenshotted the full page before and after at a tall viewport (this
+Browser pane's scrolled-capture bug, noted in earlier sessions, still
+applies, so both shots were taken at scroll position 0 with the viewport
+sized to fit the section on-screen). The band visibly shifts from a
+cool navy-blue to a warm near-black matching the hero and footer tone.
+
+### Verification actually run (2026-08-29 22:40 PT)
+
+- `npx tsc --noEmit` -- exit 0.
+- `npx next build` -- exit 0.
+- Computed-style readback before and after, both confirming exact rgb
+  values (not inferred from the source edit).
+- Exact contrast ratios computed for all 5 text elements in the section,
+  before and after -- table above.
+- Full-page screenshots before and after.
+- Demo widget re-hashed identical to the untouched baseline; `git diff
+  main` on all three `EstimateDemo*.tsx` files still empty.
