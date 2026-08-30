@@ -1,6 +1,80 @@
 # TradePulse handoff
 
-Updated: 2026-08-29 02:46 PT (FINAL DECISION on the footer mark: Greg rejected Mark C sitewide, Mark A now has a documented small-size treatment and is used at every size everywhere, including the footer -- round 1's "Mark C only under 40px" rule is superseded, see below)
+Updated: 2026-08-29 21:12 PT (hero photo + kraft palette redesign built on branch `redesign/hero-photo-kraft`, NOT merged to main -- awaiting Vercel preview review)
+
+## Hero photo and kraft palette redesign (2026-08-29 21:12 PT)
+
+**Status:** implemented on branch `redesign/hero-photo-kraft`, pushed, **not
+merged to main**. `main` is untouched. Spec is in `SPEC.md`; full detail and
+the measured numbers live there rather than being duplicated here.
+
+Marketing site moves off the navy-gradient hero and white/slate chrome onto
+a photo-grounded hero (`public/trades-van.jpg`) with a warm kraft palette
+(#F3E8D0 surface, #EADCC0 deeper page, #C9B384 border, #5C4A2E muted text).
+Hero H1 switches to Instrument Serif regular; the pill eyebrow badge is
+removed and its words relocated below the trial line.
+
+### The thing worth remembering
+
+The spec's scrim and background-position values were explicitly flagged in
+it as unverified starting points, and **both were wrong**. Measured contrast
+by sampling the real photo pixels into a canvas and compositing them under
+the scrim at each text element's actual rendered position: the orange
+headline scored 2.38:1 on desktop (needs 3.0) and the relocated "built for
+contractors" line 4.42:1 on mobile (needs 4.5). Neither failure was visible
+in a screenshot -- both looked perfectly fine. Retuned the scrim and added a
+separate stronger near-vertical scrim below 768px (the layout stacks there,
+so the text spans the full photo width and the spec's single left-to-right
+scrim doesn't apply). All six hero text elements now pass at both
+breakpoints.
+
+Two things the token swap would have missed on a visual pass: `.gradient-border`
+had `background: white` hardcoded in the page's own CSS block (would have
+stayed white on kraft), and `.dot-grid` is shared with the dark Final CTA
+section, so its CSS had to stay even though the hero no longer uses it.
+
+### Scope conflict, resolved with Greg before coding
+
+`SPEC.md` contradicted itself: the Palette decision said to warm every
+light section between hero and footer, while Explicitly-out-of-scope
+excluded "anything below the hero" on the grounds of "lack of visibility
+into current markup" -- a reason that didn't apply once the markup was in
+hand. Asked rather than guessed; Greg chose to warm the mid sections too,
+limited to background/border/muted-text tokens with no structural changes.
+Recorded in `SPEC.md` under "Clarification resolved before implementation".
+
+### Demo widget: proven untouched, not just asserted
+
+Hashed all three `EstimateDemo*.tsx` files before starting and re-hashed
+after; identical, and `git diff main` on those paths is empty. A temporary
+opacity change used to check what sits behind the widget was applied in the
+browser DOM only and reverted, never to a file.
+
+### Verification actually run (2026-08-29 21:12 PT)
+
+- `npx tsc --noEmit` -- exit 0.
+- `npx next build` -- exit 0, all routes built.
+- Screenshots at 375px and 1440px, plus a full-page capture confirming the
+  kraft treatment through every mid section and the footer.
+- Computed-style readback confirming nav/footer/band tokens resolve to the
+  exact spec hex values.
+- Subject-occlusion check: visible phone shell starts at 58.7% of hero
+  width; the person sits clear to its left.
+
+**Note on the preview tooling:** scrolled screenshots come back solid black
+in the Browser pane on this dev server. Confirmed it is not caused by this
+change by reproducing it on `/plumbing-cost`, an untouched page. Worked
+around it with a tall viewport at scroll 0.
+
+### Next action
+
+Review the Vercel preview deployment for the branch. Merge to `main` only
+after sign-off. Also outstanding: `public/trades-van.png` (2.1MB,
+uncompressed) is still in the working tree untracked and was deliberately
+NOT committed -- only the 203KB `.jpg` was. Delete the `.png` if it is no
+longer needed as a source.
+
+
 
 ## FINAL: Mark A used at every size sitewide, including the footer (2026-08-29 02:46 PT)
 

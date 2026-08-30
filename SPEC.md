@@ -1,168 +1,156 @@
-# Spec: Wordmark lockup rollout
+# Spec: Hero photo and kraft palette redesign
 
 ## What this is
-Add the "TradePulse Estimates" text lockup next to the icon mark
-wherever the icon-only swap from the previous round left it bare, and
-build (but don't place) a stacked variant for future use.
+A slight redesign of the marketing site's light chrome (nav, footer) and hero
+section, moving off the current navy-gradient hero and pale-cream nav/footer
+toward a warmer, photo-grounded look. No structural rebuild, no changes to
+the live interactive demo, no changes below the hero.
 
 ## Resolved decisions
-- "Estimates" renders in the muted grey token, not italic. The
-  reference file's CSS sets font-style: normal explicitly, colour is
-  what differentiates it from "TradePulse".
-- App nav (dark, existing 44px icon) gets the wordmark text added
-  beside it, using the on-dark colour spec: "TradePulse" in bone
-  (#F7F2E9), "Estimates" in #9A8F79.
-- The three demo widgets (EstimateDemo.tsx, EstimateDemoElectrical.tsx,
-  EstimateDemoTrades.tsx) get the same on-dark wordmark text added next
-  to their existing icon.
-- The marketing site's public header is a separate, likely untouched
-  location (last round only touched app components and the demo
-  widgets). Claude Code confirms its current state and applies the
-  light lockup spec if it still shows the old mark.
-- A stacked (icon-above-text) lockup component gets built and exported,
-  but is not placed on any page in this pass.
-- Estimate/PDF output is not touched. It stays fully white-label,
-  contractor's own branding only, no TradePulse credit anywhere on it.
+
+### Palette
+- Nav and footer background moves from the current pale cream to a warmer
+  kraft tone: surface #F3E8D0, hairline/border #C9B384, muted text on light
+  #5C4A2E. Any other light-background section between hero and footer should
+  get the same warm treatment for consistency, using #EADCC0 as the deeper
+  page-background token where a surface/page contrast is needed (mirrors how
+  the current bone/surface pair already works, just warmed).
+- Dark tokens (#26211B ink, #F7F2E9 text, #9A8F79 muted, the four tool
+  accents: orange #F59E0B, blue #2563EB, green #16A34A, purple #6D28D9) are
+  unchanged.
+- The charcoal/safety-orange alternative direction was considered and
+  rejected. Kraft only.
+
+### Hero background
+- Replace the navy gradient and dot texture with the photo at
+  `public/trades-van.jpg` (already compressed, JPEG, ~200KB, same 1254x1254
+  dimensions as the original PNG). Confirm the file is present before
+  wiring it in; if it's still `trades-van.png`, flag it rather than
+  guessing which one is current.
+- Apply a dark scrim over the photo so hero text and the demo widget stay
+  legible: a left-to-right gradient, darker over the text side, lighter
+  over the photo detail on the right. Starting point:
+  `linear-gradient(100deg, rgba(38,33,27,0.62) 15%, rgba(38,33,27,0.22) 70%)`
+  layered over the image. Treat these as a starting point, not final —
+  check legibility on an actual phone screen in daylight and adjust.
+- Position the photo so the subject (the person, not just the van) is not
+  hidden directly behind the demo widget. Starting point:
+  `background-position: 18% 22%`. This was reasoned from the photo's
+  composition, not measured against the real rendered layout — check it
+  against the actual demo widget's real position and adjust.
+
+### Hero typography
+- Headline switches from the current DM Sans bold to Instrument Serif,
+  regular weight, roughly 56px desktop (scale down responsively). Do not
+  force a bold weight — Instrument Serif does not ship a true bold, and
+  synthetic bold on a display serif looks wrong. Size and line-height carry
+  the visual weight instead.
+- Headline copy is unchanged: "Send a professional estimate" in the base
+  text colour, "before you leave the job" in the orange accent, exactly as
+  it reads today.
+- Subhead, both CTA buttons, the micro-copy line, nav links, and footer
+  links all stay in DM Sans. Only the H1 changes typeface.
+- A sturdier alternative (Fraunces, Source Serif 4, Zilla Slab) was
+  compared against Instrument Serif and rejected. Instrument Serif stays,
+  matching the existing wordmark.
+
+### Badge / eyebrow text
+- Remove the pill-shaped badge entirely: no border, no pill background, no
+  dot, no position above the headline.
+- Keep the words "Built for contractors and home service businesses" as
+  plain, unstyled small text, relocated lower in the hero block (after the
+  "14-day free trial. No credit card required." line), not in the eyebrow
+  position.
+
+### CTAs
+- Both hero buttons stay exactly as they are: "Try free for 14 days"
+  (primary, filled) and "Sign in" (secondary, outline). No copy change, no
+  removal, no restyle beyond whatever falls out of the palette swap.
+
+### Live demo widget
+- Do not touch it. Not the corners, not the internal field styling, not its
+  position in the right column above the fold. It's a real, working
+  component — every "phone corners" and "rounded card" discussion earlier
+  in this process was about a hand-built visual approximation used for
+  chat-based mockups, not an instruction to change the real component.
+  Leave it as a fixed piece and build the rest of the hero around it.
+
+### Rollback
+- Build this on a feature branch, not directly on main. Push it and let
+  Vercel's automatic preview deployment provide a live URL to review before
+  anything touches production. Only merge to main (which auto-deploys) once
+  it's confirmed to be working. If it's not working, the branch is simply
+  not merged — no separate revert mechanism needed given main is never
+  touched until sign-off.
 
 ## Explicitly out of scope
-- Any TradePulse branding on generated estimates or PDFs
-- Placing the stacked lockup anywhere
-- General re-theme beyond the wordmark rollout
-- New sizes or colour values beyond what the reference sheet specifies
+- The live demo widget's internal styling, including the line-item text
+  colour that was flagged earlier this session as inconsistent with the
+  palette. That's a real, separate issue but is not part of this spec —
+  raise it on its own if you want it fixed.
+- Anything below the hero (the "what we build" section, pricing, "how it
+  works") — not covered here due to lack of visibility into current markup.
+- General re-theme beyond what's listed above.
+
+## Clarification resolved before implementation (2026-08-29)
+
+The two bullets above are in direct conflict: the Palette decision says
+"any other light-background section between hero and footer should get the
+same warm treatment for consistency," while Explicitly-out-of-scope
+excludes "anything below the hero," giving "lack of visibility into current
+markup" as the reason. That reason did not apply during implementation (the
+markup was in hand: 10 mid-page sections alternating `bg-white` /
+`bg-slate-50`).
+
+Asked rather than guessed. **Resolution: warm the mid-page sections too**,
+limited strictly to background and border tokens — `bg-white` -> #F3E8D0
+(surface), `bg-slate-50` -> #EADCC0 (deeper page), slate borders -> #C9B384.
+No layout, copy, or structural changes to any mid-page section. The
+out-of-scope bullet is read as excluding *structural* work on those
+sections, not the token swap. Without this, the page would have rendered
+kraft chrome above and below a stark white middle.
 
 ## Open questions
 None.
 
 ## Status
-Done. Shipped 2026-08-29. App nav (Logo()) and all three demo widgets
-(EstimateDemo.tsx, EstimateDemoElectrical.tsx, EstimateDemoTrades.tsx) now
-render icon + "TradePulse Estimates" via a shared `RowLockup` component
-(new `app/components/wordmark.tsx`), Instrument Serif, on-dark colours
-(#F7F2E9 / #9A8F79), 36px text next to the 44px icon (26px scaled
-proportionally to the icon's 32->44px growth from last round, since the
-reference sheet doesn't cover a 44px icon directly -- see the comment in
-logo.tsx). Marketing site's public header (app/page.tsx nav, and the
-raster lockup shared by /trades, /electricians, /plumbers, /contact,
-/share/[id]) was checked and already shows icon + wordmark text (from the
-prior round's raster compositing) -- not icon-only and not the old mark,
-so task 3's trigger condition didn't apply; left untouched. Flagging one
-thing for a separate decision: that raster wordmark still uses its
-original sans-serif typography/colours, not this spec's Instrument Serif
-treatment, since it's baked into a flat PNG rather than live text --
-redoing it as a new composite was judged to be a bigger, separate piece of
-work than "add the wordmark where it's bare," which is what this spec
-scoped. `StackedLockup` built and exported from the same file, not
-imported anywhere. Verified `npx tsc --noEmit` and `npx next build` both
-clean; confirmed zero changes under estimate generation, preview, or
-PDF/document export (lib/generate-pdf.ts, company-estimate-header.tsx,
-download-pdf-button.tsx, estimate-markdown.tsx, app/api/generate-estimate
-all untouched -- that output remains fully white-label). Live-checked
-both the app nav and the demo widget lockup in the browser.
+Implemented 2026-08-29 on branch `redesign/hero-photo-kraft`. Not merged to
+main. Awaiting review of the Vercel preview deployment.
 
-### Correction (2026-08-29 02:07 PT): task 3 was wrong
+Verified: `npx tsc --noEmit` exit 0, `npx next build` exit 0. Screenshots
+taken at 375px and 1440px. Demo widget proven unmodified by hash comparison
+and an empty `git diff main` on all three EstimateDemo files.
 
-The "already shows icon+wordmark, not applicable" call above was wrong.
-The marketing nav/header (home page plus /trades, /electricians,
-/plumbers, /contact, /share/[id]) was in fact still rendering the legacy
-raster lockup verbatim: bold sans-serif "TradePulse" stacked over bold
-orange "Estimates", next to a small icon -- not any of the four lockups
-this spec defines. What I'd checked for was "icon-only vs has some
-wordmark," which the raster technically passed (it does have text), but
-that's not the same question as "does it match this spec's lockup," which
-it didn't. Replaced with `RowLockup variant="light"` (live component,
-`LogoMarkLight` + `WordmarkText`, Instrument Serif, muted-grey
-"Estimates", not bold, not orange) at all six locations. Icon sized 44px,
-matching the dark app nav's precedent rather than the reference sheet's
-literal 26-28px suggestion, since that would put Mark A back under the
-40px floor round 1 established (confirmed with Greg before implementing).
-Text 36px, same 26px-scaled-to-44px-icon reasoning as the dark nav. Verified
-`tsc --noEmit` and `next build` clean, and live-checked the home page and
-`/trades` in the browser -- both show the Instrument Serif lockup, not the
-raster asset. `app/page.tsx`'s small footer credit (`h-7`, ~24px icon) was
-left on the original raster, same as round 2's decision to skip it as
-"a footer credit nobody zooms into." `public/tradepulse-logo.png` is still
-used there; `public/tradepulse-logo-compact.png` is now unreferenced by
-any code (nothing deleted, flagging for Greg same as the other
-now-orphaned assets from earlier rounds).
+**Contrast was measured, not eyeballed** — the real photo pixels were sampled
+into a canvas, composited under the scrim at each text element's actual
+position, and scored against WCAG. The spec's starting scrim values failed
+twice: the orange headline came out at 2.38:1 on desktop (needs 3.0) and the
+"built for contractors" line at 4.42:1 on mobile (needs 4.5). Both looked
+fine in a screenshot. The scrim was retuned to hold ~0.74 across the text
+column then fall off fast where the demo widget sits; all six hero text
+elements now pass at both breakpoints (worst case 4.10:1 orange headline,
+5.46:1 built-for line).
 
-### Second correction (2026-08-29 02:30 PT): the footer skip was wrong too
+Deviations from the spec's starting points, all for measured legibility:
+- Desktop scrim `linear-gradient(100deg, 0.80 0%, 0.74 48%, 0.26 82%)`
+  rather than `0.62 15% / 0.22 70%`.
+- A separate, stronger, near-vertical scrim below 768px, because the layout
+  stacks to one column there and the text spans the full width of the photo.
+  The spec's single left-to-right scrim only makes sense once the layout
+  splits in two.
+- `background-position: 32% 18%` rather than `18% 22%`, checked against the
+  demo widget's real rendered position (visible phone shell starts at 58.7%
+  of hero width; the subject sits clear to its left).
 
-The "nobody zooms into it" assumption above was wrong, confirmed by
-direct screenshot -- the footer was still showing the legacy raster mark
-just like the marketing nav had been. Confirmed via grep (not assumed)
-that `app/page.tsx`'s footer `<img src="/tradepulse-logo.png">` was the
-same flagged asset. Measured the footer's actual available width in the
-browser rather than guessing: it's a flexible `justify-between` row, not
-a hard-clipped box, tightest at the `sm:` 640px breakpoint where the
-nav-links row leaves only ~189px for the logo credit -- far less than the
-nav's 44/36 or the demo widgets' 44/28, neither of which would fit here.
-Kept `iconSize=44` (the Mark A legibility floor), tried `textSize=19`
-first (matched the reference sheet's own small/dense anchor, but measured
-at 190.85px against the ~189px budget -- zero margin, rejected), settled
-on `textSize=16` (measured at 169.6px, 43.2px of real margin). Verified
-at 640px, 375px, and 1280px; screenshotted at 640px and 375px confirming
-"TradePulse Estimates" reads completely and the footer's other two rows
-(quick links, legal links) are unchanged. `tsc --noEmit` and `next build`
-both clean. `public/tradepulse-logo.png` is no longer referenced by any
-component in the codebase as of this fix. Full measurement tables in
-`HANDOFF.md`.
+Also changed, not in the spec's list but required by the palette swap:
+`.gradient-border` had `background: white` hardcoded in the page's CSS block
+and would have stayed white on kraft. Its border gradient was also navy;
+both were warmed. `text-slate-500` (18 occurrences) was swapped to #5C4A2E
+because slate-500 on #F3E8D0 measures 3.91:1 and fails AA for small text,
+where #5C4A2E gives 6.97:1.
 
-### Third correction (2026-08-29 02:37 PT): 44/16 fit but looked wrong, and Mark C didn't exist as a component
-
-The `44/16` sizing above fit its width budget but was disproportionate --
-a 44px icon next to 16px text, confirmed by screenshot. The real problem
-wasn't sizing, it was variant: round 1's own acceptance criteria
-("nothing under 40px uses Mark A, filled Mark C only") had never actually
-been built as a component, so every sub-40px context up to this point
-either used a raster Mark C image or forced Mark A's 44px floor somewhere
-too narrow for it.
-
-Added `LogoMarkC` to `app/components/logo-mark.tsx` (filled amber tile,
-dark pulse stroke, same size-dependent stroke-width curve as the raster
-favicon variants). `RowLockup` and `StackedLockup` in `wordmark.tsx` now
-both switch to it automatically via a shared `pickMark(variant, size)`
-whenever `iconSize < 40`, regardless of `variant` -- centralized once so
-this can't be silently skipped again the next time something needs to
-render small.
-
-Footer re-sized `44/16` -> `iconSize=20, textSize=19` (near 1:1, matching
-the reference sheet's own small/dense pairing). Re-measured: lockup width
-dropped from 169.6px to 167.0px, margin grew from 43.2px to 45.7px against
-the same 560px/347.25px budget. `tsc --noEmit` and `next build` both
-clean. Confirmed via fresh screenshot (640px and mobile) that the icon and
-text now read as one balanced mark. Nav (44/36, 6 locations) and the three
-demo widgets (44/28) confirmed unchanged and still resolving to Mark A,
-since both stay >=40px. Full measurement table in `HANDOFF.md`.
-
-### FINAL DECISION (2026-08-29 02:46 PT): Mark A at every size, sitewide -- the Mark C swap above is reversed
-
-Greg rejected the Mark C swap in the correction directly above. **This
-supersedes round 1's "nothing under 40px uses Mark A, filled Mark C
-only" acceptance criterion.** Mark A now has a documented, implemented
-small-size treatment (from the brand reference's own "sizes" row, exact
-values, not interpolated) and is used at every size, every surface,
-sitewide, including the footer. This is the final decision on the footer
-mark -- do not relitigate it again.
-
-`LogoMarkLight`/`LogoMarkOnDark` gained internal size-graduated
-treatment: 40px+ unchanged (stroke 2.2, both gridlines); 24-39px thickens
-to stroke 2.6, gridlines still present; under 24px thickens to stroke 3
-and drops both gridlines entirely. `pickMark()` in `wordmark.tsx` no
-longer branches on size -- it's just variant-to-component again, since
-the components handle their own graduation now. `LogoMarkC` stays as a
-component, unreferenced by the lockups, for an eventual real
-favicon/app-icon build (its original purpose).
-
-Footer kept the same `iconSize=20, textSize=19` props, now resolving to
-`LogoMarkLight`'s under-24px treatment. Predicted the lockup width would
-land close to the superseded Mark C measurement (167.0px) since both
-icons share the same 32-unit viewBox -- confirmed by direct measurement,
-not assumed: identical 167.0px, identical 45.7px margin. Stroke-width (3)
-and gridline count (0) also confirmed by reading the rendered SVG's
-attributes directly, matching the reference spec exactly. `tsc --noEmit`
-and `next build` both clean. Fresh screenshots at 640px and mobile
-(375px) confirm the icon reads clearly with no mushing and matches the
-same mark design as the nav and demo widgets. Nav (44px) and a demo
-widget (44px) both re-measured afterward and confirmed still at
-stroke-width 2.2 with both gridlines present -- unaffected. Full
-measurement table in `HANDOFF.md`.
+Left alone deliberately: `.dot-grid` CSS is retained because the dark Final
+CTA section still uses it (only the hero's usage was removed); the navy
+Final CTA band itself is unchanged per "dark tokens unchanged"; the primary
+CTA keeps its existing `#0D1B2E` label colour per "buttons stay exactly as
+they are".
