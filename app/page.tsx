@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createSupabaseServerClient, supabaseAdmin } from "@/lib/supabase-server";
 import { EstimateDemo } from "@/app/components/EstimateDemo";
 import { RowLockup } from "@/app/components/wordmark";
+import { MarketingNav } from "@/app/components/marketing-nav";
 import { TradeExamples } from "@/app/components/TradeExamples";
 import { STARTER_MONTHLY_PRICE_CAD } from "@/lib/plan-pricing";
 import { headers } from "next/headers";
@@ -226,8 +227,16 @@ export default async function LandingPage() {
             linear-gradient(178deg, rgba(38,33,27,0.80) 0%, rgba(38,33,27,0.72) 50%, rgba(38,33,27,0.76) 100%),
             url('/trades-van.jpg');
           background-size: cover;
-          background-position: 32% 18%;
           background-repeat: no-repeat;
+        }
+        /* The mobile hero is much taller/narrower than the source photo's
+           square crop, so cover-sizing shows a totally different slice than
+           on desktop -- 32% 18% (tuned for the wide desktop crop) put the
+           visible window over the tree canopy on the left, missing the
+           person entirely. Tuned separately by checking the rendered result,
+           not computed once and assumed correct. */
+        @media (max-width: 767px) {
+          .hero-photo { background-position: 56% 28%; }
         }
         @media (min-width: 768px) {
           .hero-photo {
@@ -242,6 +251,17 @@ export default async function LandingPage() {
               url('/trades-van.jpg');
             background-position: 32% 18%;
           }
+        }
+        /* The nav wordmark's WordmarkText sets font-size inline (shared by
+           every RowLockup usage sitewide), so this overrides it with
+           !important rather than touching wordmark.tsx -- scoped to just
+           this one nav instance below the breakpoint where the icon+text
+           lockup alone (313px at 36px text) would otherwise leave no room
+           in a 375px-wide bar for the CTA button or the menu button.
+           Value tuned against real measurement, not guessed: see
+           HANDOFF.md for the numbers this was checked against. */
+        @media (max-width: 639px) {
+          .nav-lockup span { font-size: 17px !important; }
         }
         .noise::after {
           content: '';
@@ -298,30 +318,7 @@ export default async function LandingPage() {
       <div style={{ fontFamily: "'DM Sans', system-ui, sans-serif", background: "#F3E8D0", color: "#26211B" }} className="min-h-screen overflow-x-hidden">
 
         {/* Nav */}
-        <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-2 sm:py-4 sm:px-10"
-          style={{ background: "rgba(243,232,208,0.85)", backdropFilter: "blur(12px)", borderBottom: "1px solid #C9B384" }}>
-          <RowLockup variant="light" iconSize={44} textSize={36} />
-          <div className="flex items-center gap-3 sm:gap-6">
-            <Link href="#how-it-works" className="hidden sm:block text-sm text-[#5C4A2E] hover:text-[#26211B] transition-colors">How it works</Link>
-            <Link href="#pricing" className="hidden sm:block text-sm text-[#5C4A2E] hover:text-[#26211B] transition-colors">Pricing</Link>
-            {user ? (
-              <Link href={ctaHref}
-                className="inline-flex items-center justify-center h-9 px-5 rounded-lg text-sm font-semibold text-white transition hover:opacity-90"
-                style={{ background: "#0D1B2E" }}>
-                {hasAccess ? "Go to App" : "Subscribe"}
-              </Link>
-            ) : (
-              <>
-                <Link href="/login" className="text-sm font-medium text-[#5C4A2E] hover:text-[#26211B] transition-colors">Sign in</Link>
-                <Link href="/signup"
-                  className="inline-flex items-center justify-center h-9 px-4 sm:px-5 rounded-lg text-sm font-semibold text-white transition hover:opacity-90"
-                  style={{ background: "#0D1B2E" }}>
-                  Start Free
-                </Link>
-              </>
-            )}
-          </div>
-        </nav>
+        <MarketingNav hasLoggedInUser={!!user} hasAccess={hasAccess} ctaHref={ctaHref} />
 
         {/* Hero */}
         <section className="hero-photo relative overflow-hidden pt-20 pb-24 sm:pt-40 sm:pb-32">
@@ -402,31 +399,19 @@ export default async function LandingPage() {
         <section id="how-it-works" className="py-12 sm:py-16 bg-[#F3E8D0]">
           <div className="mx-auto max-w-5xl px-6 sm:px-10">
             <div className="text-center mb-8">
-              <p className="text-xs font-semibold uppercase tracking-widest mb-3 text-zinc-500">How it works</p>
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Three steps. Done before you drive away.</h2>
               <p className="mt-4 text-lg text-[#5C4A2E] max-w-xl mx-auto">
                 No complicated setup. Works on your phone. Same routine after every job.
               </p>
             </div>
 
-            <div className="relative grid md:grid-cols-3 gap-4 md:gap-6">
-              <div className="hidden md:block absolute top-12 left-1/4 right-1/4 h-px"
-                style={{ background: "linear-gradient(to right, transparent, #0D1B2E 20%, #0D1B2E 80%, transparent)", opacity: 0.15 }} />
-              {STEPS.map((step, i) => (
-                <div key={step.number} className="card-lift gradient-border relative rounded-2xl p-5 md:p-7">
-                  <div className="flex items-start gap-4 mb-3 md:mb-4">
-                    <span className="text-3xl md:text-4xl font-bold leading-none" style={{ color: "#f59e0b", opacity: 0.7 }}>
-                      {step.number}
-                    </span>
-                    {i < STEPS.length - 1 && (
-                      <div className="hidden md:flex absolute -right-3 top-10 w-6 h-6 rounded-full bg-[#F3E8D0] border border-[#C9B384] items-center justify-center z-10">
-                        <svg className="w-3 h-3 text-slate-400" viewBox="0 0 12 12" fill="none">
-                          <path d="M2 6h8M7 3l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </div>
-                    )}
+            <div className="grid md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-[#C9B384]">
+              {STEPS.map((step) => (
+                <div key={step.number} className="py-6 md:py-0 md:px-8 first:pt-0 first:md:pl-0 last:pb-0 last:md:pr-0">
+                  <div className="flex items-baseline gap-2 mb-2">
+                    <span className="text-sm font-semibold" style={{ color: "#B45309" }}>{step.number}</span>
+                    <h3 className="text-lg font-semibold text-slate-900">{step.title}</h3>
                   </div>
-                  <h3 className="text-lg font-semibold text-slate-900 mb-2">{step.title}</h3>
                   <p className="text-sm leading-relaxed text-[#5C4A2E]">{step.description}</p>
                 </div>
               ))}
@@ -438,7 +423,6 @@ export default async function LandingPage() {
         <section className="py-12 sm:py-16 bg-[#EADCC0]">
           <div className="mx-auto max-w-5xl px-6 sm:px-10">
             <div className="text-center mb-8">
-              <p className="text-xs font-semibold uppercase tracking-widest mb-3 text-zinc-500">See it for your trade</p>
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">See what TradePulse creates</h2>
               <p className="mt-4 text-lg text-[#5C4A2E] max-w-xl mx-auto">
                 Example jobs using common trade scenarios. Your estimates use your own rates and line items.
@@ -452,7 +436,6 @@ export default async function LandingPage() {
         <section className="py-12 sm:py-16 bg-[#F3E8D0]">
           <div className="mx-auto max-w-5xl px-6 sm:px-10">
             <div className="text-center mb-8">
-              <p className="text-xs font-semibold uppercase tracking-widest mb-3 text-zinc-500">After it&apos;s generated</p>
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Review, edit, send, done</h2>
               <p className="mt-4 text-lg text-[#5C4A2E] max-w-xl mx-auto">
                 The estimate is a starting point, not a final answer. You stay in control before it reaches the customer.
@@ -476,7 +459,6 @@ export default async function LandingPage() {
         <section className="py-12 sm:py-16 bg-[#F3E8D0]">
           <div className="mx-auto max-w-5xl px-6 sm:px-10">
             <div className="text-center mb-8">
-              <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: "#0D1B2E", opacity: 0.4 }}>Why it works</p>
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Less time quoting. More jobs won.</h2>
               <p className="mt-4 text-lg text-[#5C4A2E] max-w-lg mx-auto">
                 Contractors who quote faster win more jobs. Customers say yes while the work is still top of mind.
@@ -514,7 +496,6 @@ export default async function LandingPage() {
         <section className="py-12 sm:py-16 bg-[#F3E8D0]">
           <div className="mx-auto max-w-4xl px-6 sm:px-10">
             <div className="text-center mb-8">
-              <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: "#0D1B2E", opacity: 0.4 }}>After the estimate</p>
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Estimates come first. This comes after.</h2>
             </div>
             <div className="grid sm:grid-cols-3 gap-4 sm:gap-6">
@@ -537,7 +518,6 @@ export default async function LandingPage() {
         <section id="pricing" className="py-12 sm:py-16 bg-[#F3E8D0]">
           <div className="mx-auto max-w-3xl px-6 sm:px-10">
             <div className="text-center mb-8">
-              <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: "#0D1B2E", opacity: 0.4 }}>Pricing</p>
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Simple, flat pricing</h2>
               <p className="mt-4 text-lg text-[#5C4A2E]">No per-estimate fees. No seat charges. Two flat rates.</p>
             </div>
@@ -633,7 +613,6 @@ export default async function LandingPage() {
         <section className="py-12 sm:py-16 bg-[#F3E8D0]">
           <div className="mx-auto max-w-3xl px-6 sm:px-10">
             <div className="text-center mb-8">
-              <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: "#0D1B2E", opacity: 0.4 }}>FAQ</p>
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Common questions</h2>
             </div>
             <div className="space-y-4">

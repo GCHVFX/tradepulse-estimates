@@ -154,3 +154,117 @@ CTA section still uses it (only the hero's usage was removed); the navy
 Final CTA band itself is unchanged per "dark tokens unchanged"; the primary
 CTA keeps its existing `#0D1B2E` label colour per "buttons stay exactly as
 they are".
+
+## Addendum: four fixes found on review (2026-08-29 22:04 PT)
+
+Same branch, still not merged. This should have been written before touching
+any code, per the instruction that started this session -- it wasn't; the
+session went straight to investigation and implementation instead, and this
+addendum was written after the fact once that was noticed. Flagging the
+process miss plainly rather than quietly backfilling it.
+
+### 1. Mobile nav was broken
+
+Checked before assuming new: `git show main:app/page.tsx` at the same nav
+block shows "How it works" and "Pricing" already carried `hidden sm:block`
+on `main`, before this branch existed -- that part predates the redesign.
+The overlap ("Sign in" wrapping onto two lines, stamped over the wordmark)
+was not present in the same form on `main` because `main`'s nav is
+structurally identical (no code changed there this session before now) --
+measurement showed the real cause either way: the wordmark lockup alone
+(`iconSize=44 textSize=36`) measures 313px, and the mobile nav only has
+327px of content width after padding. Adding "Sign in" (28px, wrapping) and
+"Start Free" (66px) on top of that pushed Start Free's button to `x=377` --
+past the 375px viewport, off-screen, not just visually crowded.
+
+No existing hamburger/mobile-nav pattern exists anywhere else in the
+codebase (checked). Built one: new `app/components/marketing-nav.tsx`, a
+client component (needed for the open/close state -- `app/page.tsx` stays a
+server component and passes down only plain serializable values, never the
+Supabase user object). Below `sm:`, "How it works" / "Pricing" / "Sign in"
+collapse into a hamburger-toggled panel; the primary CTA (Start Free / Go to
+App / Subscribe) stays visible in the bar at every width, per the brief.
+
+The wordmark itself still needed to shrink on mobile -- collapsing the other
+links doesn't help if the CTA and hamburger button alone can't fit beside a
+313px-wide lockup in a 327px-wide bar. Rather than touch `wordmark.tsx`
+(shared by six other places at carefully-tuned sizes), added a scoped
+`!important` override (`.nav-lockup span { font-size: 19px }`, then measured
+and dropped to 17px) inside `page.tsx`'s own style block, since
+`WordmarkText` sets font-size inline and only an equal-or-higher-specificity
+rule can override it. Measured, not guessed: at 17px the lockup is 177px
+wide, leaving a 7px gap to the CTA and 20px clearance to the viewport edge
+at 375px -- confirmed via `getBoundingClientRect()`, not assumed from the
+font-size change alone. Desktop (`sm:` and up) is untouched: the media query
+is `max-width: 639px`, and a screenshot at 1440px shows the nav unchanged.
+
+### 2. Mobile hero photo showed background, not the subject
+
+The `32% 18%` position tuned in the prior session was reasoned against the
+desktop crop (a wide, landscape-shaped hero box) and never checked against
+mobile's box, which is tall and narrow -- at `cover` sizing those two shapes
+select completely different slices of the same square source image. Moved
+the position into its own `@media (max-width: 767px)` rule (previously it
+was only set once, unscoped, and simply overridden again inside the
+768px-and-up query) and iterated against real screenshots: `56% 30%` first
+(brought the face into view but tight against the CTA buttons), then
+`58% 20%` (worse -- more zoomed, more overlap), settled on `56% 28%`,
+checked visually each time rather than computed once and trusted. Re-ran the
+contrast audit from the prior session after the position changed, since
+different photo pixels now sit under the same text: all hero text elements
+still pass (one apparent failure, the "Start Free"/"Try free for 14 days"
+button text at 1.01:1, was the audit script incorrectly checking that
+button's navy-on-solid-orange text against the photo behind it instead of
+its own opaque background -- not a real regression, confirmed by checking
+that pairing in isolation).
+
+### 3. Eyebrow labels removed sitewide
+
+Grepped for the shared class rather than editing seven instances by hand:
+`text-xs font-semibold uppercase tracking-widest mb-3` matched 9 times
+before -- the 7 named ("How it works", "See it for your trade", "After
+it's generated", "Why it works", "After the estimate", "Pricing", "FAQ")
+plus 2 unrelated matches (the "Starter" / "Pro" plan-name labels on the
+pricing cards, which share the class but aren't section eyebrows and
+weren't in the brief's list). Removed exactly the 7 named `<p>` elements.
+After: the shared class matches 2 (confirmed via `grep -c`, both the two
+pricing labels, neither of the 7 requested strings appears anywhere in the
+file). Headings now stand alone; no replacement copy added; heading styling
+untouched.
+
+### 4. "How it works" three-step section de-carded
+
+Removed `card-lift gradient-border relative rounded-2xl` from each step
+(those classes are still used, and still needed, by the unrelated Benefits
+section further down -- confirmed via grep before assuming the CSS could
+go), the large `text-3xl md:text-4xl` orange "01"/"02"/"03" numeral, and the
+decorative connecting line + arrow-in-circle between cards (which existed
+to visually link the numeral bubbles -- with the bubbles gone, keeping the
+connector would have pointed at nothing). Replaced with a `divide-y
+md:divide-y-0 md:divide-x` grid using the kraft `#C9B384` hairline token:
+stacked with horizontal rules on mobile, a row with vertical rules on
+desktop. Each step keeps a small `text-sm` numeral (`#B45309`, the "accent
+on light" token) inline with its `<h3>` heading -- a label, not a graphic.
+Copy for all three steps is byte-for-byte the same `STEPS` constant,
+untouched.
+
+### Verification actually run (2026-08-29 22:04 PT)
+
+- `npx tsc --noEmit` -- exit 0.
+- `npx next build` -- exit 0, all routes built.
+- Screenshots at 375px for both mobile fixes (nav collapsed, nav menu open,
+  hero subject visible) and at 375px + 1440px for the eyebrow removal and
+  the de-carded steps section.
+- Eyebrow grep count reported as evidence: 9 matches before, 2 after (both
+  confirmed to be the unrelated Starter/Pro labels, 0 of the 7 named
+  strings remaining anywhere in the file).
+- Demo widget re-proven unmodified: hashes of all three `EstimateDemo*.tsx`
+  files identical to the untouched baseline, `git diff main` on those paths
+  still empty.
+- Re-ran the hero contrast audit after the mobile position change; all
+  elements pass (one script false-positive investigated and explained
+  above, not a real failure).
+
+`public/trades-van.png` (flagged last session as safe to delete) is gone
+from the working tree as of this session -- not deleted by this work,
+presumably handled separately.

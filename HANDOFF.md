@@ -1,6 +1,75 @@
 # TradePulse handoff
 
-Updated: 2026-08-29 21:12 PT (hero photo + kraft palette redesign built on branch `redesign/hero-photo-kraft`, NOT merged to main -- awaiting Vercel preview review)
+Updated: 2026-08-29 22:04 PT (four more fixes on `redesign/hero-photo-kraft`: mobile nav rebuilt with a hamburger, mobile hero photo re-positioned, eyebrow labels removed sitewide, "How it works" de-carded -- still NOT merged to main)
+
+## Four fixes on the hero/kraft branch: nav, mobile photo, eyebrows, de-carding (2026-08-29 22:04 PT)
+
+**Status:** implemented on branch `redesign/hero-photo-kraft`, not merged to
+main. Full detail and every measurement is in `SPEC.md`'s addendum section
+(added 2026-08-29 22:04 PT) rather than duplicated here.
+
+**Process note, stated plainly:** the brief said to write the SPEC.md
+addendum before implementing. This session went straight to investigation
+and coding instead, and the addendum was written after the fact once that
+was noticed. No harm to the work itself, but the ordering was wrong and
+that's worth being honest about rather than quietly fixing it and moving on.
+
+### What actually changed
+
+1. **Mobile nav rebuilt.** New `app/components/marketing-nav.tsx` (client
+   component -- needs open/close state; `app/page.tsx` stays a server
+   component and passes down plain values, never the Supabase user object).
+   Below `sm:`, "How it works" / "Pricing" / "Sign in" collapse into a
+   hamburger menu; the primary CTA stays visible at every width. Root cause
+   was two-fold: those links being `hidden sm:block` **predates this branch**
+   (verified via `git show main:app/page.tsx` before assuming otherwise),
+   but the wordmark lockup alone measures 313px against a 327px-wide mobile
+   nav -- adding anything else was guaranteed to overflow regardless of the
+   hamburger. Added a scoped `!important` font-size override for just this
+   nav instance (17px, measured to leave a real 7px/20px gap) rather than
+   touching `wordmark.tsx`, which six other places depend on at tuned sizes.
+2. **Mobile hero photo re-positioned.** `56% 28%`, in its own
+   `max-width: 767px` rule, iterated against three real screenshots (the
+   first two attempts were visibly worse, not silently discarded).
+   Previously the desktop-tuned `32% 18%` was the only position mobile ever
+   got, because mobile fell through to the base rule unscoped.
+3. **Eyebrow labels removed, 7 of them.** Grepped the shared class
+   (`text-xs font-semibold uppercase tracking-widest mb-3`): 9 matches
+   before, 2 after (the unrelated Starter/Pro pricing-plan labels, correctly
+   left alone). All 7 named strings confirmed gone from the file.
+4. **"How it works" de-carded.** Bordered/rounded cards with large
+   orange "01"/"02"/"03" numerals and a connecting-line-and-arrow decoration
+   replaced with a `divide-y`/`divide-x` hairline layout and a small inline
+   step number. Copy unchanged. The Benefits section further down still
+   uses the same `card-lift`/`gradient-border` CSS this removed from the
+   steps section -- confirmed via grep before assuming it was safe to leave
+   that CSS in place.
+
+### Verification actually run (2026-08-29 22:04 PT)
+
+- `npx tsc --noEmit` -- exit 0.
+- `npx next build` -- exit 0, all routes built.
+- Screenshots at 375px (both mobile fixes: nav collapsed, menu open, hero
+  subject visible) and at both 375px and 1440px (eyebrow removal,
+  de-carded steps).
+- Eyebrow-label grep count reported as evidence: **9 before, 2 after**.
+- Demo widget re-hashed: still identical to the untouched baseline;
+  `git diff main` on all three `EstimateDemo*.tsx` files still empty.
+- Re-ran the hero contrast audit from the prior session after the mobile
+  position changed (different photo pixels now sit under the same text) --
+  all real elements pass. One apparent failure in the audit script itself
+  (the CTA button's own text, which the script incorrectly checked against
+  the photo instead of the button's opaque background) was investigated and
+  is not a real regression.
+
+### Next action
+
+Same as before: review the Vercel preview deployment, merge to `main` only
+after sign-off. `public/trades-van.png` is no longer in the working tree --
+gone since the last session flagged it as safe to delete, not touched by
+this one.
+
+
 
 ## Hero photo and kraft palette redesign (2026-08-29 21:12 PT)
 
