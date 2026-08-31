@@ -1,6 +1,64 @@
 # TradePulse handoff
 
-Updated: 2026-08-29 22:40 PT (Final CTA band was still the old navy gradient, never migrated to the #26211B ink token -- fixed, still NOT merged to main)
+Updated: 2026-08-30 20:29 PT (Starter pricing card had another unmigrated grey token, six-card redundant feature grid removed, FAQ converted to an accordion -- still NOT merged to main)
+
+## Starter card token, six-card redundancy, FAQ accordion (2026-08-30 20:29 PT)
+
+**Status:** implemented on branch `redesign/hero-photo-kraft`, not merged to
+main. Full detail (exact computed values, the copy comparison) is in
+`SPEC.md`'s addendum; summarized here.
+
+**1. Starter card -- same bug pattern as the CTA band, one session back.**
+Computed-style readback (not guessed): border `rgb(226, 232, 240)`
+(`#E2E8F0`, Tailwind slate-200), button background `rgb(100, 116, 139)`
+(`#64748B`, Tailwind slate-500). Another section nothing had explicitly
+scoped in. One correction made along the way: nav's "Start Free" is navy
+(`#0D1B2E`), not orange -- the actual orange used by every other primary
+CTA is `#f59e0b`, confirmed from the hero button, and that's what got
+used. Border -> `#C9B384`, button -> `#f59e0b` background with `#0D1B2E`
+text (matching the hero CTA's exact pairing, since plain white text on
+`#f59e0b` doesn't have the contrast to carry it). Re-read after: `rgb(201,
+179, 132)`, `rgb(245, 158, 11)`, `rgb(13, 27, 46)` -- exact matches. Pro
+card's border re-confirmed unchanged (`rgb(13, 27, 46)`, still `#0D1B2E`
+-- itself an unmigrated old value, left alone since it was out of scope).
+Screenshotted before/after at desktop, confirmed again at 375px.
+
+**2. Six-card grid removed -- redundancy verified by reading the copy,
+not taken on say-so.** `WORKFLOW_STEPS`'s "What the customer sees" and
+`BENEFITS`'s "Send how you want" / "Professional output" state the same
+"no login, view on any device, looks professional" claim twice. Removed
+the whole section plus the now-orphaned `BENEFITS` constant and the
+`.card-lift`/`.gradient-border` CSS (grepped first to confirm nothing else
+used them -- correct, they didn't).
+
+**3. FAQ is now an accordion.** New `app/components/faq-accordion.tsx`
+(client component). Same kraft/hairline box treatment, copy and order
+unchanged, just interactive now. Verified by reading `aria-expanded`
+directly off the DOM through three sequential clicks -- closed by
+default, exactly one open at a time, opening a second closes the first.
+Not inferred from a screenshot.
+
+### Verification actually run (2026-08-30 20:29 PT)
+
+- `npx tsc --noEmit` -- exit 0.
+- `npx next build` -- exit 0.
+- Computed-style readback for the Starter card, before and after.
+- Both content sections' actual copy read before removing either one.
+- `aria-expanded` read via JS after each accordion click.
+- Screenshots at 375px and desktop for all three changes.
+- Demo widget re-hashed identical to baseline; `git diff main` on all
+  three `EstimateDemo*.tsx` files still empty.
+- `TradeExamples.tsx` confirmed untouched via `git diff main` -- empty.
+
+### Next action
+
+Same as before: review the Vercel preview, merge only after sign-off.
+Also noted, not fixed: the Starter card's other text colours (`STARTER`
+label, price, caption, feature list) are the same generic Tailwind grays
+as the border/button were, and the Pro card's border is still the
+unmigrated `#0D1B2E`. Neither was in scope this round.
+
+
 
 ## Final CTA band was still the old navy, not the ink token (2026-08-29 22:40 PT)
 

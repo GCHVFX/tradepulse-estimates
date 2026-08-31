@@ -344,3 +344,103 @@ cool navy-blue to a warm near-black matching the hero and footer tone.
 - Full-page screenshots before and after.
 - Demo widget re-hashed identical to the untouched baseline; `git diff
   main` on all three `EstimateDemo*.tsx` files still empty.
+
+## Addendum: Starter pricing card, six-card redundancy, FAQ accordion (2026-08-30 20:29 PT)
+
+Same branch, still not merged.
+
+### 1. Starter card was another unmigrated pre-redesign token
+
+Read via computed-style, not guessed: `borderColor: rgb(226, 232, 240)`
+(`#E2E8F0`, Tailwind slate-200) and the button's `backgroundColor:
+rgb(100, 116, 139)` (`#64748B`, Tailwind slate-500) -- source confirmed
+the same: `style={{ borderColor: "#E2E8F0" }}` on the card,
+`style={{ background: "#64748B" }}` on the button. Same root cause as the
+Final CTA band two sessions ago: a section nothing had explicitly scoped
+in, still on the old generic Tailwind grays.
+
+One correction to the brief before fixing it: the nav's "Start Free" is
+**not** orange -- it's `#0D1B2E` (navy), same as `Go to App`/`Subscribe`
+everywhere else in the nav/footer. The actual orange used by every other
+primary in-page CTA (hero, Final CTA band) is `#f59e0b`. Used that.
+
+Border -> `#C9B384` (the kraft border token, confirmed used elsewhere).
+Button -> `background: "#f59e0b", color: "#0D1B2E"`, matching the hero
+CTA's exact colour pairing (white text on `#f59e0b` fails contrast, which
+is presumably why the hero CTA already pairs it with navy text -- followed
+that precedent rather than guessing a new pairing).
+
+Read back after the change: border `rgb(201, 179, 132)` (exact
+`#C9B384`), button background `rgb(245, 158, 11)` (exact `#f59e0b`),
+button text `rgb(13, 27, 46)` (exact `#0D1B2E`). Pro card's own border
+re-read afterward and confirmed unchanged: still `rgb(13, 27, 46)`
+(`#0D1B2E` -- itself an unmigrated old-navy value, same as the Starter
+border was, but explicitly out of scope here since the brief said leave
+Pro alone; flagging it rather than fixing it unasked).
+
+Screenshotted before (grey border barely visible against the kraft
+background, button reading as disabled) and after (kraft border, orange
+button matching the hero) at desktop width, and confirmed the fixed
+version again at 375px.
+
+Other pre-existing generic-gray tokens noticed in the same card in
+passing and **not touched** (not in the brief's scope): the "STARTER"
+label (`#94A3B8`), the price (`text-slate-900`), the trial caption
+(`text-slate-400`), and the feature list (`text-slate-600`). Same
+category of issue as the border/button, likely worth a future pass, not
+fixed here.
+
+### 2. Six-card feature grid removed, redundancy confirmed by reading the copy
+
+Read both `WORKFLOW_STEPS` (the four-card "Review, edit, send, done"
+section) and `BENEFITS` (the six-card "Less time quoting. More jobs won."
+section) source arrays directly before removing anything. Confirmed:
+`WORKFLOW_STEPS`'s "What the customer sees" ("A clean estimate page with
+your logo, the scope of work, and the price. No login needed.") overlaps
+directly with `BENEFITS`'s "Send how you want" ("Customers can view the
+estimate on any device... No app download required on their end.") and
+"Professional output" ("Scope of work, line items, payment terms, and
+your logo... Looks like it came from a proper business.") -- the same
+"no login, view anywhere, looks professional" claims stated twice.
+
+Removed the entire section (heading, subhead, six-card grid) along with
+the now-fully-orphaned `BENEFITS` constant and the `.card-lift`/
+`.gradient-border` CSS rules that only that section used (confirmed via
+grep before removing -- both classes had zero other usages left in the
+file). Nothing moved, nothing restyled, nothing added elsewhere.
+
+### 3. FAQ converted to an accordion
+
+New `app/components/faq-accordion.tsx` (client component -- needs
+open/close state). `page.tsx` now holds the FAQ copy as a `FAQ_ITEMS`
+constant (copy and order byte-for-byte the same as the six inline
+objects it replaced) and passes it to `<FaqAccordion items={FAQ_ITEMS} />`.
+Same kraft/hairline box treatment as before (`bg-[#F3E8D0] border
+border-[#C9B384]`), just wrapped in a `<button>` with a chevron that
+rotates on open, and the answer paragraph only rendered when that index
+is the open one.
+
+Verified behaviourally, not just visually: `aria-expanded` read directly
+off all six buttons confirmed all `false` on load, `true` on exactly one
+after clicking it, and clicking a second question flipped the first back
+to `false` while opening the second -- one open at a time, not an
+accumulating list. Screenshotted the open state at both 375px and
+desktop width.
+
+### Verification actually run (2026-08-30 20:29 PT)
+
+- `npx tsc --noEmit` -- exit 0.
+- `npx next build` -- exit 0, all routes built.
+- Starter card: computed-style readback before and after (values above).
+- Six-card removal: confirmed by reading both sections' actual copy
+  first, not removed on request alone; confirmed no other usage of
+  `BENEFITS`/`card-lift`/`gradient-border` remained before deleting them.
+- FAQ accordion: `aria-expanded` state read directly via JS after each
+  click (not inferred from a screenshot) -- closed by default, one open
+  at a time, confirmed with three sequential clicks.
+- Screenshots at 375px and desktop width for all three changes.
+- Demo widget re-hashed identical to the untouched baseline; `git diff
+  main` on all three `EstimateDemo*.tsx` files still empty.
+- `TradeExamples.tsx` (the trade tabs) confirmed untouched via `git diff
+  main` -- empty, as it has been every session it's been named out of
+  scope.

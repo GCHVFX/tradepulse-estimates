@@ -6,6 +6,7 @@ import { EstimateDemo } from "@/app/components/EstimateDemo";
 import { RowLockup } from "@/app/components/wordmark";
 import { MarketingNav } from "@/app/components/marketing-nav";
 import { TradeExamples } from "@/app/components/TradeExamples";
+import { FaqAccordion } from "@/app/components/faq-accordion";
 import { STARTER_MONTHLY_PRICE_CAD } from "@/lib/plan-pricing";
 import { headers } from "next/headers";
 import { currencyFromCountry, currencyPrefix, formatMonthlyPlanPrice, planMonthlyPrice } from "@/lib/currency";
@@ -111,69 +112,32 @@ const AFTER_ESTIMATE = [
   { title: "Follow-Up", description: "Coming soon. Stay in touch with past customers.", pro: true },
 ] as const;
 
-const BENEFITS = [
+const FAQ_ITEMS = [
   {
-    icon: (
-      <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5" aria-hidden="true">
-        <path d="M11 2L4 11h7l-2 7 7-9h-7l2-7z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    ),
-    title: "Quote on the spot",
-    description: "Send a professional estimate before you leave the driveway. Customers decide faster when the quote arrives while the job is still fresh.",
+    q: "How does the AI know what to write?",
+    a: "You describe the job in plain language, what needs doing, how long it takes, what materials you'll need. TradePulse turns that into a complete estimate with scope of work, line items, and payment terms. The more detail you give, the more accurate the output.",
   },
   {
-    icon: (
-      <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5" aria-hidden="true">
-        <path d="M3 5h14M3 15h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-        <circle cx="7" cy="5" r="2" stroke="currentColor" strokeWidth="1.5" />
-        <circle cx="13" cy="15" r="2" stroke="currentColor" strokeWidth="1.5" />
-      </svg>
-    ),
-    title: "Your rates, built in",
-    description: "Set your labour rate and markup once. Every estimate uses your numbers automatically. No more recalculating from scratch.",
+    q: "Can I use my own prices?",
+    a: "Yes. Set your hourly labour rate, materials markup, and any common line items in the Rates section. Every estimate uses your numbers automatically.",
   },
   {
-    icon: (
-      <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5" aria-hidden="true">
-        <path d="M5 3h7l3 3v11a1 1 0 01-1 1H5a1 1 0 01-1-1V4a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M12 3v4h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M7 9h6M7 12h6M7 15h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      </svg>
-    ),
-    title: "Professional output",
-    description: "Scope of work, line items, payment terms, and your logo. Looks like it came from a proper business, not a notes app.",
+    q: "What does the customer see?",
+    a: "They get a link to a clean estimate page with your logo, their details, the full scope of work, and a line-item breakdown. Works on any device. No app required on their end.",
   },
   {
-    icon: (
-      <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5" aria-hidden="true">
-        <path d="M17.5 2.5l-15 5.5 6 2 2 6 7-13.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M8.5 10L17.5 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      </svg>
-    ),
-    title: "Send how you want",
-    description: "Text it, email it, or send a link. Customers can view the estimate on any device. No app download required on their end.",
+    q: "Can I edit the estimate before sending?",
+    a: "Yes. Every section is editable after generation. You can also update customer details at any time without regenerating the estimate.",
   },
   {
-    icon: (
-      <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5" aria-hidden="true">
-        <circle cx="10" cy="6" r="3.5" stroke="currentColor" strokeWidth="1.5" />
-        <path d="M3 18c0-3.9 3.1-7 7-7s7 3.1 7 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      </svg>
-    ),
-    title: "Customer details saved",
-    description: "Name, phone, email, and address saved to the estimate. Edit customer details any time without regenerating the whole quote.",
+    q: "Do I need to be technical to use this?",
+    a: "No. Type or dictate the job details in plain language. TradePulse turns them into a professional estimate. Setup takes about five minutes.",
   },
   {
-    icon: (
-      <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5" aria-hidden="true">
-        <rect x="5.5" y="1.5" width="9" height="17" rx="2" stroke="currentColor" strokeWidth="1.5" />
-        <path d="M9 15.5h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      </svg>
-    ),
-    title: "Built for the field",
-    description: "Designed for one hand on a phone in a driveway, not a desk. Large buttons, minimal typing, fast to load.",
+    q: "Can I cancel anytime?",
+    a: "Yes. No credit card required to start. If you subscribe after your trial, you can cancel anytime from your Profile page and you won't be charged again. Your first paid charge has a 30-day money-back guarantee handled by support.",
   },
-];
+] as const;
 
 export default async function LandingPage() {
   // The same resolver /signup uses, reading the same Vercel header, so the
@@ -286,8 +250,6 @@ export default async function LandingPage() {
         .delay-200 { animation-delay: 0.2s; }
         .delay-300 { animation-delay: 0.3s; }
         .delay-400 { animation-delay: 0.4s; }
-        .card-lift { transition: transform 0.2s ease, box-shadow 0.2s ease; }
-        .card-lift:hover { transform: translateY(-3px); box-shadow: 0 16px 40px rgba(0,0,0,0.1); }
         @keyframes type-in {
           from { opacity: 0; transform: translateY(8px); }
           to   { opacity: 1; transform: translateY(0); }
@@ -297,22 +259,6 @@ export default async function LandingPage() {
         .line-3 { animation: type-in 0.4s ease 1.4s both; }
         .line-4 { animation: type-in 0.4s ease 1.7s both; }
         .line-5 { animation: type-in 0.4s ease 2.0s both; }
-        .gradient-border {
-          position: relative;
-          background: #F3E8D0;
-        }
-        .gradient-border::before {
-          content: '';
-          position: absolute;
-          inset: 0;
-          border-radius: inherit;
-          padding: 1px;
-          background: linear-gradient(135deg, rgba(201,179,132,0.9), rgba(201,179,132,0.25));
-          -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-          -webkit-mask-composite: xor;
-          mask-composite: exclude;
-          pointer-events: none;
-        }
       `}</style>
 
       <div style={{ fontFamily: "'DM Sans', system-ui, sans-serif", background: "#F3E8D0", color: "#26211B" }} className="min-h-screen overflow-x-hidden">
@@ -455,30 +401,6 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        {/* Benefits */}
-        <section className="py-12 sm:py-16 bg-[#F3E8D0]">
-          <div className="mx-auto max-w-5xl px-6 sm:px-10">
-            <div className="text-center mb-8">
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Less time quoting. More jobs won.</h2>
-              <p className="mt-4 text-lg text-[#5C4A2E] max-w-lg mx-auto">
-                Contractors who quote faster win more jobs. Customers say yes while the work is still top of mind.
-              </p>
-            </div>
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-5">
-              {BENEFITS.map(b => (
-                <div key={b.title} className="card-lift gradient-border rounded-2xl p-4 sm:p-6">
-                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center mb-3 sm:mb-4 text-lg font-bold"
-                    style={{ background: "#FEF3C7", color: "#92400E" }}>
-                    {b.icon}
-                  </div>
-                  <h3 className="text-sm sm:text-base font-semibold text-slate-900 mb-1.5 sm:mb-2">{b.title}</h3>
-                  <p className="text-xs sm:text-sm leading-relaxed text-[#5C4A2E]">{b.description}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
         {/* Positioning */}
         <section className="py-12 sm:py-16 bg-[#EADCC0]">
           <div className="mx-auto max-w-2xl px-6 sm:px-10 text-center">
@@ -526,7 +448,7 @@ export default async function LandingPage() {
           <div className="mx-auto max-w-4xl px-6 sm:px-10">
             <div className="grid sm:grid-cols-2 gap-6">
 
-              <div className="rounded-2xl border-2 p-8 relative" style={{ borderColor: "#E2E8F0" }}>
+              <div className="rounded-2xl border-2 p-8 relative" style={{ borderColor: "#C9B384" }}>
                 <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: "#94A3B8" }}>Starter</p>
                 <div className="flex items-end gap-2 mb-2">
                   <span className="text-4xl font-bold text-slate-900">{`${currencyPrefix(currency)}${planMonthlyPrice("starter", currency)}`}</span>
@@ -555,8 +477,8 @@ export default async function LandingPage() {
                 </div>
 
                 <Link href={ctaHref}
-                  className="flex items-center justify-center w-full h-12 rounded-xl text-base font-semibold text-white transition hover:opacity-90"
-                  style={{ background: "#64748B" }}>
+                  className="flex items-center justify-center w-full h-12 rounded-xl text-base font-semibold transition hover:opacity-90"
+                  style={{ background: "#f59e0b", color: "#0D1B2E" }}>
                   {ctaLabel}
                 </Link>
               </div>
@@ -615,39 +537,7 @@ export default async function LandingPage() {
             <div className="text-center mb-8">
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Common questions</h2>
             </div>
-            <div className="space-y-4">
-              {[
-                {
-                  q: "How does the AI know what to write?",
-                  a: "You describe the job in plain language, what needs doing, how long it takes, what materials you'll need. TradePulse turns that into a complete estimate with scope of work, line items, and payment terms. The more detail you give, the more accurate the output.",
-                },
-                {
-                  q: "Can I use my own prices?",
-                  a: "Yes. Set your hourly labour rate, materials markup, and any common line items in the Rates section. Every estimate uses your numbers automatically.",
-                },
-                {
-                  q: "What does the customer see?",
-                  a: "They get a link to a clean estimate page with your logo, their details, the full scope of work, and a line-item breakdown. Works on any device. No app required on their end.",
-                },
-                {
-                  q: "Can I edit the estimate before sending?",
-                  a: "Yes. Every section is editable after generation. You can also update customer details at any time without regenerating the estimate.",
-                },
-                {
-                  q: "Do I need to be technical to use this?",
-                  a: "No. Type or dictate the job details in plain language. TradePulse turns them into a professional estimate. Setup takes about five minutes.",
-                },
-                {
-                  q: "Can I cancel anytime?",
-                  a: "Yes. No credit card required to start. If you subscribe after your trial, you can cancel anytime from your Profile page and you won't be charged again. Your first paid charge has a 30-day money-back guarantee handled by support.",
-                },
-              ].map(item => (
-                <div key={item.q} className="rounded-xl bg-[#F3E8D0] border border-[#C9B384] p-6">
-                  <h3 className="font-semibold text-slate-900 mb-2">{item.q}</h3>
-                  <p className="text-sm text-[#5C4A2E] leading-relaxed">{item.a}</p>
-                </div>
-              ))}
-            </div>
+            <FaqAccordion items={FAQ_ITEMS} />
           </div>
         </section>
 
