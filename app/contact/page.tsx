@@ -73,8 +73,8 @@ function supportHref(subject: string, body?: string) {
 
 export default function ContactPage() {
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="border-b border-slate-200 bg-white">
+    <main className="min-h-screen bg-[#F3E8D0] text-[#26211B]">
+      <header className="border-b border-[#C9B384] bg-white">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-2.5 sm:px-8 sm:py-3">
           <Link href="/" aria-label="TradePulse home" className="inline-flex min-h-11 items-center">
             <RowLockup variant="light" iconSize={44} textSize={36} />
@@ -82,7 +82,7 @@ export default function ContactPage() {
           <div className="flex items-center gap-2 sm:gap-4">
             <Link
               href="/"
-              className="inline-flex min-h-11 items-center gap-2 px-2 text-sm font-semibold text-slate-600 transition-colors hover:text-slate-950"
+              className="inline-flex min-h-11 items-center gap-2 px-2 text-sm font-semibold text-[#5C4A2E] transition-colors hover:text-[#26211B]"
             >
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
               <span className="hidden sm:inline">Back home</span>
@@ -110,14 +110,14 @@ export default function ContactPage() {
         />
         <div className="relative mx-auto grid max-w-5xl gap-4 px-5 sm:gap-8 sm:px-8 md:grid-cols-[1.1fr_0.9fr] md:items-center">
           <div className="max-w-2xl">
-            <div className="hidden items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-widest text-slate-200 sm:inline-flex">
+            <div className="hidden items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-widest sm:inline-flex" style={{ color: "#9A8F79" }}>
               <LifeBuoy className="h-4 w-4 text-amber-400" aria-hidden="true" />
               TradePulse support
             </div>
             <h1 className="text-2xl font-bold tracking-tight sm:mt-6 sm:text-4xl lg:text-5xl">
               Get help and get back to the job.
             </h1>
-            <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-300 sm:mt-5 sm:text-lg">
+            <p className="mt-2 max-w-xl text-sm leading-relaxed sm:mt-5 sm:text-lg" style={{ color: "#F7F2E9" }}>
               Email us about your account, an estimate, billing, or a privacy question. Include a little context so we can understand the problem.
             </p>
             <a
@@ -127,8 +127,8 @@ export default function ContactPage() {
               <Mail className="h-5 w-5" aria-hidden="true" />
               Email support
             </a>
-            <p className="mt-2 text-xs text-slate-400 sm:mt-4 sm:text-sm">{SUPPORT_EMAIL}</p>
-            <p className="mt-2 text-xs leading-relaxed text-slate-400 sm:hidden">
+            <p className="mt-2 text-xs sm:mt-4 sm:text-sm" style={{ color: "#9A8F79" }}>{SUPPORT_EMAIL}</p>
+            <p className="mt-2 text-xs leading-relaxed sm:hidden" style={{ color: "#9A8F79" }}>
               Include your account email, what happened, and a screenshot if useful. Never send your password by email.
             </p>
           </div>
@@ -136,10 +136,10 @@ export default function ContactPage() {
           <aside className="hidden rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-sm sm:block sm:p-6">
             <p className="text-xs font-semibold uppercase tracking-widest text-amber-400">Before you email</p>
             <h2 className="mt-2 text-lg font-bold">Include these details</h2>
-            <p className="mt-3 text-sm leading-relaxed text-slate-300">
+            <p className="mt-3 text-sm leading-relaxed" style={{ color: "#F7F2E9" }}>
               The email address on your account, what you were trying to do, what happened instead (including any error message), and a screenshot when the problem is visual.
             </p>
-            <p className="mt-4 border-t border-white/10 pt-3 text-xs leading-relaxed text-slate-400">
+            <p className="mt-4 border-t border-white/10 pt-3 text-xs leading-relaxed" style={{ color: "#9A8F79" }}>
               Never send your password or full payment-card details by email.
             </p>
           </aside>
@@ -149,9 +149,9 @@ export default function ContactPage() {
       <section className="py-4 sm:py-10">
         <div className="mx-auto max-w-5xl px-5 sm:px-8">
           <div className="max-w-2xl">
-            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">What do you need help with?</p>
-            <h2 className="mt-1 text-xl font-bold tracking-tight text-slate-950 sm:mt-1.5 sm:text-3xl">Choose the closest topic</h2>
-            <p className="mt-1.5 text-sm leading-relaxed text-slate-600 sm:mt-2 sm:text-base">
+            <p className="text-xs font-semibold uppercase tracking-widest text-[#5C4A2E]">What do you need help with?</p>
+            <h2 className="mt-1 text-xl font-bold tracking-tight text-[#26211B] sm:mt-1.5 sm:text-3xl">Choose the closest topic</h2>
+            <p className="mt-1.5 text-sm leading-relaxed text-[#5C4A2E] sm:mt-2 sm:text-base">
               Each option starts an email with a useful subject line. You can still describe anything else in your message.
             </p>
           </div>
@@ -164,26 +164,26 @@ export default function ContactPage() {
                 <a
                   key={topic.title}
                   href={supportHref(topic.subject, topic.body)}
-                  className="group flex min-h-11 touch-manipulation items-center gap-4 rounded-xl border border-slate-200 bg-white px-4 py-3 transition hover:border-slate-300 hover:bg-slate-50 active:bg-slate-100"
+                  className="group flex min-h-11 touch-manipulation items-center gap-4 rounded-xl border border-[#C9B384] bg-white px-4 py-3 transition hover:bg-[#EADCC0] active:bg-[#EADCC0]"
                 >
                   <span className="pointer-events-none flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
                     <Icon className="h-5 w-5" aria-hidden="true" />
                   </span>
                   <span className="pointer-events-none min-w-0 flex-1">
-                    <span className="block text-sm font-semibold text-slate-950">{topic.title}</span>
-                    <span className="block text-xs text-slate-500">{topic.description}</span>
+                    <span className="block text-sm font-semibold text-[#26211B]">{topic.title}</span>
+                    <span className="block text-xs text-[#5C4A2E]">{topic.description}</span>
                   </span>
                   <span className="pointer-events-none hidden shrink-0 items-center gap-1 text-xs font-semibold text-[#0D1B2E] sm:inline-flex">
                     Email support
                   </span>
-                  <ChevronRight className="pointer-events-none h-4 w-4 shrink-0 text-slate-400 transition group-hover:text-slate-600" aria-hidden="true" />
+                  <ChevronRight className="pointer-events-none h-4 w-4 shrink-0 text-[#5C4A2E] transition group-hover:text-[#26211B]" aria-hidden="true" />
                 </a>
               );
             })}
           </div>
 
-          <div className="mt-6 rounded-xl border border-slate-200 bg-white px-4 py-4 sm:px-6">
-            <p className="text-sm font-semibold text-slate-950">Can&apos;t open your email app?</p>
+          <div className="mt-6 rounded-xl border border-[#C9B384] bg-white px-4 py-4 sm:px-6">
+            <p className="text-sm font-semibold text-[#26211B]">Can&apos;t open your email app?</p>
             <a
               href={`mailto:${SUPPORT_EMAIL}`}
               className="mt-1 inline-block min-h-11 touch-manipulation text-sm font-medium text-[#0D1B2E] underline decoration-amber-500 decoration-2 underline-offset-4"
@@ -195,10 +195,10 @@ export default function ContactPage() {
             </div>
           </div>
 
-          <div className="mt-8 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8">
+          <div className="mt-8 flex flex-col gap-4 rounded-2xl border border-[#C9B384] bg-white p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8">
             <div>
-              <h2 className="text-xl font-bold text-slate-950">Trying to access your account?</h2>
-              <p className="mt-2 text-sm leading-relaxed text-slate-600">
+              <h2 className="text-xl font-bold text-[#26211B]">Trying to access your account?</h2>
+              <p className="mt-2 text-sm leading-relaxed text-[#5C4A2E]">
                 Open the sign-in page. If you cannot remember your password, choose <strong>Forgot password?</strong> there.
               </p>
             </div>
@@ -212,13 +212,13 @@ export default function ContactPage() {
         </div>
       </section>
 
-      <footer className="border-t border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-5xl flex-col items-center justify-between gap-4 px-5 py-8 text-sm text-slate-500 sm:flex-row sm:px-8">
+      <footer className="border-t border-[#C9B384] bg-white">
+        <div className="mx-auto flex max-w-5xl flex-col items-center justify-between gap-4 px-5 py-8 text-sm text-[#5C4A2E] sm:flex-row sm:px-8">
           <p>TradePulse · British Columbia, Canada</p>
           <nav className="flex flex-wrap items-center justify-center gap-5">
-            <Link href="/" className="inline-flex min-h-11 min-w-11 items-center justify-center transition-colors hover:text-slate-900">Home</Link>
-            <Link href="/terms" className="inline-flex min-h-11 min-w-11 items-center justify-center transition-colors hover:text-slate-900">Terms</Link>
-            <Link href="/privacy" className="inline-flex min-h-11 min-w-11 items-center justify-center transition-colors hover:text-slate-900">Privacy</Link>
+            <Link href="/" className="inline-flex min-h-11 min-w-11 items-center justify-center transition-colors hover:text-[#26211B]">Home</Link>
+            <Link href="/terms" className="inline-flex min-h-11 min-w-11 items-center justify-center transition-colors hover:text-[#26211B]">Terms</Link>
+            <Link href="/privacy" className="inline-flex min-h-11 min-w-11 items-center justify-center transition-colors hover:text-[#26211B]">Privacy</Link>
           </nav>
         </div>
       </footer>

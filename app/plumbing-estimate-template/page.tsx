@@ -48,16 +48,16 @@ const markdownComponents = {
     <h3 className="text-lg font-semibold text-white mt-8 mb-2">{children}</h3>
   ),
   p: ({ children }: { children?: React.ReactNode }) => (
-    <p className="text-slate-300 leading-relaxed mb-4">{children}</p>
+    <p className="leading-relaxed mb-4" style={{ color: "#F7F2E9" }}>{children}</p>
   ),
   ul: ({ children }: { children?: React.ReactNode }) => (
     <ul className="mb-5 space-y-2 pl-1">{children}</ul>
   ),
   ol: ({ children }: { children?: React.ReactNode }) => (
-    <ol className="mb-5 space-y-2 pl-1 list-decimal list-inside text-slate-300">{children}</ol>
+    <ol className="mb-5 space-y-2 pl-1 list-decimal list-inside" style={{ color: "#F7F2E9" }}>{children}</ol>
   ),
   li: ({ children }: { children?: React.ReactNode }) => (
-    <li className="text-slate-300 leading-relaxed flex gap-2">
+    <li className="leading-relaxed flex gap-2" style={{ color: "#F7F2E9" }}>
       <span className="text-amber-500 mt-1 shrink-0">•</span>
       <span>{children}</span>
     </li>
@@ -80,16 +80,16 @@ const markdownComponents = {
   ),
   th: ({ children, style }: { children?: React.ReactNode; style?: React.CSSProperties }) => (
     <th
-      className="px-3 py-2.5 text-xs font-semibold text-slate-400 uppercase tracking-wide whitespace-nowrap"
-      style={{ textAlign: style?.textAlign ?? "left" }}
+      className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wide whitespace-nowrap"
+      style={{ textAlign: style?.textAlign ?? "left", color: "#9A8F79" }}
     >
       {children}
     </th>
   ),
   td: ({ children, style }: { children?: React.ReactNode; style?: React.CSSProperties }) => (
     <td
-      className="px-3 py-2.5 border-t border-white/10 text-slate-300 whitespace-nowrap"
-      style={{ textAlign: style?.textAlign ?? "left" }}
+      className="px-3 py-2.5 border-t border-white/10 whitespace-nowrap"
+      style={{ textAlign: style?.textAlign ?? "left", color: "#F7F2E9" }}
     >
       {children}
     </td>
@@ -102,7 +102,7 @@ export default function PlumbingEstimateTemplatePage() {
     <div className="min-h-dvh bg-[#0D1B2E] flex flex-col font-[family-name:var(--font-dm-sans)]">
       <main className="flex-1 flex flex-col items-center px-6 pt-12 pb-24">
         <article className="w-full max-w-2xl">
-          <Link href="/" className="inline-flex items-center gap-1 text-sm text-slate-400 hover:text-slate-200 transition-colors mb-8">
+          <Link href="/" className="inline-flex items-center gap-1 text-sm hover:text-[#F7F2E9] transition-colors mb-8" style={{ color: "#9A8F79" }}>
             ← Back to TradePulse
           </Link>
 
@@ -135,7 +135,7 @@ export default function PlumbingEstimateTemplatePage() {
           {/* CTA */}
           <div className="mt-12 rounded-2xl bg-white/5 border border-white/10 p-6 text-center">
             <p className="text-white font-bold text-lg">Stop writing estimates from scratch</p>
-            <p className="text-slate-400 text-sm mt-2">
+            <p className="text-sm mt-2" style={{ color: "#9A8F79" }}>
               Turn a job description into a professional estimate in seconds. Send it from your phone before you leave the driveway.
             </p>
             <Link
@@ -145,22 +145,22 @@ export default function PlumbingEstimateTemplatePage() {
             >
               Create Your Estimate Free
             </Link>
-            <p className="text-slate-600 text-xs mt-3">14-day free trial. No credit card required.</p>
+            <p className="text-xs mt-3" style={{ color: "#9A8F79" }}>14-day free trial. No credit card required.</p>
           </div>
         </article>
       </main>
 
-      <footer className="text-center py-8 text-sm text-slate-500">
+      <footer className="text-center py-8 text-sm" style={{ color: "#9A8F79" }}>
         <p>
           TradePulse Estimates,{" "}
-          <a href={CANONICAL_URL} className="hover:text-slate-300 transition-colors">
+          <a href={CANONICAL_URL} className="hover:text-[#F7F2E9] transition-colors">
             {CANONICAL_DOMAIN}
           </a>
         </p>
         <div className="mt-2 flex items-center justify-center gap-4 text-xs flex-wrap">
-          <a href={`mailto:${SUPPORT_EMAIL}`} className="hover:text-slate-300 transition-colors">{SUPPORT_EMAIL}</a>
-          <a href="/terms" className="hover:text-slate-300 transition-colors">Terms of Service</a>
-          <a href="/privacy" className="hover:text-slate-300 transition-colors">Privacy Policy</a>
+          <a href={`mailto:${SUPPORT_EMAIL}`} className="hover:text-[#F7F2E9] transition-colors">{SUPPORT_EMAIL}</a>
+          <a href="/terms" className="hover:text-[#F7F2E9] transition-colors">Terms of Service</a>
+          <a href="/privacy" className="hover:text-[#F7F2E9] transition-colors">Privacy Policy</a>
         </div>
       </footer>
     </div>

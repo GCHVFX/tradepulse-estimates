@@ -1,6 +1,100 @@
 # TradePulse handoff
 
-Updated: 2026-08-30 20:29 PT (Starter pricing card had another unmigrated grey token, six-card redundant feature grid removed, FAQ converted to an accordion -- still NOT merged to main)
+Updated: 2026-08-30 22:15 PT (Final pre-merge sweep complete: sitewide stray-token audit found and fixed 4 more genuine misses beyond this session's named routes, including the shared EstimateMarkdown renderer. Branch is ready for review -- NOT merged to main, Greg reviews the live preview himself)
+
+## READY FOR REVIEW: Final pre-merge sweep, sitewide stray-token audit (2026-08-30 22:15 PT)
+
+**Status:** implemented on branch `redesign/hero-photo-kraft`, pushed, **not
+merged to main**. This was requested and treated as the last change before
+merge. Full per-file detail is in `SPEC.md`'s final addendum; this entry
+summarizes the sweep plus the whole branch for PR review.
+
+### What this pass did
+
+Audited the entire codebase (not just routes touched by prior sessions) for
+literal hex values or Tailwind classes from the default slate/gray/zinc/
+neutral/stone palettes, including the marketing routes that predate this
+branch's work: `/trades`, `/electricians`, `/plumbers`, `/contact`,
+`/share/[id]`, `/plumbing-cost`, plus their untested siblings
+`/electrical-cost` and `/plumbing-estimate-template`.
+
+Found and migrated genuine misses in: `app/trades/page.tsx`,
+`app/electricians/page.tsx`, `app/plumbers/page.tsx` (6-7 stray tokens
+each), `app/plumbing-cost/page.tsx` and `app/electrical-cost/page.tsx` (12
+each), `app/plumbing-estimate-template/page.tsx`, `app/contact/page.tsx` (7),
+`app/share/[id]/page.tsx` (5), `app/page.tsx` (18 further instances beyond
+an earlier session's single fix), and `app/components/faq-accordion.tsx`
+(1 miss from an earlier round).
+
+The sitewide part of the grep (not restricted to the named routes) also
+caught three shared components nobody had checked: `CopyEmailButton.tsx`
+(renders only on `/contact`), `company-estimate-header.tsx` (renders on a
+white card in three places including `/share/[id]`), and -- the largest
+find -- `estimate-markdown.tsx`, the single source-of-truth
+`EstimateMarkdown` renderer that draws the bulk of every estimate's visible
+content and was entirely unmigrated (every element renderer: h1/h2/h3/p/
+li/strong/table/thead/th/td/hr/blockquote). Also fixed
+`download-pdf-button.tsx`'s zinc button, used exclusively on `/share/[id]`.
+All colour-only changes, no layout/copy/structural changes anywhere.
+
+`#0D1B2E` (the old navy) was reported everywhere it appears -- it's a much
+wider footprint than "nav CTA, Pro card, Subscribe button" (it's also the
+standard navy-on-amber button-text pairing used on every CTA sitewide, plus
+two full section backgrounds) -- but per the brief, none of it was touched.
+The trade-example tabs (`TradeExamples.tsx`) were confirmed untouched, a
+fourth time this branch.
+
+**Scope-note flag:** the brief said "this branch has fourteen prior
+sessions." `git log main..HEAD` shows four commits (`9088b86`, `8aa100d`,
+`c45af7a`, `578e653`). Recording the discrepancy rather than repeating an
+unverified number -- flagging for Greg, not asserting either number is
+right.
+
+### Verification
+
+`npx tsc --noEmit` and `npx next build` both clean. Screenshots at 375px
+and desktop for every section a fix landed in this pass. WCAG contrast
+recomputed (manual luminance formula) for every text/background pairing
+touched this session -- all pass AA, 5.00:1 to 15.96:1. Demo widget
+(`EstimateDemo*.tsx`) and `TradeExamples.tsx` re-hashed / `git diff main`
+confirmed empty -- untouched. Full detail in `SPEC.md`.
+
+### Branch summary, for PR review (what changed across all sessions on this branch)
+
+`redesign/hero-photo-kraft` replaces the marketing site's old navy-gradient
+hero and pale-cream/slate chrome with a warm kraft palette (surface
+`#F3E8D0`, hairline/border `#C9B384`, muted-ink `#5C4A2E`, ink `#26211B` on
+light; `#F7F2E9`/`#9A8F79` on dark) and a photo-grounded hero
+(`public/trades-van.jpg`) in place of the old gradient. In order:
+
+1. **Hero photo and kraft palette redesign** -- new hero background, new
+   Instrument Serif headline treatment, kraft nav/footer chrome replacing
+   pale cream, badge/eyebrow removed above the headline.
+2. **Mobile nav rebuild, mobile hero crop, eyebrow removal, "How it works"
+   de-carding** -- hamburger menu for mobile nav, hero photo repositioned
+   for mobile framing, remaining eyebrow labels removed, the "How it
+   works" section un-cardified.
+3. **Final CTA band migrated** from the old navy to the `#26211B` ink
+   token.
+4. **Starter pricing card token fix, six-card redundant section removed,
+   FAQ converted to an accordion** -- the Starter card's last unmigrated
+   grey token fixed, a six-card feature grid removed after confirming its
+   content duplicated the four-card workflow section above it, FAQ list
+   converted to a collapsible accordion (`faq-accordion.tsx`).
+5. **This pass: final sitewide stray-token sweep** -- as described above.
+
+Throughout every session: the live demo widget
+(`EstimateDemo.tsx`/`EstimateDemoElectrical.tsx`/`EstimateDemoTrades.tsx`)
+and the trade-example tabs (`TradeExamples.tsx`) were never touched,
+verified by `git diff main` every single round including this one.
+
+**This branch is ready for review.** Do not merge to main -- Greg reviews
+the live Vercel preview himself before merging.
+
+**Exact next action:** commit this session's changes, push to
+`origin/redesign/hero-photo-kraft`, confirm the new Vercel preview
+deployment reaches READY, hand Greg the preview URL. No further code
+changes are planned on this branch pending his review.
 
 ## Starter card token, six-card redundancy, FAQ accordion (2026-08-30 20:29 PT)
 

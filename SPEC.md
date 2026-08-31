@@ -444,3 +444,210 @@ desktop width.
 - `TradeExamples.tsx` (the trade tabs) confirmed untouched via `git diff
   main` -- empty, as it has been every session it's been named out of
   scope.
+
+## Final pre-merge sweep: sitewide stray-token audit (2026-08-30 22:15 PT)
+
+**Status:** implemented on branch `redesign/hero-photo-kraft`, pushed, not
+merged. Requested and treated as the last change before merge -- a full
+sitewide audit for leftover Tailwind default slate/gray/zinc/neutral/stone
+classes and hex values, not another one-off fix, covering routes this
+branch's prior sessions never touched (`/trades`, `/electricians`,
+`/plumbers`, `/contact`, `/share/[id]`, `/plumbing-cost`) plus their direct
+siblings (`/electrical-cost`, `/plumbing-estimate-template`).
+
+### Scope note: fourteen prior sessions claimed, four commits found
+
+The task brief stated "this branch has fourteen prior sessions on it."
+`git log main..HEAD` on this branch shows four commits: `9088b86`, `8aa100d`,
+`c45af7a`, `578e653`. Recording this discrepancy rather than repeating an
+unverified number -- sessions and commits aren't the same thing (a session
+can end without committing), so this isn't proof the "fourteen" figure is
+wrong, only that it isn't corroborated by branch history. Flagging for Greg
+to confirm if it matters.
+
+### Every match found, classified, and migrated
+
+**`app/trades/page.tsx`, `app/electricians/page.tsx`, `app/plumbers/page.tsx`**
+(6-7 edits each): sign-in link colours, subhead/description text, CTA
+caption, "How it works" eyebrow, trust line, mobile CTA bar border, footer
+domain link and legal footer -- all `text-slate-500`, `hover:text-slate-700`,
+`border-slate-100`, `border-zinc-800`, `text-zinc-600`, `hover:text-zinc-400`.
+Genuine misses in already-migrated pages (these three routes carry the same
+kraft nav/footer chrome as the home page but were never swept for stray
+tokens in a prior session). Migrated to `text-[#5C4A2E]` /
+`hover:text-[#26211B]` / `border-[#C9B384]` per the established
+base-muted/hover-brighter convention. Verified zero remaining via grep.
+
+**`app/plumbing-cost/page.tsx`, `app/electrical-cost/page.tsx`** (12 edits
+each, structurally identical siblings): headings, stat-box backgrounds,
+dividers migrated from `text-slate-900/500/400/600/700`, `border-slate-200`,
+`bg-slate-50`, `divide-slate-100` to the kraft set. The dark "Are you a
+plumber/electrician?" CTA card (its own `#26211B` background, not
+`#0D1B2E`) had its text and caption migrated from slate classes to the
+on-dark pair (`#F7F2E9` / `#9A8F79`). Genuine miss -- same kraft treatment as
+the rest of the site, just never swept. Verified zero remaining via grep.
+Screenshotted at 375px and desktop; dark CTA card confirmed correct
+on-dark contrast.
+
+**`app/plumbing-estimate-template/page.tsx`**: root stays `bg-[#0D1B2E]`
+(out of scope, untouched). Its `markdownComponents` renderers (`p`, `ol`,
+`li`, `th`, `td`), the back-link, the CTA card copy, and the footer were
+migrated from slate classes to the on-dark pair, since text inside a dark
+section needs the on-dark tokens, not the light kraft muted-ink (`#5C4A2E`)
+which would read as illegibly dim there. One self-caught mistake mid-fix:
+the footer links were first written base-bright/hover-dim
+(`#F7F2E9` base, `hover:opacity-80`), backwards from this branch's
+established base-muted/hover-brighter convention -- caught and corrected
+before it went out for review. Verified zero remaining via grep; confirmed
+via screenshot at both breakpoints, including the pricing table and
+footer.
+
+**`app/contact/page.tsx`**: 7 edits across three zones. Root/header light
+chrome: `bg-[#F3E8D0] text-[#26211B]`. Dark hero section
+(its own `bg-[#0D1B2E]`, out of scope, untouched): `text-slate-200/300/400`
+migrated to on-dark tokens (`#F7F2E9` for prominent copy, `#9A8F79` for
+secondary). Light content section: topic cards migrated to
+`border-[#C9B384]`, `hover:bg-[#EADCC0] active:bg-[#EADCC0]` (no distinct
+hover-border token exists, so the `hover:border-slate-300` it had was
+dropped rather than invented). Genuine miss -- this route predates the
+kraft redesign entirely. Verified zero remaining via grep; screenshotted
+mobile, full mobile scroll, and desktop.
+
+**`app/share/[id]/page.tsx`**: 5 edits, entirely light context.
+`bg-slate-50` (not-found state and page root) to `bg-[#F3E8D0]`; card
+border and letterhead divider to `border-[#C9B384]`; `text-zinc-500`
+(prepared-by line) to `#5C4A2E`; `text-zinc-900` (title) to `#26211B`;
+photo thumbnail border and footer "Powered by" text corrected. Genuine
+miss. Screenshotted the not-found state at mobile; no live estimate ID was
+available in this environment to screenshot the main render path, so that
+path was verified by reading the source and the shared-component fixes
+below rather than by screenshot.
+
+**`app/page.tsx` (home page)**: the previously-flagged `#94A3B8` "Starter"
+label was already fixed in an earlier session. This pass found and fixed
+18 further unmigrated instances: `text-slate-700` (pain-point strip) and
+`bg-slate-300` (divider dot) targeted individually; `text-slate-900` (12
+heading occurrences), `text-slate-400`, `text-slate-600`, and
+`text-slate-800` (Pro card feature title, distinct from the `#0D1B2E` used
+elsewhere on the same Pro card for border/label/button, which stays
+untouched) applied via `replace_all` after confirming via grep that no
+conflicting `hover:` variant of the same literal string existed in the
+file. Genuine miss -- headings were tacitly exempted in every prior round.
+Verified zero remaining via grep; confirmed `#0D1B2E` still present 9 times
+(correctly untouched); re-screenshotted the full mobile scroll after the
+fix, including the pricing cards and FAQ accordion.
+
+**`app/components/faq-accordion.tsx`**: one miss from the FAQ-accordion
+conversion two sessions ago -- `text-slate-900` on the question heading,
+missed because the accordion's own file header comment already claimed
+"the kraft/hairline box treatment... is the same as the plain list this
+replaced" without that being fully true. Fixed to `text-[#26211B]`.
+
+**`app/components/CopyEmailButton.tsx`**: found only by searching the
+whole codebase rather than just the routes named in the brief -- this
+component renders exclusively on `/contact` (confirmed via grep for its
+only usage) but was never touched when that page was migrated. Entirely
+unmigrated: `border-slate-300`, `bg-white`, `text-slate-800`,
+`hover:bg-slate-50`, `text-slate-500`. Migrated to `border-[#C9B384]`,
+`text-[#26211B]`, `hover:bg-[#EADCC0]`, `text-[#5C4A2E]`.
+
+**`app/components/company-estimate-header.tsx`**: `text-zinc-800` on the
+business-name line. Shared between the authenticated app shell and
+`/share/[id]`, but always rendered on a literal white card in every one of
+its three usages (not on the app shell's dark background) -- CLAUDE.md
+itself calls it "the header on the white estimate card." Migrated to
+`text-[#26211B]`, correct in all three contexts since the card itself is
+white regardless of what surrounds it.
+
+**`app/components/estimate-markdown.tsx`**: the single source-of-truth
+estimate-content renderer (`EstimateMarkdown`, per CLAUDE.md) was entirely
+unmigrated -- every one of its markdown-element renderers (`h1`, `h2`,
+`h3`, `p`, the "Estimated total" callout, `li`, `strong`, `table`,
+`thead`, `th`, `td`, `hr`, `blockquote`) used `text-zinc-900/700/600/400`,
+`border-zinc-200/300`, and `bg-zinc-100`. This is the largest genuine miss
+found this session: it renders the bulk of every estimate's visible
+content on the public `/share/[id]` white card, one of the six routes the
+brief named explicitly. Migrated following this branch's established
+zinc-tier mapping (400/500/600/700 to muted-ink `#5C4A2E`, 800/900 to ink
+`#26211B`, all borders/hairlines to `#C9B384`, the table-header background
+to the deeper kraft surface `#EADCC0`). Colour values only -- no structural
+change to the renderer.
+
+**`app/components/download-pdf-button.tsx`**: `bg-zinc-800
+hover:bg-zinc-700` on the only button this component renders, used
+exclusively on `/share/[id]` (confirmed via grep -- not shared with the
+authenticated app shell at all, so this isn't a case of "correctly left
+alone because it's app-shell theming"). Migrated to `bg-[#26211B]
+hover:opacity-90`, matching the established solid-dark-button convention
+used elsewhere on this branch (base colour + `hover:opacity-90`, not a
+second shade).
+
+### Confirmed not a regression (untouched, correctly out of scope)
+
+Grep across `app/**/*.tsx` for the full slate/gray/zinc/neutral/stone class
+families and their literal default hex values turned up matches only in:
+the authenticated app shell (`bottom-nav.tsx`, `customer-details-block.tsx`,
+`deposit-block.tsx`, and every route under the dark `bg-zinc-950` theme --
+`estimates`, `new`, `profile`, `rates`, `payments`, `onboarding`, `login`,
+`signup`, `subscribe`, `privacy`, `terms`, `demo` -- a separate, intentional
+theme never named in any round of this branch); the three protected demo
+widgets (`EstimateDemo.tsx`, `EstimateDemoElectrical.tsx`,
+`EstimateDemoTrades.tsx`, all literal near-black/gray hex inside their own
+self-contained phone-mockup styling); `TradeExamples.tsx` (`#F1F5F9`,
+`#475569` -- the trade-example tabs, untouched, confirmed again); and
+`profile-form.tsx` (`#09090b`, matching the app shell's own dark theme).
+None of these are regressions or misses -- all are either the deliberately
+separate authenticated-app theme or explicitly protected files.
+
+### `#0D1B2E` (old navy) -- every location, reported, none touched
+
+Per the brief, reporting every place this appears without changing it (a
+separate design decision, not part of this cleanup):
+
+- `app/components/marketing-nav.tsx:33,37` -- nav CTA button background.
+- `app/page.tsx:287,481,488,559` -- amber-button navy text pairing (badge,
+  hero CTA, Pro badge); `:492` -- Pro card "Pro" eyebrow label; `:486` --
+  Pro card border; `:521,588,596` -- Pro/Subscribe button backgrounds.
+- `app/trades/page.tsx`, `app/electricians/page.tsx`, `app/plumbers/page.tsx`
+  (2 h1/h2 headings, 1 amber-button text pairing, 1 CTA button each) --
+  present on all three trade landing pages, not just Pro/Subscribe as the
+  brief described.
+- `app/plumbing-cost/page.tsx:245`, `app/electrical-cost/page.tsx:242`,
+  `app/plumbing-estimate-template/page.tsx:102,144` -- amber-button text
+  pairing plus (template page only) the page's own root background.
+- `app/contact/page.tsx:93,101,125,176,189,207` -- Sign-in button (x2),
+  dark hero section background, amber-button text pairing, "Email support"
+  label, mailto link.
+- `app/components/TradeExamples.tsx:95` -- active-tab background (part of
+  the explicitly protected tabs component).
+- `app/opengraph-image.tsx:15` -- OG image background.
+
+This footprint is considerably wider than "nav CTA, Pro pricing card,
+Subscribe button" -- it's also the standard navy-text-on-amber-button
+pairing used on every CTA button sitewide, and two full page/section
+backgrounds. None of it was touched.
+
+### Verification actually run (2026-08-30 22:15 PT)
+
+- `npx tsc --noEmit` -- exit 0.
+- `npx next build` -- exit 0, all routes built including the four newly
+  touched shared components.
+- Screenshots at 375px and desktop for every section where a fix landed
+  this pass: `/trades`, `/electricians`, `/plumbers` (mobile, prior
+  session already covered desktop for these three), `/contact` (mobile,
+  full mobile scroll, desktop), `/share/[id]` not-found state (mobile),
+  `/plumbing-cost` (mobile, desktop), `/electrical-cost` (mobile including
+  the dark CTA card, desktop), `/plumbing-estimate-template` (full-page
+  mobile and desktop via a tall viewport, working around a known
+  Browser-pane bug where a screenshot taken after scrolling to a ref can
+  render solid black), home page (full mobile scroll re-confirmed after
+  the 18-instance batch fix).
+- WCAG contrast re-checked (manual luminance/contrast calculation, not
+  eyeballed) for every text/background pairing touched this session: ink
+  `#26211B` and muted-ink `#5C4A2E` against white, `#F3E8D0`, and `#EADCC0`
+  all pass AA (6.26:1 to 15.96:1); on-dark `#F7F2E9`/`#9A8F79` against
+  `#26211B` and `#0D1B2E` both pass AA (5.00:1 to 14.31:1); white on the
+  new `#26211B` Download PDF button passes AA (15.96:1).
+- Demo widget re-hashed against baseline: `git diff main` on
+  `EstimateDemo.tsx`, `EstimateDemoElectrical.tsx`, `EstimateDemoTrades.tsx`
+  still empty. `TradeExamples.tsx` also confirmed empty via the same diff.

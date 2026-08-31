@@ -28,7 +28,7 @@ export function FaqAccordion({ items }: { items: readonly FaqItem[] }) {
               aria-expanded={isOpen}
               className="w-full flex items-center justify-between gap-4 text-left p-6"
             >
-              <h3 className="font-semibold text-slate-900">{item.q}</h3>
+              <h3 className="font-semibold text-[#26211B]">{item.q}</h3>
               <svg
                 viewBox="0 0 20 20"
                 fill="none"

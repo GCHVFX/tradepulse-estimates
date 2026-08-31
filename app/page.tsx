@@ -318,9 +318,9 @@ export default async function LandingPage() {
           <div className="mx-auto max-w-4xl px-6 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-8 text-center">
             {PAIN_POINTS.map((point, i) => (
               <div key={point} className="flex items-center gap-3 sm:gap-8">
-                <p className="text-sm sm:text-base font-medium text-slate-700">{point}</p>
+                <p className="text-sm sm:text-base font-medium text-[#26211B]">{point}</p>
                 {i < PAIN_POINTS.length - 1 && (
-                  <span className="hidden sm:block w-1 h-1 rounded-full bg-slate-300" aria-hidden="true" />
+                  <span className="hidden sm:block w-1 h-1 rounded-full bg-[#C9B384]" aria-hidden="true" />
                 )}
               </div>
             ))}
@@ -345,7 +345,7 @@ export default async function LandingPage() {
         <section id="how-it-works" className="py-12 sm:py-16 bg-[#F3E8D0]">
           <div className="mx-auto max-w-5xl px-6 sm:px-10">
             <div className="text-center mb-8">
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Three steps. Done before you drive away.</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold text-[#26211B]">Three steps. Done before you drive away.</h2>
               <p className="mt-4 text-lg text-[#5C4A2E] max-w-xl mx-auto">
                 No complicated setup. Works on your phone. Same routine after every job.
               </p>
@@ -356,7 +356,7 @@ export default async function LandingPage() {
                 <div key={step.number} className="py-6 md:py-0 md:px-8 first:pt-0 first:md:pl-0 last:pb-0 last:md:pr-0">
                   <div className="flex items-baseline gap-2 mb-2">
                     <span className="text-sm font-semibold" style={{ color: "#B45309" }}>{step.number}</span>
-                    <h3 className="text-lg font-semibold text-slate-900">{step.title}</h3>
+                    <h3 className="text-lg font-semibold text-[#26211B]">{step.title}</h3>
                   </div>
                   <p className="text-sm leading-relaxed text-[#5C4A2E]">{step.description}</p>
                 </div>
@@ -369,7 +369,7 @@ export default async function LandingPage() {
         <section className="py-12 sm:py-16 bg-[#EADCC0]">
           <div className="mx-auto max-w-5xl px-6 sm:px-10">
             <div className="text-center mb-8">
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">See what TradePulse creates</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold text-[#26211B]">See what TradePulse creates</h2>
               <p className="mt-4 text-lg text-[#5C4A2E] max-w-xl mx-auto">
                 Example jobs using common trade scenarios. Your estimates use your own rates and line items.
               </p>
@@ -382,7 +382,7 @@ export default async function LandingPage() {
         <section className="py-12 sm:py-16 bg-[#F3E8D0]">
           <div className="mx-auto max-w-5xl px-6 sm:px-10">
             <div className="text-center mb-8">
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Review, edit, send, done</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold text-[#26211B]">Review, edit, send, done</h2>
               <p className="mt-4 text-lg text-[#5C4A2E] max-w-xl mx-auto">
                 The estimate is a starting point, not a final answer. You stay in control before it reaches the customer.
               </p>
@@ -393,7 +393,7 @@ export default async function LandingPage() {
                   <div className="w-9 h-9 rounded-lg flex items-center justify-center mb-3" style={{ background: "#FEF3C7", color: "#92400E" }}>
                     {step.icon}
                   </div>
-                  <h3 className="text-sm sm:text-base font-semibold text-slate-900 mb-1.5">{step.title}</h3>
+                  <h3 className="text-sm sm:text-base font-semibold text-[#26211B] mb-1.5">{step.title}</h3>
                   <p className="text-xs sm:text-sm leading-relaxed text-[#5C4A2E]">{step.description}</p>
                 </div>
               ))}
@@ -404,7 +404,7 @@ export default async function LandingPage() {
         {/* Positioning */}
         <section className="py-12 sm:py-16 bg-[#EADCC0]">
           <div className="mx-auto max-w-2xl px-6 sm:px-10 text-center">
-            <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 leading-tight">
+            <h2 className="text-3xl sm:text-4xl font-bold text-[#26211B] leading-tight">
               Fast estimates without another complicated business platform
             </h2>
             <p className="mt-5 text-base sm:text-lg text-[#5C4A2E] leading-relaxed">
@@ -418,13 +418,13 @@ export default async function LandingPage() {
         <section className="py-12 sm:py-16 bg-[#F3E8D0]">
           <div className="mx-auto max-w-4xl px-6 sm:px-10">
             <div className="text-center mb-8">
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Estimates come first. This comes after.</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold text-[#26211B]">Estimates come first. This comes after.</h2>
             </div>
             <div className="grid sm:grid-cols-3 gap-4 sm:gap-6">
               {AFTER_ESTIMATE.map(item => (
                 <div key={item.title} className="text-center sm:text-left">
                   <div className="flex items-center justify-center sm:justify-start gap-2 mb-1.5">
-                    <h3 className="text-sm font-semibold text-slate-900">{item.title}</h3>
+                    <h3 className="text-sm font-semibold text-[#26211B]">{item.title}</h3>
                     {item.pro && (
                       <span className="text-[10px] font-bold leading-none text-amber-600 bg-amber-500/10 border border-amber-500/30 rounded px-1.5 py-0.5">PRO</span>
                     )}
@@ -440,7 +440,7 @@ export default async function LandingPage() {
         <section id="pricing" className="py-12 sm:py-16 bg-[#F3E8D0]">
           <div className="mx-auto max-w-3xl px-6 sm:px-10">
             <div className="text-center mb-8">
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Simple, flat pricing</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold text-[#26211B]">Simple, flat pricing</h2>
               <p className="mt-4 text-lg text-[#5C4A2E]">No per-estimate fees. No seat charges. Two flat rates.</p>
             </div>
           </div>
@@ -449,12 +449,12 @@ export default async function LandingPage() {
             <div className="grid sm:grid-cols-2 gap-6">
 
               <div className="rounded-2xl border-2 p-8 relative" style={{ borderColor: "#C9B384" }}>
-                <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: "#94A3B8" }}>Starter</p>
+                <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: "#5C4A2E" }}>Starter</p>
                 <div className="flex items-end gap-2 mb-2">
-                  <span className="text-4xl font-bold text-slate-900">{`${currencyPrefix(currency)}${planMonthlyPrice("starter", currency)}`}</span>
+                  <span className="text-4xl font-bold text-[#26211B]">{`${currencyPrefix(currency)}${planMonthlyPrice("starter", currency)}`}</span>
                   <span className="text-[#5C4A2E] mb-1">/month</span>
                 </div>
-                <p className="text-sm text-slate-400 mb-6">Estimates only. No card required for a 14-day trial.</p>
+                <p className="text-sm text-[#5C4A2E] mb-6">Estimates only. No card required for a 14-day trial.</p>
 
                 <div className="flex flex-col gap-2.5 mb-8">
                   {[
@@ -471,7 +471,7 @@ export default async function LandingPage() {
                         <circle cx="8" cy="8" r="7" fill="#ECFDF5" />
                         <path d="M5 8l2 2 4-4" stroke="#10B981" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
-                      <span className="text-sm text-slate-600">{feature}</span>
+                      <span className="text-sm text-[#5C4A2E]">{feature}</span>
                     </div>
                   ))}
                 </div>
@@ -491,10 +491,10 @@ export default async function LandingPage() {
                 </div>
                 <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: "#0D1B2E" }}>Pro</p>
                 <div className="flex items-end gap-2 mb-2">
-                  <span className="text-4xl font-bold text-slate-900">{`${currencyPrefix(currency)}${planMonthlyPrice("pro", currency)}`}</span>
+                  <span className="text-4xl font-bold text-[#26211B]">{`${currencyPrefix(currency)}${planMonthlyPrice("pro", currency)}`}</span>
                   <span className="text-[#5C4A2E] mb-1">/month</span>
                 </div>
-                <p className="text-sm text-slate-400 mb-6">Everything in Starter, plus:</p>
+                <p className="text-sm text-[#5C4A2E] mb-6">Everything in Starter, plus:</p>
 
                 <div className="flex flex-col gap-3 mb-8">
                   {[
@@ -509,7 +509,7 @@ export default async function LandingPage() {
                         <path d="M5 8l2 2 4-4" stroke="#10B981" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
                       <div>
-                        <p className="text-sm font-semibold text-slate-800">{item.title}</p>
+                        <p className="text-sm font-semibold text-[#26211B]">{item.title}</p>
                         <p className="text-xs text-[#5C4A2E]">{item.description}</p>
                       </div>
                     </div>
@@ -525,7 +525,7 @@ export default async function LandingPage() {
 
             </div>
 
-            <p className="text-center text-xs text-slate-400 mt-6">
+            <p className="text-center text-xs text-[#5C4A2E] mt-6">
               Starter includes a 14-day free trial, no card required. Pro is billed right away. First paid charge has a 30-day money-back guarantee.
             </p>
           </div>
@@ -535,7 +535,7 @@ export default async function LandingPage() {
         <section className="py-12 sm:py-16 bg-[#F3E8D0]">
           <div className="mx-auto max-w-3xl px-6 sm:px-10">
             <div className="text-center mb-8">
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Common questions</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold text-[#26211B]">Common questions</h2>
             </div>
             <FaqAccordion items={FAQ_ITEMS} />
           </div>

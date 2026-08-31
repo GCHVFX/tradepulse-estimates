@@ -24,11 +24,11 @@ export function CopyEmailButton() {
       <button
         type="button"
         onClick={handleCopy}
-        className="inline-flex min-h-11 w-fit items-center justify-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50"
+        className="inline-flex min-h-11 w-fit items-center justify-center rounded-lg border border-[#C9B384] bg-white px-4 text-sm font-semibold text-[#26211B] transition-colors hover:bg-[#EADCC0]"
       >
         Copy email address
       </button>
-      <p role="status" aria-live="polite" className="text-xs leading-relaxed text-slate-500 min-h-[1rem]">
+      <p role="status" aria-live="polite" className="text-xs leading-relaxed text-[#5C4A2E] min-h-[1rem]">
         {state === 'copied' && 'Email copied.'}
         {state === 'error' && "Couldn't copy automatically. Select the address above and copy it manually."}
       </p>
