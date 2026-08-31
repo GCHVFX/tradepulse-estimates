@@ -1,6 +1,87 @@
 # TradePulse handoff
 
-Updated: 2026-08-30 22:15 PT (Final pre-merge sweep complete: sitewide stray-token audit found and fixed 4 more genuine misses beyond this session's named routes, including the shared EstimateMarkdown renderer. Branch is ready for review -- NOT merged to main, Greg reviews the live preview himself)
+Updated: 2026-08-31 08:01 PT (Hero photo and kraft palette redesign MERGED to main and LIVE in production at https://tradepulse-estimates.com. Merge commit 8441c84dc075c5f3b2eae85625c087a1b7c41bbf. Whole redesign thread closed out.)
+
+## MERGED AND LIVE: Hero photo and kraft palette redesign (2026-08-31 08:01 PT)
+
+**Status: done.** `redesign/hero-photo-kraft` is merged into `main` and
+deployed to production. Greg reviewed the live Vercel preview himself and
+confirmed it was ready before authorizing the merge.
+
+### Pre-merge verification (done before touching anything)
+
+Per Greg's explicit instruction, git state was verified rather than
+assumed:
+
+- Local `main` had 2 commits never pushed to `origin/main`: `d76d834`
+  ("Apply new TradePulse brand mark across the site and app") and
+  `f0ad044` ("Fill in HANDOFF.md commit hash for the brand mark rollout")
+  -- confirmed still the case, matching the known prior state.
+- `git merge-base --is-ancestor main redesign/hero-photo-kraft` returned
+  true, and the merge-base of the two was exactly `f0ad044` -- local
+  `main`'s own tip. The branch was cut cleanly after the brand-mark work,
+  not before it, so nothing was orphaned.
+- `origin/main` confirmed an ancestor of both local `main` and the
+  redesign branch -- a clean linear chain, no divergence anywhere.
+
+### Merge and deploy
+
+- `git checkout main`, `git merge --no-ff redesign/hero-photo-kraft` --
+  clean merge, no conflicts. Merge commit:
+  **`8441c84dc075c5f3b2eae85625c087a1b7c41bbf`**.
+- `npx tsc --noEmit` and `npx next build` re-run on merged `main` before
+  pushing -- both clean.
+- `git push origin main`: `53050f5..8441c84`. This carried the previously
+  unpushed brand-mark commits and the full redesign to `origin/main`
+  together, in one push, as expected from the ancestry check above.
+- Production deployment `223hxbu3y` reached **Ready** (polled via `vercel
+  ls`, not assumed from the push alone).
+
+### Production confirmed live (real proof, not local dev/build)
+
+Unlike every preview deployment used throughout this redesign, production
+has no Vercel SSO/Deployment Protection gate. Fetched the live canonical
+URL directly and confirmed the redesign is actually there:
+
+- `https://tradepulse-estimates.com` -- confirmed via `location.href` in
+  the loaded page (not just a redirect assumption). Screenshotted at both
+  a standard viewport and a full-page tall viewport: photo-grounded hero
+  (`trades-van.jpg`), kraft nav/footer, Instrument Serif headline, the
+  "Three steps" / "See what TradePulse creates" / "Review, edit, send,
+  done" / pricing sections all rendering the kraft palette and tokens from
+  this branch, not the old navy/pale-cream theme.
+- `https://tradepulse-estimates.com/contact` -- also confirmed live: kraft
+  header/footer chrome and the correctly on-dark hero section from this
+  branch's final sweep.
+- No SSO interstitial on either page -- this is the real public production
+  render.
+
+### Branch left alone
+
+`redesign/hero-photo-kraft` was not deleted or otherwise touched --
+that's Greg's call, not automatic. Suggest deleting it once he's
+comfortable the merge is stable, since its own history is fully preserved
+inside the `--no-ff` merge commit on `main` either way.
+
+### What's on production now (summary of the whole redesign thread)
+
+See the prior "READY FOR REVIEW" entry immediately below for full detail.
+In short: the marketing site's navy-gradient hero and pale-cream/slate
+chrome is replaced sitewide with a photo-grounded hero and a warm kraft
+palette (surface `#F3E8D0`, hairline/border `#C9B384`, muted-ink
+`#5C4A2E`, ink `#26211B` on light; `#F7F2E9`/`#9A8F79` on dark), across
+five sessions: the initial redesign, a mobile-nav/eyebrow/de-carding
+round, a Final-CTA-band token fix, a Starter-card/six-card-removal/FAQ-
+accordion round, and a final sitewide stray-token sweep. The live demo
+widget and the trade-example tabs were never touched, verified every
+round via `git diff`. `#0D1B2E` (old navy) remains by deliberate choice in
+the nav CTA, Pro pricing card, Subscribe button, and the navy-on-amber
+button-text pairing used sitewide -- a separate design decision, not part
+of this cleanup, reported in full in `SPEC.md`.
+
+**Exact next action:** none required. This closes out the redesign
+thread. Optional, Greg's call: delete the now-merged
+`redesign/hero-photo-kraft` branch.
 
 ## READY FOR REVIEW: Final pre-merge sweep, sitewide stray-token audit (2026-08-30 22:15 PT)
 
