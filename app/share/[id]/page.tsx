@@ -25,9 +25,9 @@ export default async function ShareEstimatePage({
 
   if (!estimate) {
     return (
-      <div className="min-h-dvh bg-slate-50 flex flex-col items-center justify-center gap-4 px-5 text-center">
+      <div className="min-h-dvh bg-[#F3E8D0] flex flex-col items-center justify-center gap-4 px-5 text-center">
         <RowLockup variant="light" iconSize={44} textSize={36} />
-        <p className="text-slate-400 text-base mt-6">Estimate not found.</p>
+        <p className="text-[#5C4A2E] text-base mt-6">Estimate not found.</p>
       </div>
     );
   }
@@ -66,16 +66,16 @@ export default async function ShareEstimatePage({
   }
 
   return (
-    <div className="min-h-dvh bg-slate-50 flex flex-col">
+    <div className="min-h-dvh bg-[#F3E8D0] flex flex-col">
       <main className="flex-1 px-5 pt-6 pb-20 max-w-2xl mx-auto w-full">
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+        <div className="bg-white rounded-2xl border border-[#C9B384] shadow-sm p-6">
 
           {/* Business letterhead */}
           {(logoUrl || businessName || estimate.prepared_by) && (
-            <div className="pb-5 mb-5 border-b border-slate-200">
+            <div className="pb-5 mb-5 border-b border-[#C9B384]">
               <CompanyEstimateHeader logoUrl={logoUrl} businessName={businessName} />
               {estimate.prepared_by && (
-                <p className={`text-sm text-zinc-500 ${logoUrl || businessName ? "mt-2" : ""}`}>
+                <p className={`text-sm text-[#5C4A2E] ${logoUrl || businessName ? "mt-2" : ""}`}>
                   {estimate.prepared_by}
                 </p>
               )}
@@ -86,12 +86,12 @@ export default async function ShareEstimatePage({
           <span className="inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-600">
             Estimate
           </span>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight leading-tight text-zinc-900 break-words">
+          <h1 className="mt-2 text-2xl font-bold tracking-tight leading-tight text-[#26211B] break-words">
             {estimate.title}
           </h1>
 
           {/* Customer details */}
-          <div className="text-slate-700 text-xs leading-relaxed mb-5 border-t border-slate-100 pt-4">
+          <div className="text-[#5C4A2E] text-xs leading-relaxed mb-5 border-t border-[#C9B384] pt-4">
             {estimate.customer_name && (
               <span className="block">Prepared for: {estimate.customer_name}</span>
             )}
@@ -118,11 +118,11 @@ export default async function ShareEstimatePage({
 
           {/* Outside the pricing table on purpose: a currency code inside an
               amount cell would break parseCost() on a later edit. */}
-          <p className="mt-4 text-xs text-slate-500">{allAmountsInLabel(estimateCurrency)}</p>
+          <p className="mt-4 text-xs text-[#5C4A2E]">{allAmountsInLabel(estimateCurrency)}</p>
 
           {estimate.include_photos && photoUrls.length > 0 && (
             <div className="mt-6">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Photos</h2>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-[#5C4A2E]">Photos</h2>
               <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
                 {photoUrls.map((url) => (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -130,7 +130,7 @@ export default async function ShareEstimatePage({
                     key={url}
                     src={url}
                     alt="Job site photo"
-                    className="aspect-square w-full rounded-xl border border-slate-200 object-cover"
+                    className="aspect-square w-full rounded-xl border border-[#C9B384] object-cover"
                   />
                 ))}
               </div>
@@ -151,13 +151,13 @@ export default async function ShareEstimatePage({
       </main>
 
       <footer className="px-5 py-4 text-center">
-        <p className="text-slate-400 text-xs">
+        <p className="text-[#5C4A2E] text-xs">
           Powered by{" "}
           <a
             href={CANONICAL_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-slate-500 hover:text-amber-500 transition-colors font-medium"
+            className="text-[#5C4A2E] hover:text-amber-500 transition-colors font-medium"
           >
             TradePulse
           </a>

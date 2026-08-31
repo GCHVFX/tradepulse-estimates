@@ -32,7 +32,7 @@ export function DownloadPdfButton({
           currency,
         })
       }
-      className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+      className="w-full bg-[#26211B] hover:opacity-90 text-white font-semibold text-base rounded-xl py-4 transition-opacity min-h-[56px]"
     >
       Download PDF
     </button>

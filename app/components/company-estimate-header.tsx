@@ -24,7 +24,7 @@ export function CompanyEstimateHeader({
         />
       )}
       {businessName && (
-        <p className="text-xl font-bold text-zinc-800 leading-tight">
+        <p className="text-xl font-bold text-[#26211B] leading-tight">
           {businessName}
         </p>
       )}

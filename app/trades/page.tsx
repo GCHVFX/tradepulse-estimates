@@ -52,7 +52,7 @@ export default function TradesPage() {
         <RowLockup variant="light" iconSize={44} textSize={36} />
         <Link
           href="/login"
-          className="text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors"
+          className="text-sm font-medium text-[#5C4A2E] hover:text-[#26211B] transition-colors"
         >
           Sign in
         </Link>
@@ -65,10 +65,10 @@ export default function TradesPage() {
           <h1 className="text-3xl sm:text-4xl font-bold leading-tight tracking-tight" style={{ color: "#0D1B2E" }}>
             Send a professional estimate in 30 seconds
           </h1>
-          <p className="mt-2 text-sm font-semibold text-slate-500">
+          <p className="mt-2 text-sm font-semibold text-[#5C4A2E]">
             Built for plumbers, electricians, and contractors.
           </p>
-          <p className="mt-2 text-base text-slate-500 leading-relaxed">
+          <p className="mt-2 text-base text-[#5C4A2E] leading-relaxed">
             Type the job. Get a quote ready to send. Works from your phone.
           </p>
         </div>
@@ -92,12 +92,12 @@ export default function TradesPage() {
           >
             Try Free for 14 Days
           </Link>
-          <p className="text-xs text-slate-400">No card required.</p>
+          <p className="text-xs text-[#5C4A2E]">No card required.</p>
         </div>
 
         {/* How it works */}
         <div className="mt-14 w-full max-w-sm">
-          <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-6 text-center">How it works</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-[#5C4A2E] mb-6 text-center">How it works</p>
           <ul className="flex flex-col gap-4">
             {[
               "Describe the job in plain English. Get a quote ready to send in 30 seconds.",
@@ -122,7 +122,7 @@ export default function TradesPage() {
         </div>
 
         {/* Trust line */}
-        <p className="mt-12 text-sm text-slate-400 text-center max-w-xs leading-relaxed">
+        <p className="mt-12 text-sm text-[#5C4A2E] text-center max-w-xs leading-relaxed">
           Built for contractors who quote jobs in the truck, not at a desk.
         </p>
 
@@ -137,7 +137,7 @@ export default function TradesPage() {
       </main>
 
       {/* Mobile CTA — fixed bottom */}
-      <div className="fixed bottom-0 left-0 right-0 sm:hidden px-6 pb-8 pt-4 bg-white border-t border-slate-100">
+      <div className="fixed bottom-0 left-0 right-0 sm:hidden px-6 pb-8 pt-4 bg-white border-t border-[#C9B384]">
         <Link
           href="/signup?next=%2Fnew"
           className="flex items-center justify-center w-full rounded-2xl py-4 text-base font-bold transition-opacity hover:opacity-90"
@@ -145,21 +145,21 @@ export default function TradesPage() {
         >
           Try Free for 14 Days
         </Link>
-        <p className="text-center text-xs text-slate-400 mt-2">No card required.</p>
+        <p className="text-center text-xs text-[#5C4A2E] mt-2">No card required.</p>
       </div>
 
-      <footer className="hidden sm:block text-center py-8 text-sm text-slate-400">
+      <footer className="hidden sm:block text-center py-8 text-sm text-[#5C4A2E]">
         TradePulse Estimates,{" "}
-        <a href={CANONICAL_URL} className="hover:text-slate-600 transition-colors">
+        <a href={CANONICAL_URL} className="hover:text-[#26211B] transition-colors">
           {CANONICAL_DOMAIN}
         </a>
       </footer>
 
-      <footer className="border-t border-zinc-800 mt-16 py-6 px-5 text-center">
-        <div className="flex items-center justify-center gap-6 text-xs text-zinc-600 flex-wrap">
-          <a href={`mailto:${SUPPORT_EMAIL}`} className="hover:text-zinc-400 transition-colors">{SUPPORT_EMAIL}</a>
-          <a href="/terms" className="hover:text-zinc-400 transition-colors">Terms of Service</a>
-          <a href="/privacy" className="hover:text-zinc-400 transition-colors">Privacy Policy</a>
+      <footer className="border-t border-[#C9B384] mt-16 py-6 px-5 text-center">
+        <div className="flex items-center justify-center gap-6 text-xs text-[#5C4A2E] flex-wrap">
+          <a href={`mailto:${SUPPORT_EMAIL}`} className="hover:text-[#26211B] transition-colors">{SUPPORT_EMAIL}</a>
+          <a href="/terms" className="hover:text-[#26211B] transition-colors">Terms of Service</a>
+          <a href="/privacy" className="hover:text-[#26211B] transition-colors">Privacy Policy</a>
         </div>
       </footer>
     </div>

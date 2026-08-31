@@ -1,6 +1,354 @@
 # TradePulse handoff
 
-Updated: 2026-08-29 02:46 PT (FINAL DECISION on the footer mark: Greg rejected Mark C sitewide, Mark A now has a documented small-size treatment and is used at every size everywhere, including the footer -- round 1's "Mark C only under 40px" rule is superseded, see below)
+Updated: 2026-08-30 22:15 PT (Final pre-merge sweep complete: sitewide stray-token audit found and fixed 4 more genuine misses beyond this session's named routes, including the shared EstimateMarkdown renderer. Branch is ready for review -- NOT merged to main, Greg reviews the live preview himself)
+
+## READY FOR REVIEW: Final pre-merge sweep, sitewide stray-token audit (2026-08-30 22:15 PT)
+
+**Status:** implemented on branch `redesign/hero-photo-kraft`, pushed, **not
+merged to main**. This was requested and treated as the last change before
+merge. Full per-file detail is in `SPEC.md`'s final addendum; this entry
+summarizes the sweep plus the whole branch for PR review.
+
+### What this pass did
+
+Audited the entire codebase (not just routes touched by prior sessions) for
+literal hex values or Tailwind classes from the default slate/gray/zinc/
+neutral/stone palettes, including the marketing routes that predate this
+branch's work: `/trades`, `/electricians`, `/plumbers`, `/contact`,
+`/share/[id]`, `/plumbing-cost`, plus their untested siblings
+`/electrical-cost` and `/plumbing-estimate-template`.
+
+Found and migrated genuine misses in: `app/trades/page.tsx`,
+`app/electricians/page.tsx`, `app/plumbers/page.tsx` (6-7 stray tokens
+each), `app/plumbing-cost/page.tsx` and `app/electrical-cost/page.tsx` (12
+each), `app/plumbing-estimate-template/page.tsx`, `app/contact/page.tsx` (7),
+`app/share/[id]/page.tsx` (5), `app/page.tsx` (18 further instances beyond
+an earlier session's single fix), and `app/components/faq-accordion.tsx`
+(1 miss from an earlier round).
+
+The sitewide part of the grep (not restricted to the named routes) also
+caught three shared components nobody had checked: `CopyEmailButton.tsx`
+(renders only on `/contact`), `company-estimate-header.tsx` (renders on a
+white card in three places including `/share/[id]`), and -- the largest
+find -- `estimate-markdown.tsx`, the single source-of-truth
+`EstimateMarkdown` renderer that draws the bulk of every estimate's visible
+content and was entirely unmigrated (every element renderer: h1/h2/h3/p/
+li/strong/table/thead/th/td/hr/blockquote). Also fixed
+`download-pdf-button.tsx`'s zinc button, used exclusively on `/share/[id]`.
+All colour-only changes, no layout/copy/structural changes anywhere.
+
+`#0D1B2E` (the old navy) was reported everywhere it appears -- it's a much
+wider footprint than "nav CTA, Pro card, Subscribe button" (it's also the
+standard navy-on-amber button-text pairing used on every CTA sitewide, plus
+two full section backgrounds) -- but per the brief, none of it was touched.
+The trade-example tabs (`TradeExamples.tsx`) were confirmed untouched, a
+fourth time this branch.
+
+**Scope-note flag:** the brief said "this branch has fourteen prior
+sessions." `git log main..HEAD` shows four commits (`9088b86`, `8aa100d`,
+`c45af7a`, `578e653`). Recording the discrepancy rather than repeating an
+unverified number -- flagging for Greg, not asserting either number is
+right.
+
+### Verification
+
+`npx tsc --noEmit` and `npx next build` both clean. Screenshots at 375px
+and desktop for every section a fix landed in this pass. WCAG contrast
+recomputed (manual luminance formula) for every text/background pairing
+touched this session -- all pass AA, 5.00:1 to 15.96:1. Demo widget
+(`EstimateDemo*.tsx`) and `TradeExamples.tsx` re-hashed / `git diff main`
+confirmed empty -- untouched. Full detail in `SPEC.md`.
+
+### Branch summary, for PR review (what changed across all sessions on this branch)
+
+`redesign/hero-photo-kraft` replaces the marketing site's old navy-gradient
+hero and pale-cream/slate chrome with a warm kraft palette (surface
+`#F3E8D0`, hairline/border `#C9B384`, muted-ink `#5C4A2E`, ink `#26211B` on
+light; `#F7F2E9`/`#9A8F79` on dark) and a photo-grounded hero
+(`public/trades-van.jpg`) in place of the old gradient. In order:
+
+1. **Hero photo and kraft palette redesign** -- new hero background, new
+   Instrument Serif headline treatment, kraft nav/footer chrome replacing
+   pale cream, badge/eyebrow removed above the headline.
+2. **Mobile nav rebuild, mobile hero crop, eyebrow removal, "How it works"
+   de-carding** -- hamburger menu for mobile nav, hero photo repositioned
+   for mobile framing, remaining eyebrow labels removed, the "How it
+   works" section un-cardified.
+3. **Final CTA band migrated** from the old navy to the `#26211B` ink
+   token.
+4. **Starter pricing card token fix, six-card redundant section removed,
+   FAQ converted to an accordion** -- the Starter card's last unmigrated
+   grey token fixed, a six-card feature grid removed after confirming its
+   content duplicated the four-card workflow section above it, FAQ list
+   converted to a collapsible accordion (`faq-accordion.tsx`).
+5. **This pass: final sitewide stray-token sweep** -- as described above.
+
+Throughout every session: the live demo widget
+(`EstimateDemo.tsx`/`EstimateDemoElectrical.tsx`/`EstimateDemoTrades.tsx`)
+and the trade-example tabs (`TradeExamples.tsx`) were never touched,
+verified by `git diff main` every single round including this one.
+
+**This branch is ready for review.** Do not merge to main -- Greg reviews
+the live Vercel preview himself before merging.
+
+**Exact next action:** commit this session's changes, push to
+`origin/redesign/hero-photo-kraft`, confirm the new Vercel preview
+deployment reaches READY, hand Greg the preview URL. No further code
+changes are planned on this branch pending his review.
+
+## Starter card token, six-card redundancy, FAQ accordion (2026-08-30 20:29 PT)
+
+**Status:** implemented on branch `redesign/hero-photo-kraft`, not merged to
+main. Full detail (exact computed values, the copy comparison) is in
+`SPEC.md`'s addendum; summarized here.
+
+**1. Starter card -- same bug pattern as the CTA band, one session back.**
+Computed-style readback (not guessed): border `rgb(226, 232, 240)`
+(`#E2E8F0`, Tailwind slate-200), button background `rgb(100, 116, 139)`
+(`#64748B`, Tailwind slate-500). Another section nothing had explicitly
+scoped in. One correction made along the way: nav's "Start Free" is navy
+(`#0D1B2E`), not orange -- the actual orange used by every other primary
+CTA is `#f59e0b`, confirmed from the hero button, and that's what got
+used. Border -> `#C9B384`, button -> `#f59e0b` background with `#0D1B2E`
+text (matching the hero CTA's exact pairing, since plain white text on
+`#f59e0b` doesn't have the contrast to carry it). Re-read after: `rgb(201,
+179, 132)`, `rgb(245, 158, 11)`, `rgb(13, 27, 46)` -- exact matches. Pro
+card's border re-confirmed unchanged (`rgb(13, 27, 46)`, still `#0D1B2E`
+-- itself an unmigrated old value, left alone since it was out of scope).
+Screenshotted before/after at desktop, confirmed again at 375px.
+
+**2. Six-card grid removed -- redundancy verified by reading the copy,
+not taken on say-so.** `WORKFLOW_STEPS`'s "What the customer sees" and
+`BENEFITS`'s "Send how you want" / "Professional output" state the same
+"no login, view on any device, looks professional" claim twice. Removed
+the whole section plus the now-orphaned `BENEFITS` constant and the
+`.card-lift`/`.gradient-border` CSS (grepped first to confirm nothing else
+used them -- correct, they didn't).
+
+**3. FAQ is now an accordion.** New `app/components/faq-accordion.tsx`
+(client component). Same kraft/hairline box treatment, copy and order
+unchanged, just interactive now. Verified by reading `aria-expanded`
+directly off the DOM through three sequential clicks -- closed by
+default, exactly one open at a time, opening a second closes the first.
+Not inferred from a screenshot.
+
+### Verification actually run (2026-08-30 20:29 PT)
+
+- `npx tsc --noEmit` -- exit 0.
+- `npx next build` -- exit 0.
+- Computed-style readback for the Starter card, before and after.
+- Both content sections' actual copy read before removing either one.
+- `aria-expanded` read via JS after each accordion click.
+- Screenshots at 375px and desktop for all three changes.
+- Demo widget re-hashed identical to baseline; `git diff main` on all
+  three `EstimateDemo*.tsx` files still empty.
+- `TradeExamples.tsx` confirmed untouched via `git diff main` -- empty.
+
+### Next action
+
+Same as before: review the Vercel preview, merge only after sign-off.
+Also noted, not fixed: the Starter card's other text colours (`STARTER`
+label, price, caption, feature list) are the same generic Tailwind grays
+as the border/button were, and the Pro card's border is still the
+unmigrated `#0D1B2E`. Neither was in scope this round.
+
+
+
+## Final CTA band was still the old navy, not the ink token (2026-08-29 22:40 PT)
+
+**Status:** implemented on branch `redesign/hero-photo-kraft`, not merged to
+main. Full detail (exact computed values, the full contrast table) is in
+`SPEC.md`'s addendum; summarized here.
+
+Checked via computed-style readback (not a class-name guess): the "Quote
+faster. / Win more jobs." section resolved to
+`linear-gradient(135deg, rgb(13,27,46) 0%, rgb(26,46,71) 100%)` --
+`#0D1B2E`/`#1A2E47`, the pre-redesign navy. Not close to `#26211B`, not a
+rounding difference -- a different hue entirely (cool navy vs. warm
+near-black). It had never been touched by any of this branch's work because
+nobody had explicitly scoped it in. Fixed to a solid `#26211B` (confirmed
+by re-reading the computed style afterward: `rgb(38, 33, 27)`, exact).
+
+**One correction made along the way:** the question that started this
+check assumed the demo widget also used `#26211B`. It doesn't -- the demo
+widget's own background is `#09090b`, a separate value, untouched, unrelated
+to the kraft/ink tokens. Only the hero scrim actually matches `#26211B`.
+Said so plainly rather than letting the premise stand uncorrected.
+
+Computed exact contrast ratios (not estimated) for all 5 text elements in
+the section, before and after. Every element that passed before still
+passes with more margin after. One pre-existing failure was found and is
+**not fixed**, since it wasn't part of what was asked: the "14-day free
+trial" line at 30% white opacity measures 2.60:1 against the old
+background and 2.70:1 against the new one -- both well under the 4.5
+needed for 14px text. Not a regression from this change; flagged for a
+separate decision.
+
+Screenshotted the full page before and after (tall-viewport workaround for
+the same scrolled-capture bug noted in the previous session) -- the band
+visibly shifts from navy-blue to warm near-black, matching the hero and
+footer.
+
+### Verification actually run (2026-08-29 22:40 PT)
+
+- `npx tsc --noEmit` -- exit 0.
+- `npx next build` -- exit 0.
+- Computed-style readback before and after.
+- Exact WCAG contrast computed for all 5 text elements, before/after.
+- Full-page screenshots before and after.
+- Demo widget re-hashed identical to baseline; `git diff main` on all
+  three `EstimateDemo*.tsx` files still empty.
+
+### Next action
+
+Same as before: review the Vercel preview, merge only after sign-off.
+Separately, Greg should decide what to do about the pre-existing 14-day
+trial line contrast failure noted above -- not fixed here, flagged only.
+
+
+
+## Four fixes on the hero/kraft branch: nav, mobile photo, eyebrows, de-carding (2026-08-29 22:04 PT)
+
+**Status:** implemented on branch `redesign/hero-photo-kraft`, not merged to
+main. Full detail and every measurement is in `SPEC.md`'s addendum section
+(added 2026-08-29 22:04 PT) rather than duplicated here.
+
+**Process note, stated plainly:** the brief said to write the SPEC.md
+addendum before implementing. This session went straight to investigation
+and coding instead, and the addendum was written after the fact once that
+was noticed. No harm to the work itself, but the ordering was wrong and
+that's worth being honest about rather than quietly fixing it and moving on.
+
+### What actually changed
+
+1. **Mobile nav rebuilt.** New `app/components/marketing-nav.tsx` (client
+   component -- needs open/close state; `app/page.tsx` stays a server
+   component and passes down plain values, never the Supabase user object).
+   Below `sm:`, "How it works" / "Pricing" / "Sign in" collapse into a
+   hamburger menu; the primary CTA stays visible at every width. Root cause
+   was two-fold: those links being `hidden sm:block` **predates this branch**
+   (verified via `git show main:app/page.tsx` before assuming otherwise),
+   but the wordmark lockup alone measures 313px against a 327px-wide mobile
+   nav -- adding anything else was guaranteed to overflow regardless of the
+   hamburger. Added a scoped `!important` font-size override for just this
+   nav instance (17px, measured to leave a real 7px/20px gap) rather than
+   touching `wordmark.tsx`, which six other places depend on at tuned sizes.
+2. **Mobile hero photo re-positioned.** `56% 28%`, in its own
+   `max-width: 767px` rule, iterated against three real screenshots (the
+   first two attempts were visibly worse, not silently discarded).
+   Previously the desktop-tuned `32% 18%` was the only position mobile ever
+   got, because mobile fell through to the base rule unscoped.
+3. **Eyebrow labels removed, 7 of them.** Grepped the shared class
+   (`text-xs font-semibold uppercase tracking-widest mb-3`): 9 matches
+   before, 2 after (the unrelated Starter/Pro pricing-plan labels, correctly
+   left alone). All 7 named strings confirmed gone from the file.
+4. **"How it works" de-carded.** Bordered/rounded cards with large
+   orange "01"/"02"/"03" numerals and a connecting-line-and-arrow decoration
+   replaced with a `divide-y`/`divide-x` hairline layout and a small inline
+   step number. Copy unchanged. The Benefits section further down still
+   uses the same `card-lift`/`gradient-border` CSS this removed from the
+   steps section -- confirmed via grep before assuming it was safe to leave
+   that CSS in place.
+
+### Verification actually run (2026-08-29 22:04 PT)
+
+- `npx tsc --noEmit` -- exit 0.
+- `npx next build` -- exit 0, all routes built.
+- Screenshots at 375px (both mobile fixes: nav collapsed, menu open, hero
+  subject visible) and at both 375px and 1440px (eyebrow removal,
+  de-carded steps).
+- Eyebrow-label grep count reported as evidence: **9 before, 2 after**.
+- Demo widget re-hashed: still identical to the untouched baseline;
+  `git diff main` on all three `EstimateDemo*.tsx` files still empty.
+- Re-ran the hero contrast audit from the prior session after the mobile
+  position changed (different photo pixels now sit under the same text) --
+  all real elements pass. One apparent failure in the audit script itself
+  (the CTA button's own text, which the script incorrectly checked against
+  the photo instead of the button's opaque background) was investigated and
+  is not a real regression.
+
+### Next action
+
+Same as before: review the Vercel preview deployment, merge to `main` only
+after sign-off. `public/trades-van.png` is no longer in the working tree --
+gone since the last session flagged it as safe to delete, not touched by
+this one.
+
+
+
+## Hero photo and kraft palette redesign (2026-08-29 21:12 PT)
+
+**Status:** implemented on branch `redesign/hero-photo-kraft`, pushed, **not
+merged to main**. `main` is untouched. Spec is in `SPEC.md`; full detail and
+the measured numbers live there rather than being duplicated here.
+
+Marketing site moves off the navy-gradient hero and white/slate chrome onto
+a photo-grounded hero (`public/trades-van.jpg`) with a warm kraft palette
+(#F3E8D0 surface, #EADCC0 deeper page, #C9B384 border, #5C4A2E muted text).
+Hero H1 switches to Instrument Serif regular; the pill eyebrow badge is
+removed and its words relocated below the trial line.
+
+### The thing worth remembering
+
+The spec's scrim and background-position values were explicitly flagged in
+it as unverified starting points, and **both were wrong**. Measured contrast
+by sampling the real photo pixels into a canvas and compositing them under
+the scrim at each text element's actual rendered position: the orange
+headline scored 2.38:1 on desktop (needs 3.0) and the relocated "built for
+contractors" line 4.42:1 on mobile (needs 4.5). Neither failure was visible
+in a screenshot -- both looked perfectly fine. Retuned the scrim and added a
+separate stronger near-vertical scrim below 768px (the layout stacks there,
+so the text spans the full photo width and the spec's single left-to-right
+scrim doesn't apply). All six hero text elements now pass at both
+breakpoints.
+
+Two things the token swap would have missed on a visual pass: `.gradient-border`
+had `background: white` hardcoded in the page's own CSS block (would have
+stayed white on kraft), and `.dot-grid` is shared with the dark Final CTA
+section, so its CSS had to stay even though the hero no longer uses it.
+
+### Scope conflict, resolved with Greg before coding
+
+`SPEC.md` contradicted itself: the Palette decision said to warm every
+light section between hero and footer, while Explicitly-out-of-scope
+excluded "anything below the hero" on the grounds of "lack of visibility
+into current markup" -- a reason that didn't apply once the markup was in
+hand. Asked rather than guessed; Greg chose to warm the mid sections too,
+limited to background/border/muted-text tokens with no structural changes.
+Recorded in `SPEC.md` under "Clarification resolved before implementation".
+
+### Demo widget: proven untouched, not just asserted
+
+Hashed all three `EstimateDemo*.tsx` files before starting and re-hashed
+after; identical, and `git diff main` on those paths is empty. A temporary
+opacity change used to check what sits behind the widget was applied in the
+browser DOM only and reverted, never to a file.
+
+### Verification actually run (2026-08-29 21:12 PT)
+
+- `npx tsc --noEmit` -- exit 0.
+- `npx next build` -- exit 0, all routes built.
+- Screenshots at 375px and 1440px, plus a full-page capture confirming the
+  kraft treatment through every mid section and the footer.
+- Computed-style readback confirming nav/footer/band tokens resolve to the
+  exact spec hex values.
+- Subject-occlusion check: visible phone shell starts at 58.7% of hero
+  width; the person sits clear to its left.
+
+**Note on the preview tooling:** scrolled screenshots come back solid black
+in the Browser pane on this dev server. Confirmed it is not caused by this
+change by reproducing it on `/plumbing-cost`, an untouched page. Worked
+around it with a tall viewport at scroll 0.
+
+### Next action
+
+Review the Vercel preview deployment for the branch. Merge to `main` only
+after sign-off. Also outstanding: `public/trades-van.png` (2.1MB,
+uncompressed) is still in the working tree untracked and was deliberately
+NOT committed -- only the 203KB `.jpg` was. Delete the `.png` if it is no
+longer needed as a source.
+
+
 
 ## FINAL: Mark A used at every size sitewide, including the footer (2026-08-29 02:46 PT)
 
