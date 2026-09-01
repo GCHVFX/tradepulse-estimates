@@ -1,12 +1,21 @@
 # TradePulse handoff
 
-Updated: 2026-09-01 08:11 PT (Canadian pricing badge implemented on branch `feature/canadian-badge`, not yet committed or merged. Unrelated to the redesign thread below, which stays closed out.)
+Updated: 2026-09-01 08:27 PT (Canadian pricing badge committed, merged to main, and pushed to origin/main. Actual Vercel production deployment not independently confirmed -- see status note below. Unrelated to the redesign thread below, which stays closed out.)
 
-## IMPLEMENTED, NOT COMMITTED: Canadian pricing badge, geo-gated (2026-09-01 08:11 PT)
+## MERGED, PUSHED: Canadian pricing badge, geo-gated (2026-09-01 08:27 PT)
 
-**Status:** working tree only, on branch `feature/canadian-badge`, cut from
-`main` after the redesign merge. Nothing committed yet -- commits are only
-made when Greg asks.
+**Status:** committed on `feature/canadian-badge` (`5e1bf78`), pushed to
+`origin/feature/canadian-badge`, then merged into `main` with `--no-ff`
+(merge commit `2def966`, clean, no conflicts -- `feature/canadian-badge`
+was cut directly from `main`'s tip with no divergence, confirmed via
+`git merge-base --is-ancestor` before merging) and pushed to
+`origin/main`. `npx tsc --noEmit` and `npx next build` re-run on the
+merged `main` before pushing -- both clean. Whether this has actually
+reached Vercel production is **not confirmed** -- no deployment status
+was checked after this push (unlike the redesign merge below, which was
+polled via `vercel ls` and fetched live). Confirm via a fresh
+`https://tradepulse-estimates.com` fetch or `vercel ls` before assuming
+it's live.
 
 **What:** a plain-text "Proudly Canadian, priced in CAD" line under the
 "Simple, flat pricing" headline/subhead on `app/page.tsx`, above the
@@ -72,12 +81,13 @@ rather than imported.
 one reused header read split into two variables, one conditional block
 in the pricing section).
 
-**Exact next action:** Greg reviews the diff and decides whether to
-commit. If a real screenshot comparison is wanted before merging, it
-needs a working screenshot path (a real Vercel preview deployment, or a
-browser session outside whatever caused the black-frame capture here) --
-the automated header-level checks above already prove the render logic
-itself is correct.
+**Exact next action:** confirm the Vercel production deployment actually
+picked up `origin/main`'s new tip (`2def966`) -- e.g. `vercel ls` or a
+fresh fetch of `https://tradepulse-estimates.com`'s pricing section --
+since that wasn't checked after this push. Once confirmed, this thread
+is closed; `feature/canadian-badge` can be deleted (Greg's call, same as
+the redesign branch above), its full history already preserved in the
+`--no-ff` merge commit on `main` either way.
 
 ## MERGED AND LIVE: Hero photo and kraft palette redesign (2026-08-31 08:01 PT)
 
