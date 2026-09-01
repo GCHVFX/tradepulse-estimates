@@ -12,6 +12,7 @@ import { headers } from "next/headers";
 import { currencyFromCountry, currencyPrefix, formatMonthlyPlanPrice, planMonthlyPrice } from "@/lib/currency";
 import { CANONICAL_URL } from "@/lib/site-url";
 import { hasSubscriptionAccess, SUBSCRIPTION_ACCESS_COLUMNS } from "@/lib/subscription-access";
+import { isVisitorInCanada } from "@/lib/geo";
 
 export const metadata: Metadata = {
   title: "Estimate Software for Contractors & Trades | TradePulse",
@@ -146,7 +147,11 @@ export default async function LandingPage() {
   // US is USD, and Canada, an unknown country, and a missing header are all
   // CAD. Reading a request header keeps this route rendered per request, so
   // one visitor's country can never be cached and served to another.
-  const currency = currencyFromCountry((await headers()).get("x-vercel-ip-country"));
+  const visitorCountry = (await headers()).get("x-vercel-ip-country");
+  const currency = currencyFromCountry(visitorCountry);
+  // Separate from currency: the "Proudly Canadian" line only ever shows for
+  // a confirmed CA visitor, never as a fallback. See lib/geo.ts.
+  const showCanadianBadge = isVisitorInCanada(visitorCountry);
 
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -442,6 +447,15 @@ export default async function LandingPage() {
             <div className="text-center mb-8">
               <h2 className="text-3xl sm:text-4xl font-bold text-[#26211B]">Simple, flat pricing</h2>
               <p className="mt-4 text-lg text-[#5C4A2E]">No per-estimate fees. No seat charges. Two flat rates.</p>
+              {showCanadianBadge && (
+                <p className="mt-3 flex items-center justify-center gap-1.5 text-sm text-[#5C4A2E]">
+                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M5 21c.5 -4.5 2.5 -8 7 -10" />
+                    <path d="M13 19c-2.733 0 -4.16 -3.11 -5 -5c-1.892 -.84 -4 -1.826 -4 -4.556c1.014 -.644 2.816 -.649 4 -.444c-.312 -2.071 -.37 -4.414 1 -6c2.364 .369 3 4 3 4c1.463 -1.368 4 -2 6 -2c0 2 -.63 4.538 -2 6q 3.687 .996 4 3c-1.586 1.36 -3.933 1.311 -6 1q .19 1.098 -1 4" />
+                  </svg>
+                  Proudly Canadian, priced in CAD
+                </p>
+              )}
             </div>
           </div>
 
