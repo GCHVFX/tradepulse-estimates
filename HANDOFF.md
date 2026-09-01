@@ -1,6 +1,83 @@
 # TradePulse handoff
 
-Updated: 2026-08-31 08:01 PT (Hero photo and kraft palette redesign MERGED to main and LIVE in production at https://tradepulse-estimates.com. Merge commit 8441c84dc075c5f3b2eae85625c087a1b7c41bbf. Whole redesign thread closed out.)
+Updated: 2026-09-01 08:11 PT (Canadian pricing badge implemented on branch `feature/canadian-badge`, not yet committed or merged. Unrelated to the redesign thread below, which stays closed out.)
+
+## IMPLEMENTED, NOT COMMITTED: Canadian pricing badge, geo-gated (2026-09-01 08:11 PT)
+
+**Status:** working tree only, on branch `feature/canadian-badge`, cut from
+`main` after the redesign merge. Nothing committed yet -- commits are only
+made when Greg asks.
+
+**What:** a plain-text "Proudly Canadian, priced in CAD" line under the
+"Simple, flat pricing" headline/subhead on `app/page.tsx`, above the
+Starter/Pro cards. Small line-art maple leaf icon inline, muted
+`#5C4A2E` kraft-palette text colour, no pill/border/background -- matches
+the site's existing no-badge-styling rule. Shows only for a confirmed
+Canadian visitor; renders nothing otherwise (fails closed).
+
+**Geo-gating:** `lib/geo.ts` (new) exports `isVisitorInCanada(country)`,
+reading the same `x-vercel-ip-country` Vercel edge header this page
+already reads for currency detection (`currencyFromCountry` in
+`lib/currency.ts`), via the same `(await headers()).get(...)` call --
+reused, not duplicated, so there's one header read for both. Deliberately
+a separate function from `currencyFromCountry`: that one treats a missing
+or unrecognized country as CAD (fail open, correct for currency defaults);
+this one treats anything other than an exact "CA" (case-insensitive) as
+false (fail closed, correct for a Canada-only claim). Confirmed via
+Context7 docs lookup that `NextRequest.geo`/`.ip` were removed in Next 15
+and their replacement (`geolocation()`/`ipAddress()` from
+`@vercel/functions`) needs a `NextRequest` object, which a Server
+Component like `app/page.tsx` doesn't have -- so reading the header
+directly via `next/headers`, exactly as the existing currency code
+already does, is the correct current approach here, not a workaround.
+
+**Icon:** Tabler Icons' `leaf-maple` outline SVG (MIT licensed), inlined
+as a two-`<path>` SVG, not added as an npm dependency. Same visual
+convention as this project's existing lucide-react icons (24x24 viewbox,
+`stroke="currentColor"`, `strokeWidth="2"`, round caps/joins, `fill="none"`)
+so it sits consistently alongside them, but lucide-react itself has no
+maple-leaf icon (only a generic `Leaf`), which is why this one is inlined
+rather than imported.
+
+**Verification run:**
+- `npx tsc --noEmit` -- clean.
+- `npx next build` -- clean, `/` still correctly dynamic (`ƒ`), same as
+  before this change (it already read a request header for currency).
+- Local dev server on port 3000, direct `curl` with spoofed
+  `x-vercel-ip-country` headers against the real SSR output (a local
+  Next.js dev/start server has no Vercel edge in front of it to strip or
+  inject that header, so a raw `curl -H` reproduces exactly what Vercel's
+  edge would send in production):
+  - No header: badge absent. Confirmed via full-page text dump -- pricing
+    copy runs straight into the Starter card, no gap.
+  - `x-vercel-ip-country: CA`: badge present, correct text and position in
+    the SSR payload.
+  - `x-vercel-ip-country: ca` (lowercase): badge present -- confirms the
+    case-insensitive normalization.
+  - `x-vercel-ip-country: US`: badge absent.
+- Browser-pane screenshot capture returned a solid black frame on every
+  attempt in this session, regardless of page or state (tried
+  scroll_to, tab fronting, resize, reload) -- an environment/capture
+  issue unrelated to this change, not something further retries fixed.
+  Screenshots were not obtained; the curl-based SSR diff and the
+  full-page text dump above are the verification evidence instead.
+- Not independently re-verified: visual regression on cards below the
+  badge. The SSR payload diff shows the badge is one additional
+  conditional element ahead of the existing `grid sm:grid-cols-2 gap-6`
+  card container, which is otherwise byte-identical between the CA and
+  non-CA payloads, so no layout shift is expected -- but this wasn't
+  confirmed with an actual rendered screenshot per the reason above.
+
+**Files changed:** `lib/geo.ts` (new), `app/page.tsx` (import,
+one reused header read split into two variables, one conditional block
+in the pricing section).
+
+**Exact next action:** Greg reviews the diff and decides whether to
+commit. If a real screenshot comparison is wanted before merging, it
+needs a working screenshot path (a real Vercel preview deployment, or a
+browser session outside whatever caused the black-frame capture here) --
+the automated header-level checks above already prove the render logic
+itself is correct.
 
 ## MERGED AND LIVE: Hero photo and kraft palette redesign (2026-08-31 08:01 PT)
 
