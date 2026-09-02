@@ -1,6 +1,96 @@
 # TradePulse handoff
 
-Updated: 2026-09-01 08:27 PT (Canadian pricing badge committed, merged to main, and pushed to origin/main. Actual Vercel production deployment not independently confirmed -- see status note below. Unrelated to the redesign thread below, which stays closed out.)
+Updated: 2026-09-01 21:11 PT (Mobile nav wordmark-crowding bug fixed on branch `fix/mobile-nav-crowding`, not yet committed. Unrelated to the Canadian-badge and redesign threads below, both of which stay closed out.)
+
+## IMPLEMENTED, NOT COMMITTED: Mobile nav wordmark crowds the CTA below ~390px (2026-09-01 21:11 PT)
+
+**Status:** working tree only, on branch `fix/mobile-nav-crowding`, cut from
+`main` after the Canadian-badge merge. Nothing committed yet.
+
+**Bug (confirmed live on production):** at mobile widths, the
+"TradePulse Estimates" wordmark crowded directly into the "Start Free"
+CTA, with the CTA and hamburger button squeezed into what was left. This
+is downstream of, and separate from, the redesign-session's own
+hamburger-menu fix (confirmed live and still working -- that one handled
+"How it works"/"Pricing" disappearing and the CTA landing fully
+off-screen; this is a narrower-width problem it didn't cover).
+
+**Root cause, found by measuring the real rendered nav** (not a visual
+glance -- see the per-width numbers below), on the local dev server via
+`curl`-free direct DOM measurement (`getBoundingClientRect()` /
+`getComputedStyle()` through the browser tooling): the existing
+mobile-only wordmark shrink (`.nav-lockup span { font-size: 17px
+!important }` in `app/page.tsx`, added in the redesign session) is still
+in place and does help, but the nav bar has no explicit `gap` between the
+wordmark and the right-hand CTA/hamburger group -- it relies entirely on
+`justify-between` leaving slack. Below ~390px there wasn't any:
+
+| width | gap (wordmark -> CTA), before fix | CTA rendered width | notes |
+|---|---|---|---|
+| 320px | 0px | 77.3px (natural 98.9px) | CTA and hamburger visibly flex-shrunk narrower than their own padding |
+| 360px | 0px | 93.9px | touching, mild squeeze |
+| 375px | 7.4px | 98.9px (natural) | not squeezed, but no real breathing room |
+| 390px | 22.4px | 98.9px (natural) | already comfortable, untouched by the fix |
+| 412px | 44.4px | 98.9px (natural) | already comfortable, untouched by the fix |
+
+**Fix:** a second, narrower media-query rule in `app/page.tsx`'s existing
+`.nav-lockup` style block: `@media (max-width: 389px) { .nav-lockup span
+span + span { display: none; } }` -- drops "Estimates" (WordmarkText's
+second inner span, targeted structurally via an adjacent-sibling
+selector so `wordmark.tsx`, shared by every other `RowLockup` usage
+sitewide, doesn't need a class added just for this one nav instance),
+leaving just the icon + "TradePulse". That frees ~55px, comfortably more
+than the 15-50px shortfall measured across 320-375px, and restores the
+CTA and hamburger to their natural, uncompressed size everywhere in that
+range -- confirmed by re-measuring post-fix (see verification below).
+390px and up were already comfortable and are untouched: the breakpoint
+is 389px specifically because that's where the natural (no-fix) gap
+crosses from problematic to comfortable.
+
+Considered and rejected: shrinking the font further (already at 17px,
+smaller risks illegibility) and tightening the CTA's padding alone
+(wouldn't close the 320px shortfall on its own). Comment trail for both
+the rationale and the exact measurements lives in `app/page.tsx` right
+above the new rule, plus a short pointer comment in
+`app/components/marketing-nav.tsx` where `.nav-lockup` is used.
+
+**Files changed:** `app/page.tsx` (one new media-query rule + comment,
+same style block as the existing 639px rule), `app/components/marketing-nav.tsx`
+(comment only, no logic change), `tests/smoke/nav-wordmark-no-crowding.spec.ts`
+(new).
+
+**Verification run:**
+- `npx tsc --noEmit` -- clean.
+- `npx next build` -- clean.
+- Real DOM measurement (`getBoundingClientRect`/`getComputedStyle`) against
+  the local dev server at 320, 360, 375, 390, 412px, before and after the
+  fix. After the fix: gaps of 10.8px, 50.8px, 65.8px, 22.4px (unchanged),
+  44.4px (unchanged) respectively; CTA and hamburger render at their
+  natural uncompressed width at every one of those widths; no body
+  horizontal overflow at any width; "Estimates" confirmed hidden below
+  390px and confirmed still visible at 390/412px.
+- Screenshots taken and visually reviewed at all five widths, both before
+  (320/360/375 showing the crowding) and after (all five clean, 390/412
+  visually identical to before since that range wasn't touched).
+- Mobile hamburger dropdown menu (open/close, "How it works"/"Pricing"/
+  "Sign in" links) manually re-tested at 320px post-fix -- still opens,
+  closes, and renders correctly. Not touched by this change, confirmed
+  only as a sanity check.
+- New Playwright smoke test `tests/smoke/nav-wordmark-no-crowding.spec.ts`
+  added per this project's standing bugfix-to-smoke-test habit: 5 tests
+  (320/360/375 must have a real gap and single-line CTA and hidden
+  "Estimates"; 390/412 must keep the full wordmark and a real gap).
+  Proven as a real regression lock, not a tautology: temporarily stashed
+  the fix and reran -- the three narrow-width tests failed with the exact
+  pre-fix numbers (0px, 0px, 7.4px gaps) while 390/412 still passed since
+  that range was never broken; restored the fix and reran clean (5/5
+  passed). Run via `PLAYWRIGHT_BASE_URL="http://localhost:3000" npx
+  playwright test tests/smoke/nav-wordmark-no-crowding.spec.ts`.
+
+**Exact next action:** Greg reviews the diff and decides whether to
+commit. This is a small, scoped fix -- nothing outside `app/page.tsx`'s
+nav-lockup style block, `marketing-nav.tsx`'s comment, and the new test
+file was touched.
 
 ## MERGED, PUSHED: Canadian pricing badge, geo-gated (2026-09-01 08:27 PT)
 

@@ -48,7 +48,10 @@ export function MarketingNav({
         {/* Text shrinks under 640px via the .nav-lockup CSS rule in page.tsx's
             style block -- at 36px the wordmark alone (313px) leaves no room
             for anything else in a 375px-wide nav. Icon stays 44px; only the
-            text shrinks, so Mark A's own 40px-and-up treatment is untouched. */}
+            text shrinks, so Mark A's own 40px-and-up treatment is untouched.
+            Below 390px, that same rule block also drops "Estimates" --
+            the 17px shrink alone still wasn't enough room at 320-375px,
+            see page.tsx for the measurements. */}
         <span className="nav-lockup">
           <RowLockup variant="light" iconSize={44} textSize={36} />
         </span>
