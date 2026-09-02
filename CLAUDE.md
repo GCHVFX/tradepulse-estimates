@@ -4,6 +4,12 @@ TradePulse Estimates turns a short job description into a professional estimate 
 
 ---
 
+## Critical Rules
+
+- Never sign up a test/throwaway account by hand through `/signup`. This project's `.env.local` runs a LIVE Stripe key, not test mode, any signup creates a real Stripe Customer and Subscription. Always use the `signUpFreshAccount()` helper in `tests/smoke/helpers.ts` (its safety gate lives in `tests/smoke/smoke-safety.ts`) for any testing that requires an authenticated account, and clean it up the same way the smoke suite does. See DECISIONS.md for the incident this rule came from.
+
+---
+
 ## Stack
 
 - Next.js (App Router), TypeScript, Tailwind CSS, shadcn/ui
