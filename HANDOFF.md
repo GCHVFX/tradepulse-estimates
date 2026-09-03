@@ -1,6 +1,6 @@
 # TradePulse handoff
 
-Updated: 2026-09-02 20:41 PT (merged `fix/mobile-nav-crowding`, `fix/legal-pages-kraft-and-disclosures`, and `fix/csv-import-column-matching` into `main`, pushed to `origin/main`. Production deployment `dpl_G2YEoF1AJUsQdDYk4Sj4AhoCvssE` (commit `52bafd1`) reached Ready, aliased to `tradepulse-estimates.com`, confirmed live by fetching the real canonical URL directly (not assumed from the API alone) -- homepage 200, and `/privacy` actually serving the new `bg-white` light theme and the new "approximate location" disclosure text. **The Stripe cleanup action item below is still open, separate, and unresolved -- check it.** Entries for all three merged branches kept below, most recent first. Unrelated to the Canadian-badge and redesign threads further down, both of which stay closed out.)
+Updated: 2026-09-02 21:31 PT (the Stripe cleanup item below is now resolved -- confirmed directly in the Stripe Dashboard on 2026-09-01, 10:04:34pm: customer permanently deleted, subscription cancelled. That confirmation happened outside any Claude Code session, so the doc had kept flagging it as open until now. Prior entry: merged `fix/mobile-nav-crowding`, `fix/legal-pages-kraft-and-disclosures`, and `fix/csv-import-column-matching` into `main`, pushed to `origin/main`. Production deployment `dpl_G2YEoF1AJUsQdDYk4Sj4AhoCvssE` (commit `52bafd1`) reached Ready, aliased to `tradepulse-estimates.com`, confirmed live by fetching the real canonical URL directly (not assumed from the API alone) -- homepage 200, and `/privacy` actually serving the new `bg-white` light theme and the new "approximate location" disclosure text. Entries for all three merged branches kept below, most recent first. Unrelated to the Canadian-badge and redesign threads further down, both of which stay closed out.)
 
 ## Rates screen: "Common line items" + "Import from CSV" merged into one section (2026-09-01 22:30 PT, committed 2026-09-02 20:24 PT, merged to main 2026-09-02)
 
@@ -61,9 +61,9 @@ into one section:
 CSV-fix changes from the entry below, on the same branch, same commit).
 
 **Exact next action:** none required -- committed, pushed, and merged to
-`main`. Separately, still resolve the open Stripe cleanup item below.
+`main`. The Stripe cleanup item below is now resolved too.
 
-## ACTION NEEDED: a live Stripe customer/subscription leaked during manual testing this session, needs manual cleanup (2026-09-01 22:11 PT)
+## RESOLVED: a live Stripe customer/subscription leaked during manual testing this session, has been cleaned up (2026-09-01 22:11 PT, resolved 2026-09-01 22:04:34 PT)
 
 **What happened:** verifying the CSV import fix below needed a logged-in
 account, so a throwaway account was created by hand through the real
@@ -94,12 +94,14 @@ file.
   this wasn't confirmed, only inferred, and is reported as uncertain
   rather than assumed.
 
-**Exact next action, and it's real (not just tidiness): check the Stripe
-Dashboard directly for customer `cus_VBTCpjtJk4olNy` / subscription
-`sub_1UB6GRQ45KFNqa8xckBhcJyA` and cancel/delete it if it exists.** A
-trial with no payment method attached typically can't be charged, but
-that wasn't independently confirmed either -- verify directly rather than
-assuming it's harmless.
+**Resolved:** Greg checked the Stripe Dashboard directly for customer
+`cus_VBTCpjtJk4olNy` / subscription `sub_1UB6GRQ45KFNqa8xckBhcJyA`. The
+customer page shows "This customer account has been permanently
+deleted," and the event log shows the subscription cancelled, both
+timestamped 2026-09-01, 10:04:34pm. No further action needed. This
+confirmation happened outside any Claude Code session (directly in the
+Stripe Dashboard), which is why this entry kept getting carried forward
+as open in every subsequent session update until now.
 
 **Process fix applied for the rest of this session:** the long-running
 dev server (same process, already running before this session started)
