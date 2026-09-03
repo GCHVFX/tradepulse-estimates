@@ -1,6 +1,70 @@
 # TradePulse handoff
 
-Updated: 2026-09-02 21:48 PT (merged `fix/trade-tabs-mobile-overflow` (be3f384, merge 84c7196) and `fix/mobile-hero-photo-crop` (7054ec7, merge 423c210) into `main` with `--no-ff` -- Greg explicitly opted to skip manual preview review for these two, small/already-verified/no real traffic on the app right now. Pushed to `origin/main`, production deployment `dpl_95VHSmrHqYFXrFcTKSXG3dXEX4vT` (commit `423c210`) reached Ready, aliased to `tradepulse-estimates.com`, and **confirmed live by fetching the real canonical URL directly**: the hero's mobile CSS shows `background-position: 56% 24%; background-size: 140%`, and the trade-tabs `role="tablist"` carries the `max-[379px]:justify-start max-[379px]:overflow-x-auto` classes -- both fixes' own fingerprints, not just a green deploy status. The Stripe cleanup item further below is resolved too -- confirmed directly in the Stripe Dashboard on 2026-09-01, 10:04:34pm: customer permanently deleted, subscription cancelled. That confirmation happened outside any Claude Code session, so the doc had kept flagging it as open until now. Unrelated to the mobile-nav/legal-pages/CSV-import work below it, all of which is already merged to `main` and confirmed live in production.)
+Updated: 2026-09-02 22:14 PT (Hero photo crop v2 fixed on branch `fix/mobile-hero-photo-crop-v2`, committed, **not merged -- explicitly held for Greg's manual review**, per his own instruction that passing checks alone wasn't enough sign-off on the last two rounds. The live crop (`56% 24%`, `140%`) showed the phone but cut his head off entirely; see the entry below for the fix and how it was found. A second branch, `fix/trade-tabs-scroll-affordance`, is in progress separately for the trade-tabs fade-out affordance -- also to be held for review, not merged. Unrelated to the mobile-nav/legal-pages/CSV-import/trade-tabs-overflow/hero-crop-v1 work above it, all of which is already merged to `main` and confirmed live in production.)
+
+## Mobile hero photo crop v2: head was missing from the frame (2026-09-02 22:14 PT)
+
+**Status:** implemented on new branch `fix/mobile-hero-photo-crop-v2`, cut
+from `main` at `d2b8605`. Committed. **Not merged -- do not merge without
+Greg reviewing this one specifically.**
+
+**Bug:** the live mobile crop (`background-position: 56% 24%; background-
+size: 140%`, from the previous session's fix) showed the phone, hands,
+tool belt, and van door, but his head was entirely missing from frame.
+Confirmed by screenshot before starting, not assumed from the brief.
+
+**Root cause, found by measuring the actual rendered layout, not by
+eyeballing the photo:** with `background-size` a single percentage
+value on a square source image, the whole photo (top to bottom, sky to
+boots) renders into one fixed-height band whose height is set by that
+percentage of the container's *width* (not height), and `background-
+position`'s ypos% only controls where that band sits vertically. At
+140% zoom the band was tall enough that the source's head region
+landed at the same screen height as the "Try free" / "Sign in"
+buttons -- not clipped by the container, just visually buried behind
+opaque UI. The phone happened to land in the clear gap below those
+buttons, which is why only the phone read as "in frame."
+
+**Fix:** reduced the zoom (140% -> 100%) to shrink the head-to-phone
+span in the source image down to a size that fits inside that one clear
+gap (between the bottom of the "Sign in" button and the top of the demo
+widget mockup below it), then moved `ypos%` (24% -> 38%) to slide the
+whole band down so the head+phone span actually lands inside that gap
+instead of straddling the buttons above it.
+
+**Found and tuned entirely by iterating against real screenshots, not
+by computing a value and assuming it was right** (the mistake that
+produced the original miss): took a baseline screenshot, confirmed the
+occlusion visually, derived a starting candidate from measured element
+positions (button bottom, demo-widget top, hero container height),
+screenshotted that candidate at all 5 widths, found the 412px width
+(the widest, hence the largest rendered gap in absolute px but also the
+tightest margin against the demo widget) had the phone nearly touching
+the demo widget's top edge, and did one more size-reduction pass (105%
+-> 100%) before confirming clean separation at all 5 widths.
+
+**Verification run:**
+- Real screenshots at 320/360/375/390/412px, checked explicitly against
+  both named criteria (head visible? phone visible?) via zoomed crops of
+  the actual rendered result, not the full-size thumbnail. Both pass at
+  every width, with visible margin from the buttons above and the demo
+  widget below at every width tested.
+- Re-ran the same measured WCAG contrast methodology as the v1 crop
+  (canvas pixel-sampling of the real photo + alpha-compositing the CSS
+  scrim gradient + each text element's own color), since a different
+  crop puts different photo pixels under the text again. All 5 hero
+  text elements pass at all 5 widths. Lowest margin: the amber "before
+  you leave the job" line at 4.01:1 (375px) against a 3.0 minimum for
+  large text -- tighter than the v1 crop's 4.94-6.11 range, but a real
+  pass with margin, not borderline. Full per-width amber-line numbers:
+  320px 6.14, 360px 5.38, 375px 4.01, 390px 4.39, 412px 5.80.
+- `npx tsc --noEmit` -- clean. `npx next build` -- clean.
+
+**Files changed:** `app/page.tsx` (one CSS rule, comment expanded to
+record the reasoning above).
+
+**Exact next action:** Greg reviews the screenshots (sent) and the live
+branch, then decides whether to merge. Not merged yet, on purpose.
 
 ## Homepage trade tabs overflow the viewport at mobile widths, fixed (2026-09-02 21:07 PT)
 
