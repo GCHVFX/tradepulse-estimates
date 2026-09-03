@@ -1,6 +1,86 @@
 # TradePulse handoff
 
-Updated: 2026-09-02 22:37 PT (merged `fix/mobile-hero-photo-crop-v2` (7fea349, merge 5559e5d) and `fix/trade-tabs-scroll-affordance` (f472a3f, merge fbe3c1e) into `main` with `--no-ff` -- Greg reviewed and gave the explicit go-ahead to merge both. Pushed to `origin/main`, production deployment `dpl_HS3X4Cb28VAK7tEvSwRNE5wRCi31` (commit `fbe3c1e`) reached Ready, aliased to `tradepulse-estimates.com`, and **confirmed live by fetching the real canonical URL directly**: the hero's mobile CSS now reads `background-position: 56% 38%; background-size: 100%`, and the trade-tabs fade overlay's exact class list (`hidden max-[379px]:block pointer-events-none absolute inset-y-0 right-0 w-10 transition-opacity duration-150`) is present in the served markup -- both fixes' own fingerprints, not just a green deploy status. See the two entries directly below for what each fixes. Unrelated to the mobile-nav/legal-pages/CSV-import/trade-tabs-overflow/hero-crop-v1 work further below, all of which is already merged to `main` and confirmed live in production.)
+Updated: 2026-09-02 22:54 PT (two small bounded follow-ups: (1) the mobile hero photo crop was reverted from the v2 attempt (`56% 24%`, `background-size: 140%`) back to the original shipped crop (`56% 28%`, no `background-size` override) -- explicit decision by Greg, not a bug; (2) the trade-tabs scroll fade was one-sided (right edge only), leaving a hard cut with no fade on the tab exiting to the left once scrolled -- fixed to show a fade on whichever edge(s) currently have hidden content. See the two entries directly below. Unrelated to the mobile-nav/legal-pages/CSV-import/trade-tabs-overflow work further below, all of which is already merged to `main` and confirmed live in production.)
+
+## Mobile hero photo crop: reverted v2 back to the original (2026-09-02 22:54 PT)
+
+**Status:** implemented on branch
+`fix/hero-crop-revert-and-tabs-fade-both-edges`, cut from `main` at
+`a7affae`. Committed and merged.
+
+**What:** Greg decided to go back to the original mobile hero crop
+(`background-position: 56% 28%`, no `background-size` override --
+inherits the shared `cover` rule) instead of continuing to iterate on
+the v2 attempt (`56% 24%`, `background-size: 140%`, see the entry
+below for why that one existed). Explicit decision, not a bug in v2 --
+this is the exact crop shipped in the first version, not a new attempt.
+
+**Verification, kept minimal per explicit instruction:** screenshotted
+the hero at 375px to confirm the reverted composition (phone, hands,
+tool belt, and van door visible, matching the original pre-v2 crop
+exactly). `npx tsc --noEmit` -- clean. `npx next build` -- clean.
+Skipped the multi-breakpoint contrast re-check: this crop was already
+verified clean before v2 ever shipped, nothing new to check.
+
+**Files changed:** `app/page.tsx` (one CSS rule reverted, comment
+rewritten to record both the original reasoning and the v2-then-revert
+history rather than leaving stale detail that no longer matches the
+shipped value).
+
+**Exact next action:** none required -- committed, merged to `main`,
+pushed.
+
+## Trade tabs scroll fade: fixed to work on both edges (2026-09-02 22:54 PT)
+
+**Status:** implemented on the same branch as the hero-crop revert
+above (both small, bounded, done together per the combined
+instruction). Committed and merged.
+
+**Bug (confirmed by screenshot):** the scroll-edge fade added last
+session only rendered on the right. Once scrolled right, the tab
+exiting the row on the left was hard-cut with no fade -- the same
+"looks broken" problem the right-side fade was built to solve, just
+relocated to the other edge once a user actually scrolled.
+
+**Fix:** track `canScrollLeft` alongside the existing `canScrollRight`
+(same `scrollLeft`/`scrollWidth`/`clientWidth` math, mirrored), and
+render a second fade div at the left edge with its own opacity. Now:
+right fade only at rest (nothing scrolled past yet), both fades while
+scrolled partway (content hidden on both sides), left fade only once
+scrolled all the way to Painting (nothing left to reveal on the
+right), neither at a comfortable width where nothing scrolls.
+
+**Verification, kept minimal per explicit instruction:**
+- Screenshotted the row at rest, mid-scroll, and full-scroll at 320px.
+  Confirmed via computed opacity, not just visual read: rest `[left
+  0, right 1]`, mid-scroll `[left 1, right 1]`, full-scroll `[left 1,
+  right 0]`.
+- Capturing a genuine static "mid-scroll" state needed one adjustment:
+  `scroll-snap-proximity` pulls a plain instant `scrollLeft =` write
+  back to the nearest snap point (a real finger holds a mid-drag
+  position because it's still touching the screen; snap only applies
+  on release, which an instant property write doesn't replicate).
+  Suspended `scroll-snap-type` for that one capture only, to depict the
+  real in-drag appearance -- not shipped, and not needed for the
+  rest/full-scroll states, which land on real snap points on their own.
+- Updated `tests/smoke/trade-tabs-scroll-affordance.spec.ts`: the old
+  single-fade locator broke (strict-mode violation, now matches two
+  elements) -- rewritten to check the left and right fades
+  independently at rest, full-scroll, and mid-scroll, plus the
+  existing comfortable-width and tap-through cases. Proven as a real
+  regression lock: reverted just the two-sided fade change and reran
+  -- the three new left/both-fade assertions failed exactly as
+  expected (left fade stuck at 0 in every state), then restored and
+  reran, all 5 passed.
+- The existing `tests/smoke/trade-tabs-mobile-overflow.spec.ts` (6
+  tests) re-run unaffected, all still pass.
+- `npx tsc --noEmit` -- clean. `npx next build` -- clean.
+
+**Files changed:** `app/components/TradeExamples.tsx`,
+`tests/smoke/trade-tabs-scroll-affordance.spec.ts`.
+
+**Exact next action:** none required -- committed, merged to `main`,
+pushed.
 
 ## Mobile hero photo crop v2: head was missing from the frame (2026-09-02 22:14 PT)
 

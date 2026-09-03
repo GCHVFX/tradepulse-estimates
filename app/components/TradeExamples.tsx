@@ -80,15 +80,18 @@ export function TradeExamples() {
   const example = EXAMPLES[active];
 
   // Below max-[379px]:, the tab row scrolls instead of shrinking to fit (see
-  // the comment on the tablist itself). A bare clipped tab at the right edge
+  // the comment on the tablist itself). A bare clipped tab at either edge
   // reads as broken, not scrollable -- there's no visual signal that more
-  // content exists, just a button cut off mid-rectangle. canScrollRight
-  // drives a fade-out overlay at the right edge (transparent to this
-  // section's own page background, #EADCC0) that's only shown while there's
-  // actually more to scroll to, fading out once the row is scrolled all the
-  // way -- a fade that stayed visible after Painting is fully in view would
-  // itself be misleading, implying unseen content that isn't there.
+  // content exists, just a button cut off mid-rectangle. canScrollLeft /
+  // canScrollRight each drive their own fade-out overlay (transparent to
+  // this section's own page background, #EADCC0), shown only on whichever
+  // edge(s) currently have hidden content: right fade at rest (nothing
+  // scrolled past yet), both fades mid-scroll, left fade only once
+  // scrolled all the way to Painting (nothing left to reveal on the
+  // right). A fade on an edge with nothing hidden behind it would itself
+  // be misleading -- implying content that isn't there.
   const tablistRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
 
   useEffect(() => {
@@ -97,6 +100,7 @@ export function TradeExamples() {
 
     const checkScroll = () => {
       // 2px slack for sub-pixel rounding, not a real remaining scroll distance.
+      setCanScrollLeft(el.scrollLeft > 2);
       setCanScrollRight(el.scrollWidth - el.clientWidth - el.scrollLeft > 2);
     };
 
@@ -174,15 +178,24 @@ export function TradeExamples() {
             </button>
           ))}
         </div>
-        {/* pointer-events-none: this sits on top of the last tab's own tap
-            target and must never intercept the click. Hidden above 379px
-            (the same breakpoint the scrolling itself is gated on) since
-            there's nothing to hint at once the row no longer scrolls.
-            No chevron/arrow: this is a touch-swipe context (narrow phone
-            widths only), where horizontal swipe is already the expected
-            gesture on a chip/tab row -- an arrow icon here would spend
-            scarce width on a 320px screen restating what the fade (and the
-            already-visible sliver of the next tab) already communicates. */}
+        {/* pointer-events-none on both: they sit on top of the first/last
+            tab's own tap target and must never intercept the click. Hidden
+            above 379px (the same breakpoint the scrolling itself is gated
+            on) since there's nothing to hint at once the row no longer
+            scrolls. No chevron/arrow: this is a touch-swipe context (narrow
+            phone widths only), where horizontal swipe is already the
+            expected gesture on a chip/tab row -- an arrow icon here would
+            spend scarce width on a 320px screen restating what the fade
+            (and the already-visible sliver of the next/previous tab)
+            already communicates. */}
+        <div
+          aria-hidden="true"
+          className="hidden max-[379px]:block pointer-events-none absolute inset-y-0 left-0 w-10 transition-opacity duration-150"
+          style={{
+            background: 'linear-gradient(to left, rgba(234,220,192,0) 0%, #EADCC0 65%)',
+            opacity: canScrollLeft ? 1 : 0,
+          }}
+        />
         <div
           aria-hidden="true"
           className="hidden max-[379px]:block pointer-events-none absolute inset-y-0 right-0 w-10 transition-opacity duration-150"
