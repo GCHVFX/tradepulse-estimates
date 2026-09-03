@@ -1,12 +1,12 @@
 # TradePulse handoff
 
-Updated: 2026-09-02 22:14 PT (Hero photo crop v2 fixed on branch `fix/mobile-hero-photo-crop-v2`, committed, **not merged -- explicitly held for Greg's manual review**, per his own instruction that passing checks alone wasn't enough sign-off on the last two rounds. The live crop (`56% 24%`, `140%`) showed the phone but cut his head off entirely; see the entry below for the fix and how it was found. A second branch, `fix/trade-tabs-scroll-affordance`, is in progress separately for the trade-tabs fade-out affordance -- also to be held for review, not merged. Unrelated to the mobile-nav/legal-pages/CSV-import/trade-tabs-overflow/hero-crop-v1 work above it, all of which is already merged to `main` and confirmed live in production.)
+Updated: 2026-09-02 22:31 PT (merged `fix/mobile-hero-photo-crop-v2` and `fix/trade-tabs-scroll-affordance` into `main` with `--no-ff`, about to push to `origin/main` -- Greg reviewed and gave the explicit go-ahead to merge both. See the two entries directly below for what each fixes. Unrelated to the mobile-nav/legal-pages/CSV-import/trade-tabs-overflow/hero-crop-v1 work further below, all of which is already merged to `main` and confirmed live in production.)
 
 ## Mobile hero photo crop v2: head was missing from the frame (2026-09-02 22:14 PT)
 
-**Status:** implemented on new branch `fix/mobile-hero-photo-crop-v2`, cut
-from `main` at `d2b8605`. Committed. **Not merged -- do not merge without
-Greg reviewing this one specifically.**
+**Status:** implemented on branch `fix/mobile-hero-photo-crop-v2`, cut
+from `main` at `d2b8605`. Committed, and merged to `main` with
+`--no-ff` after Greg's explicit review and go-ahead.
 
 **Bug:** the live mobile crop (`background-position: 56% 24%; background-
 size: 140%`, from the previous session's fix) showed the phone, hands,
@@ -63,8 +63,79 @@ the demo widget's top edge, and did one more size-reduction pass (105%
 **Files changed:** `app/page.tsx` (one CSS rule, comment expanded to
 record the reasoning above).
 
-**Exact next action:** Greg reviews the screenshots (sent) and the live
-branch, then decides whether to merge. Not merged yet, on purpose.
+**Exact next action:** none required -- committed as `7fea349`, merged
+to `main` with `--no-ff`, Greg's explicit go-ahead given for this
+merge.
+
+## Trade tabs scroll affordance: rest state looked broken, not scrollable (2026-09-02 22:24 PT)
+
+**Status:** implemented on branch `fix/trade-tabs-scroll-affordance`,
+cut from `main` at `d2b8605`. Committed, and merged to `main` with
+`--no-ff` after Greg's explicit review and go-ahead.
+
+**Problem (found in review, not a new bug report):** the horizontal-
+scroll fix for the trade tabs (see the overflow entry below) works --
+proven by its own smoke test -- but at rest, the row just shows a tab
+abruptly clipped mid-rectangle at the right edge, with no visual signal
+that more content exists. Indistinguishable from a layout bug.
+
+**Fix:** a fade-out gradient overlay at the right edge of the
+scrollable row, transparent to the section's own page background
+(`#EADCC0`) so the partially visible next tab reads as an intentional
+preview. The overlay is a sibling of the scrolling row (inside a new
+`relative` wrapper div), not a child of it -- a fade placed inside the
+scrolling element would scroll away with the content instead of
+staying anchored to the row's own right edge.
+
+**Made this dynamic rather than a static always-on overlay:** the fade
+is only shown while there's actually more to scroll to
+(`scrollWidth - clientWidth - scrollLeft > 2px` of slack), tracked via
+a scroll/resize listener plus a recheck once `document.fonts.ready`
+resolves (a font swap changes each tab's text width, which changes
+`scrollWidth` -- the very first measurement on mount can run before
+that swap settles). It fades out once the row is scrolled all the way
+to Painting. A fade that stayed visible after the last tab is fully in
+view would itself be misleading -- implying unseen content that isn't
+there.
+
+**No chevron/arrow added (a judgment call, not a request):** this
+affordance only applies at narrow phone widths (`max-[379px]:`), a
+touch-swipe context where horizontal swipe is already the expected
+gesture on a chip/tab row. An arrow icon would spend scarce width on a
+320px screen restating what the fade -- and the already-visible sliver
+of the next tab -- already communicates.
+
+**Verification run:**
+- Real screenshots of the rest state (no interaction) at
+  320/360/375/390/412px -- the fade is visibly present at the three
+  scrolling widths (320/360/375) and correctly absent at the two
+  comfortable widths (390/412, unaffected, matching the overflow fix's
+  own unaffected-width guarantee).
+- Screenshotted the row again after programmatically scrolling to the
+  end at 320px: fade is gone, Painting fully visible, nothing implying
+  further content.
+- Confirmed via computed `opacity` (not just visual inspection): 1 at
+  rest, drops below 0.1 once scrolled to the end.
+- Confirmed the fade doesn't block taps: tapping Painting (the tab
+  partially under the fade at rest) still switches the active example
+  and updates the panel content correctly.
+- `tests/smoke/trade-tabs-scroll-affordance.spec.ts` added (3 tests:
+  fade visible-then-fades-out at a scrollable width, fade absent at a
+  comfortable width, tap-through still works). Proven as a real
+  regression lock, not a tautology: temporarily reverted the fix and
+  reran -- the fade-visibility test failed (element didn't exist at
+  all), then restored the fix and reran, all 3 passed.
+- The existing `tests/smoke/trade-tabs-mobile-overflow.spec.ts` (6
+  tests) re-run against the new markup (the added wrapper div and fade
+  sibling) -- all 6 still pass unchanged, no updates needed.
+- `npx tsc --noEmit` -- clean. `npx next build` -- clean.
+
+**Files changed:** `app/components/TradeExamples.tsx`,
+`tests/smoke/trade-tabs-scroll-affordance.spec.ts` (new).
+
+**Exact next action:** none required -- committed as `f472a3f`, merged
+to `main` with `--no-ff`, Greg's explicit go-ahead given for this
+merge.
 
 ## Homepage trade tabs overflow the viewport at mobile widths, fixed (2026-09-02 21:07 PT)
 
