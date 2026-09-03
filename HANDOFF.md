@@ -1,6 +1,6 @@
 # TradePulse handoff
 
-Updated: 2026-09-02 21:45 PT (merged `fix/trade-tabs-mobile-overflow` and `fix/mobile-hero-photo-crop` into `main` with `--no-ff`, about to push to `origin/main` -- Greg explicitly opted to skip manual preview review for these two, small/already-verified/no real traffic on the app right now. The Stripe cleanup item further below is resolved -- confirmed directly in the Stripe Dashboard on 2026-09-01, 10:04:34pm: customer permanently deleted, subscription cancelled. That confirmation happened outside any Claude Code session, so the doc had kept flagging it as open until now. Unrelated to the mobile-nav/legal-pages/CSV-import work below it, all of which is already merged to `main` and confirmed live in production.)
+Updated: 2026-09-02 21:48 PT (merged `fix/trade-tabs-mobile-overflow` (be3f384, merge 84c7196) and `fix/mobile-hero-photo-crop` (7054ec7, merge 423c210) into `main` with `--no-ff` -- Greg explicitly opted to skip manual preview review for these two, small/already-verified/no real traffic on the app right now. Pushed to `origin/main`, production deployment `dpl_95VHSmrHqYFXrFcTKSXG3dXEX4vT` (commit `423c210`) reached Ready, aliased to `tradepulse-estimates.com`, and **confirmed live by fetching the real canonical URL directly**: the hero's mobile CSS shows `background-position: 56% 24%; background-size: 140%`, and the trade-tabs `role="tablist"` carries the `max-[379px]:justify-start max-[379px]:overflow-x-auto` classes -- both fixes' own fingerprints, not just a green deploy status. The Stripe cleanup item further below is resolved too -- confirmed directly in the Stripe Dashboard on 2026-09-01, 10:04:34pm: customer permanently deleted, subscription cancelled. That confirmation happened outside any Claude Code session, so the doc had kept flagging it as open until now. Unrelated to the mobile-nav/legal-pages/CSV-import work below it, all of which is already merged to `main` and confirmed live in production.)
 
 ## Homepage trade tabs overflow the viewport at mobile widths, fixed (2026-09-02 21:07 PT)
 
@@ -69,14 +69,19 @@ about. Corrected to the measured `max-[379px]:` value before commit.
 **Files changed:** `app/components/TradeExamples.tsx`,
 `tests/smoke/trade-tabs-mobile-overflow.spec.ts` (new).
 
-**Exact next action:** none required -- committed on
-`fix/trade-tabs-mobile-overflow`. Screenshots were taken at
-320/360/375/390px and sent; a desktop (1280px) screenshot could not be
-captured due to a recurring Browser-pane rendering issue this session
-(black frame regardless of page state) -- confirmed correct instead via
-computed-style readback (`justify-content: center`, `overflow-x:
-visible`, all tabs fully visible), the same fallback used earlier in
-this session for the same capture issue.
+**Exact next action:** none required -- committed as `be3f384`, merged
+to `main` (`84c7196`, `--no-ff`, manual preview review explicitly
+skipped per Greg's call), pushed, and confirmed live at
+`https://tradepulse-estimates.com` (deployment `dpl_95VHSmrHqYFXrFcTKSXG3dXEX4vT`,
+commit `423c210`) -- the live tablist markup carries the
+`max-[379px]:justify-start max-[379px]:overflow-x-auto` classes.
+Screenshots were taken at 320/360/375/390px and sent; a desktop
+(1280px) screenshot could not be captured due to a recurring
+Browser-pane rendering issue this session (black frame regardless of
+page state) -- confirmed correct instead via computed-style readback
+(`justify-content: center`, `overflow-x: visible`, all tabs fully
+visible), the same fallback used earlier in this session for the same
+capture issue.
 
 ## Mobile hero photo pulled back to show more context (2026-09-02 21:22 PT)
 
@@ -120,9 +125,13 @@ observed was the amber line at 4.94:1 (412px) against a 3.0 minimum.
 
 **Files changed:** `app/page.tsx` (one CSS rule, one line).
 
-**Exact next action:** none required -- committed on
-`fix/mobile-hero-photo-crop`. Screenshots at 320/360/375/390/412px sent
-for the record.
+**Exact next action:** none required -- committed as `7054ec7`, merged
+to `main` (`423c210`, `--no-ff`, manual preview review explicitly
+skipped per Greg's call), pushed, and confirmed live at
+`https://tradepulse-estimates.com` (deployment `dpl_95VHSmrHqYFXrFcTKSXG3dXEX4vT`)
+-- the live mobile hero CSS reads `background-position: 56% 24%;
+background-size: 140%`. Screenshots at 320/360/375/390/412px sent for
+the record.
 
 ## Rates screen: "Common line items" + "Import from CSV" merged into one section (2026-09-01 22:30 PT, committed 2026-09-02 20:24 PT, merged to main 2026-09-02)
 
