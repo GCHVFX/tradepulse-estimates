@@ -1,6 +1,6 @@
 # TradePulse handoff
 
-Updated: 2026-09-02 21:35 PT (Trade-tabs mobile-overflow bug fixed on branch `fix/trade-tabs-mobile-overflow`, committed. The Stripe cleanup item further below is resolved -- confirmed directly in the Stripe Dashboard on 2026-09-01, 10:04:34pm: customer permanently deleted, subscription cancelled. That confirmation happened outside any Claude Code session, so the doc had kept flagging it as open until now. Unrelated to the mobile-nav/legal-pages/CSV-import work below it, all of which is merged to `main` and confirmed live in production.)
+Updated: 2026-09-02 21:45 PT (merged `fix/trade-tabs-mobile-overflow` and `fix/mobile-hero-photo-crop` into `main` with `--no-ff`, about to push to `origin/main` -- Greg explicitly opted to skip manual preview review for these two, small/already-verified/no real traffic on the app right now. The Stripe cleanup item further below is resolved -- confirmed directly in the Stripe Dashboard on 2026-09-01, 10:04:34pm: customer permanently deleted, subscription cancelled. That confirmation happened outside any Claude Code session, so the doc had kept flagging it as open until now. Unrelated to the mobile-nav/legal-pages/CSV-import work below it, all of which is already merged to `main` and confirmed live in production.)
 
 ## Homepage trade tabs overflow the viewport at mobile widths, fixed (2026-09-02 21:07 PT)
 
@@ -77,6 +77,52 @@ captured due to a recurring Browser-pane rendering issue this session
 computed-style readback (`justify-content: center`, `overflow-x:
 visible`, all tabs fully visible), the same fallback used earlier in
 this session for the same capture issue.
+
+## Mobile hero photo pulled back to show more context (2026-09-02 21:22 PT)
+
+**Status:** implemented on new branch `fix/mobile-hero-photo-crop`, cut
+from `main` (confirmed clean via `git status`/`git branch` before
+starting, separate from the trade-tabs-overflow branch per explicit
+instruction not to bundle them). Not committed.
+
+**What:** Greg reviewed a side-by-side comparison and chose to pull the
+mobile hero photo back from its previous tighter crop, specifically to
+show the phone in his hand along with more of the open van door. Only
+`app/page.tsx`'s `@media (max-width: 767px) { .hero-photo { ... } }`
+rule changed -- one line, `background-position: 56% 28%` ->
+`background-position: 56% 24%; background-size: 140%` (previously no
+mobile-specific `background-size` at all, inheriting the shared
+`cover` rule). The `min-width: 768px` desktop rule is untouched.
+
+The brief's own starting values (`56% 24%`, `~140%`) were explicitly
+flagged as "a direction, not a target" -- applied and then verified
+against real screenshots at 320/360/375/390/412px, not assumed
+correct. They worked cleanly at every width on the first pass: the
+phone (in his hands) and a good portion of the van door, mirror, and
+tool belt are all visible, no further iteration was needed.
+
+**Contrast re-checked by measurement, not eyeballed**, per the explicit
+instruction and this project's own prior history with exactly this
+failure mode (text passing visually but failing measured contrast).
+Method: loaded the real source photo into an offscreen canvas, computed
+which source pixel maps to each screen position from the actual
+computed `background-position`/`background-size`/hero-box dimensions,
+alpha-composited the scrim gradient (`linear-gradient(178deg,
+rgba(38,33,27,.8) 0%, .72 50%, .76 100%)`) at the correct vertical
+fraction on top of that sampled pixel, then ran the real WCAG relative-
+luminance contrast formula against each hero text element's own color
+(H1, the amber `before you leave the job` line, and the three lower
+paragraphs) -- the same rigor as the original redesign's own contrast
+work (`SPEC.md`/`HANDOFF.md` history), not a new method invented for
+this. All 5 elements passed at all 5 widths, comfortably above their
+respective WCAG thresholds (large text 3.0, body text 4.5) -- lowest
+observed was the amber line at 4.94:1 (412px) against a 3.0 minimum.
+
+**Files changed:** `app/page.tsx` (one CSS rule, one line).
+
+**Exact next action:** none required -- committed on
+`fix/mobile-hero-photo-crop`. Screenshots at 320/360/375/390/412px sent
+for the record.
 
 ## Rates screen: "Common line items" + "Import from CSV" merged into one section (2026-09-01 22:30 PT, committed 2026-09-02 20:24 PT, merged to main 2026-09-02)
 

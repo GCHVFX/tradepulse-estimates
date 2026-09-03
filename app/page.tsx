@@ -205,7 +205,7 @@ export default async function LandingPage() {
            person entirely. Tuned separately by checking the rendered result,
            not computed once and assumed correct. */
         @media (max-width: 767px) {
-          .hero-photo { background-position: 56% 28%; }
+          .hero-photo { background-position: 56% 24%; background-size: 140%; }
         }
         @media (min-width: 768px) {
           .hero-photo {
