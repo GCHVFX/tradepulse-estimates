@@ -1,13 +1,15 @@
 # TradePulse handoff
 
-Updated: 2026-09-01 22:30 PT (Rates screen "Common line items"/"Import from CSV" merged into one section, same branch as the CSV import fix, still not committed. **The Stripe cleanup action item from 22:11 PT is still open and separate -- see that entry below, unresolved.**)
+Updated: 2026-09-02 20:24 PT (CSV import fix + Rates screen restructure committed as one commit, `98efaf4`, and pushed to `origin/fix/csv-import-column-matching`. **The Stripe cleanup action item from 22:11 PT (2026-09-01) is still open and separate -- see that entry below, unresolved.**)
 
-## Rates screen: "Common line items" + "Import from CSV" merged into one section (2026-09-01 22:30 PT)
+## Rates screen: "Common line items" + "Import from CSV" merged into one section (2026-09-01 22:30 PT, committed 2026-09-02 20:24 PT)
 
-**Status:** implemented on `fix/csv-import-column-matching` (same branch
-as the CSV import fix above -- this session was told to continue there
-rather than open a new branch, confirmed via `git status`/`git branch`
-before starting). Not committed.
+**Status:** committed together with the CSV import fix entry below as
+one commit, `98efaf4` on `fix/csv-import-column-matching` (same branch
+as the CSV import fix -- this session was told to continue there rather
+than open a new branch, confirmed via `git status`/`git branch` before
+starting). Pushed to `origin/fix/csv-import-column-matching`. Not
+merged to `main`.
 
 **What:** `app/components/price-book.tsx`'s "Common line items" and
 "Import from CSV" were two separate, equally-weighted sections (same
@@ -59,11 +61,11 @@ into one section:
 - The verification script itself was temporary (`tests/smoke/_tmp-verify-rates-restructure.spec.ts`), deleted immediately after use -- this was a one-off check, not a new permanent test (nothing here is a new bug fix needing a regression lock, per this project's own bugfix-to-smoke-test habit's own scope: "not for new features... styling tweaks").
 
 **Files changed:** `app/components/price-book.tsx` only (plus its own
-uncommitted CSV-fix changes from the entry below, on the same branch).
+CSV-fix changes from the entry below, on the same branch, same commit).
 
-**Exact next action:** Greg reviews the diff and decides whether to
-commit -- and, still separately, resolves the open Stripe cleanup item
-below.
+**Exact next action:** none required for this branch -- committed and
+pushed. Merge/PR is Greg's call. Separately, still resolve the open
+Stripe cleanup item below.
 
 ## ACTION NEEDED: a live Stripe customer/subscription leaked during manual testing this session, needs manual cleanup (2026-09-01 22:11 PT)
 
@@ -112,10 +114,12 @@ confirmed safe to use, or avoided live signups entirely by testing pure
 functions directly (see the CSV import entry below) -- not repeated by
 hand again.
 
-## CSV import silent $0.00 bug, fixed (2026-09-01 22:11 PT)
+## CSV import silent $0.00 bug, fixed (2026-09-01 22:11 PT, committed 2026-09-02 20:24 PT)
 
-**Status:** implemented on branch `fix/csv-import-column-matching`, cut
-from `main` after the payment-reminder investigation. Not yet committed.
+**Status:** committed as `98efaf4` on `fix/csv-import-column-matching`
+(cut from `main` after the payment-reminder investigation), together
+with the Rates screen restructure above in the same commit. Pushed to
+`origin/fix/csv-import-column-matching`. Not merged to `main`.
 
 **Bug (confirmed real, reported by Greg):** a Rates CSV import with
 headers "Unit" and "Rate (CAD)" imported 21 items with correct names and
@@ -209,9 +213,9 @@ with `price: 0`.
 `app/components/price-book.tsx`,
 `tests/smoke/csv-import-rate-column-matching.spec.ts` (new).
 
-**Exact next action:** Greg reviews the diff and decides whether to
-commit -- and, separately and more urgently, checks the Stripe Dashboard
-per the ACTION NEEDED entry above.
+**Exact next action:** none required for this branch -- committed and
+pushed. Merge/PR is Greg's call. Separately and more urgently, still
+check the Stripe Dashboard per the ACTION NEEDED entry above.
 
 ## INVESTIGATION ONLY, NO CODE CHANGED: Payment reminder SMS missing business name and payment link (2026-09-01 21:35 PT)
 
