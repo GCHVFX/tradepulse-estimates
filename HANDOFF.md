@@ -1,11 +1,100 @@
 # TradePulse handoff
 
-Updated: 2026-09-01 21:11 PT (Mobile nav wordmark-crowding bug fixed on branch `fix/mobile-nav-crowding`, not yet committed. Unrelated to the Canadian-badge and redesign threads below, both of which stay closed out.)
+Updated: 2026-09-02 (merged both `fix/mobile-nav-crowding` and `fix/legal-pages-kraft-and-disclosures` into `main`. Entries for both kept below, most recent first. Unrelated to the Canadian-badge and redesign threads further down, both of which stay closed out.)
 
-## IMPLEMENTED, NOT COMMITTED: Mobile nav wordmark crowds the CTA below ~390px (2026-09-01 21:11 PT)
+## Privacy/Terms: light kraft restyle + content disclosures (2026-09-01 22:50 PT, merged to main 2026-09-02)
 
-**Status:** working tree only, on branch `fix/mobile-nav-crowding`, cut from
-`main` after the Canadian-badge merge. Nothing committed yet.
+**Status:** implemented on `fix/legal-pages-kraft-and-disclosures` (cut
+from `main`, separate from the CSV import/Rates work on
+`fix/csv-import-column-matching`). Committed, pushed, and merged to
+`main` with `--no-ff`.
+
+**Part 1, styling:** `app/privacy/page.tsx` and `app/terms/page.tsx` were
+on `bg-zinc-950`/`text-white` -- the dark authenticated-app-shell theme,
+correctly left alone during the earlier sitewide kraft audit since
+nothing had named these pages yet. Migrated to the light system:
+`bg-white`, ink `text-[#26211B]` headings/emphasis, muted-ink
+`text-[#5C4A2E]` body text, hairline `border-[#C9B384]` -- matching
+`app/plumbing-cost/page.tsx` specifically (the brief named the cost-guide
+pages as the reference), not the Contact page's card-heavy
+`bg-[#F3E8D0]` treatment, since these are long-form text documents, not
+a card-based utility page. The Third-Party Services table changed from
+per-cell `border border-zinc-800` boxes to the same hairline pattern the
+cost-guide pages use for their line-item tables: a single `border-b`
+under the header row plus `divide-y` between body rows, no cell borders.
+
+**Nav/footer, reported not fixed, per the brief's own instruction:**
+Both pages are fully standalone -- just the "← Back to TradePulse" link,
+no shared nav or footer. Checked whether this was an oversight specific
+to these two pages: it is not. Only `app/page.tsx` (the homepage) uses
+`MarketingNav` anywhere in the repo (`grep -l "MarketingNav" app/*/page.tsx
+app/page.tsx`); no shared `Footer` component exists at all (grepped for
+one, none found) -- every other public page that has a footer
+(`plumbing-cost`, likely the other cost guides and trade pages) just
+inlines its own copy of similar footer markup independently. So
+Privacy/Terms being bare matches the sitewide norm outside the homepage,
+not an anomaly -- left the structure exactly as it was, restyled colours
+only, per the brief's explicit instruction not to silently add chrome
+that was never there.
+
+**Part 2, content -- two of three edits landed, one skipped on Greg's
+explicit call:**
+1. Usage data: added the IP-derived approximate-location sentence
+   (Canadian-content targeting, not stored) verbatim, under Privacy's
+   "Usage data" paragraph.
+2. Account information: added the Google sign-in sentence verbatim
+   under "Account information," plus a new Google row ("Sign-in
+   authentication") in the Third-Party Services table.
+3. **Skipped, per Greg's explicit answer to a clarifying question asked
+   mid-task:** grepping both files found zero literal occurrences of
+   `support@trytradepulse.com` -- both pages render the address entirely
+   through the shared `SUPPORT_EMAIL` constant in `lib/email-addresses.ts`,
+   whose own comment says the domain is deliberately still
+   `trytradepulse.com` until the new sending domain is verified and
+   warmed up in Resend, and "nowhere else in the repo should carry a
+   TradePulse email address." Flipping `EMAIL_DOMAIN` there would change
+   every `from:`/`SUPPORT_EMAIL` reference sitewide before that
+   verification; hardcoding a literal on just these two pages would
+   violate that file's own single-source-of-truth rule. Asked rather
+   than guessed; Greg chose to skip this edit entirely for now.
+   `lib/email-addresses.ts` was not touched.
+
+**Sitewide `trytradepulse.com` survey, reported not fixed (explicitly
+out of scope this session):** `grep -rn "trytradepulse\.com" --include=*.ts
+--include=*.tsx .` finds it in exactly three places, all deliberate,
+already documented elsewhere in this file/CLAUDE.md: `lib/email-addresses.ts`
+(the `EMAIL_DOMAIN` constant above), `lib/site-url.ts` (the permanent
+301-redirect alias list -- "must never be detached," per CLAUDE.md's
+Domains section, since old share links/postcard QR codes point at it),
+and `tests/smoke/twilio-signature-allowlist.spec.ts` (a test fixture for
+that same permanent alias). Nothing else in the repo references it.
+
+**Verification run:**
+- `npx tsc --noEmit` -- clean. `npx next build` -- clean.
+- Content edits confirmed via `grep -c` on the actual strings (not a
+  visual read-through) -- each of the two landed sentences and the new
+  table row found exactly once in `app/privacy/page.tsx`; zero literal
+  `trytradepulse`/`support@` strings in either file, confirming the
+  skipped edit really left nothing to catch.
+- Screenshotted both pages at 390px and 1280px via a temporary
+  Playwright script (no login needed -- both pages are public), deleted
+  immediately after use.
+
+**Files changed:** `app/privacy/page.tsx`, `app/terms/page.tsx`.
+`lib/email-addresses.ts` deliberately untouched.
+
+**Exact next action:** none required -- committed, pushed, and merged to
+`main`. Whenever the `tradepulse-estimates.com` Resend sending domain is
+actually verified and warmed up, flip `EMAIL_DOMAIN` in
+`lib/email-addresses.ts` (one line, per that file's own instructions),
+which will update Privacy, Terms, and every other `SUPPORT_EMAIL`/
+`ESTIMATES_FROM` reference sitewide together.
+
+## Mobile nav wordmark crowds the CTA below ~390px, fixed (2026-09-01 21:11 PT, merged to main 2026-09-02)
+
+**Status:** committed on `fix/mobile-nav-crowding` (`8aae7dd`, cut from
+`main` after the Canadian-badge merge), pushed, and merged to `main`
+with `--no-ff`.
 
 **Bug (confirmed live on production):** at mobile widths, the
 "TradePulse Estimates" wordmark crowded directly into the "Start Free"
@@ -87,8 +176,8 @@ same style block as the existing 639px rule), `app/components/marketing-nav.tsx`
   passed). Run via `PLAYWRIGHT_BASE_URL="http://localhost:3000" npx
   playwright test tests/smoke/nav-wordmark-no-crowding.spec.ts`.
 
-**Exact next action:** Greg reviews the diff and decides whether to
-commit. This is a small, scoped fix -- nothing outside `app/page.tsx`'s
+**Exact next action:** none required -- committed, pushed, and merged to
+`main`. This was a small, scoped fix -- nothing outside `app/page.tsx`'s
 nav-lockup style block, `marketing-nav.tsx`'s comment, and the new test
 file was touched.
 
