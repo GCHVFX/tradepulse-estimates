@@ -5,7 +5,11 @@ export function parseCSV(text: string): {
   const lines = splitCSVLines(text);
   if (lines.length === 0) return { headers: [], rows: [] };
 
-  const headers = parseCSVLine(lines[0]).map((h) => h.trim().toLowerCase());
+  // Original casing preserved (not lowercased) so a mapping-fallback UI can
+  // show the customer their actual column headers. Every consumer matches
+  // headers case-insensitively already (see lib/csv-column-match.ts's
+  // normalizeHeader()), so nothing downstream depended on lowercasing here.
+  const headers = parseCSVLine(lines[0]).map((h) => h.trim());
   const rows: Record<string, string>[] = [];
 
   for (let i = 1; i < lines.length; i++) {

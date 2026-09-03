@@ -1,6 +1,296 @@
 # TradePulse handoff
 
-Updated: 2026-09-01 08:27 PT (Canadian pricing badge committed, merged to main, and pushed to origin/main. Actual Vercel production deployment not independently confirmed -- see status note below. Unrelated to the redesign thread below, which stays closed out.)
+Updated: 2026-09-01 22:30 PT (Rates screen "Common line items"/"Import from CSV" merged into one section, same branch as the CSV import fix, still not committed. **The Stripe cleanup action item from 22:11 PT is still open and separate -- see that entry below, unresolved.**)
+
+## Rates screen: "Common line items" + "Import from CSV" merged into one section (2026-09-01 22:30 PT)
+
+**Status:** implemented on `fix/csv-import-column-matching` (same branch
+as the CSV import fix above -- this session was told to continue there
+rather than open a new branch, confirmed via `git status`/`git branch`
+before starting). Not committed.
+
+**What:** `app/components/price-book.tsx`'s "Common line items" and
+"Import from CSV" were two separate, equally-weighted sections (same
+visual treatment as the Tax label/Tax rate fields above them) despite
+being the data every future AI-generated estimate draws from. Merged
+into one section:
+- One `<h2 className="text-base font-semibold text-white">` heading
+  ("Common line items"), reusing the exact sub-heading treatment already
+  established in `profile-form.tsx`'s "Reviews & payment reminders"
+  section rather than inventing a new one -- bigger/bolder than the
+  `text-sm font-medium text-zinc-400` field labels above it, more
+  internal spacing (`gap-4`, `pt-2`), no colour block/badge/tint added.
+- "Add item" and "Import CSV" now share the identical button treatment
+  (the existing dashed-amber style, previously only on "Add item") in a
+  side-by-side `flex-1` pair -- true equal peers, not one primary button
+  next to a differently-styled secondary one.
+- "Download Template" demoted from an equal-weight button to a small
+  underlined text link ("Don't have a list yet? Download a blank
+  template"), same `onClick={downloadTemplate}` call, un-changed
+  function -- still a 44px-tall tap target despite the small visual
+  size.
+- Both existing copy blocks ("Material prices on estimates include your
+  markup..." and "No items yet. Add your common line items...") kept
+  verbatim. The old CSV-specific subcopy ("Upload a spreadsheet to add
+  items in bulk...") was dropped rather than folded in awkwardly under
+  one merged heading -- not explicitly protected by the brief, and
+  redundant once "Import CSV" sits directly beside a self-explanatory
+  "Add item" peer. Flagged here rather than silently cut.
+- No behavior changes: every `onClick` is the exact same function
+  reference as before (`setShowAddForm`, `csvInputRef.current?.click()`,
+  `downloadTemplate`, `handleCSVFile`), only relocated in the JSX tree.
+
+**Verification run:**
+- `npx tsc --noEmit` -- clean. `npx next build` -- clean.
+- Screenshotted at 390px (mobile) and 1280px (desktop) via a throwaway
+  account created through `signUpFreshAccount()`
+  (`tests/smoke/helpers.ts`) with `ALLOW_PRODUCTION_SIGNUP_SMOKE=true`
+  set for that one run -- per the new Critical Rules entry in
+  `CLAUDE.md`, not by hand this time. `cleanupTestAccount()` completed
+  without error both times this session (including the Stripe deletion
+  step), confirming the earlier key-mismatch issue is resolved now that
+  the dev server was restarted on the current `.env.local`.
+- All three flows confirmed still working end-to-end in the same
+  script, not just visually: manual add opens/cancels its inline form;
+  a CSV upload through the same hidden file input still produces a
+  correct preview (bonus confirmation the CSV fix above still works
+  post-restructure); the template link triggers a real download named
+  `pricebook-template.csv`.
+- The verification script itself was temporary (`tests/smoke/_tmp-verify-rates-restructure.spec.ts`), deleted immediately after use -- this was a one-off check, not a new permanent test (nothing here is a new bug fix needing a regression lock, per this project's own bugfix-to-smoke-test habit's own scope: "not for new features... styling tweaks").
+
+**Files changed:** `app/components/price-book.tsx` only (plus its own
+uncommitted CSV-fix changes from the entry below, on the same branch).
+
+**Exact next action:** Greg reviews the diff and decides whether to
+commit -- and, still separately, resolves the open Stripe cleanup item
+below.
+
+## ACTION NEEDED: a live Stripe customer/subscription leaked during manual testing this session, needs manual cleanup (2026-09-01 22:11 PT)
+
+**What happened:** verifying the CSV import fix below needed a logged-in
+account, so a throwaway account was created by hand through the real
+`/signup` UI (`gchansen+csvtest-20260901@gmail.com`) before this session
+had read `tests/smoke/smoke-safety.ts` -- which exists specifically to
+gate this. That file confirms this project's **local dev stack's
+`.env.local` runs on a live-mode Stripe key** (`sk_live_...`, confirmed by
+reading the key's prefix directly), not test mode, and documents a prior
+incident: *"A previous run leaked 19 live Stripe customers this way."*
+This session's manual signup, done before that context was known, created
+a 20th: a real Stripe Customer and trialing Subscription with no card on
+file.
+
+**Cleanup attempted, database side succeeded, Stripe side did not:**
+- `tpe_pricebook_items`, `tpe_estimates`, and the `tpe_businesses` row for
+  that account were deleted directly via Supabase (confirmed 0 rows
+  remaining).
+- The Supabase Auth user was deleted via the Admin API (confirmed 200,
+  confirmed 0 matching rows in `auth.users` afterward).
+- Deleting the Stripe customer (`cus_VBTCpjtJk4olNy`, subscription
+  `sub_1UB6GRQ45KFNqa8xckBhcJyA`) directly via the Stripe API using the
+  key currently in `.env.local` failed with `resource_missing` / "No such
+  customer" -- despite that being the exact ID this session's own signup
+  response and the database row both recorded. Likely explanation: the
+  local dev server had been running long enough that it was still using
+  an older, since-rotated Stripe key in memory when it created the
+  customer, different from whichever key `.env.local` holds now -- but
+  this wasn't confirmed, only inferred, and is reported as uncertain
+  rather than assumed.
+
+**Exact next action, and it's real (not just tidiness): check the Stripe
+Dashboard directly for customer `cus_VBTCpjtJk4olNy` / subscription
+`sub_1UB6GRQ45KFNqa8xckBhcJyA` and cancel/delete it if it exists.** A
+trial with no payment method attached typically can't be charged, but
+that wasn't independently confirmed either -- verify directly rather than
+assuming it's harmless.
+
+**Process fix applied for the rest of this session:** the long-running
+dev server (same process, already running before this session started)
+was restarted so it picks up the current `.env.local`, and all further
+verification in this session used `tests/smoke/`'s existing
+`signUpFreshAccount()`/`cleanupTestAccount()` helpers exactly once
+confirmed safe to use, or avoided live signups entirely by testing pure
+functions directly (see the CSV import entry below) -- not repeated by
+hand again.
+
+## CSV import silent $0.00 bug, fixed (2026-09-01 22:11 PT)
+
+**Status:** implemented on branch `fix/csv-import-column-matching`, cut
+from `main` after the payment-reminder investigation. Not yet committed.
+
+**Bug (confirmed real, reported by Greg):** a Rates CSV import with
+headers "Unit" and "Rate (CAD)" imported 21 items with correct names and
+categories but every price at $0.00 -- only a small dismissible banner as
+evidence, no block on import.
+
+**Root cause 1 (critical, silent data corruption):** `normalizeHeader()`
+in `app/components/price-book.tsx` stripped every non-alphanumeric
+character (including parentheses) BEFORE checking for a trailing
+"(CAD)"/currency suffix, so "Rate (CAD)" normalized to `rate_cad`
+-- matching nothing in the "rate" alias list -- instead of `rate`.
+Combined with no fallback other than silently defaulting an unmatched
+required column's price to 0, a real, non-empty price in the source file
+became a saved $0.00 rate with no way to notice short of opening the
+saved item.
+
+**Root cause 2 (usability):** column matching was already alias-based
+(not literally exact-only) but had no real synonym coverage, no
+ambiguity handling, and -- most importantly -- no fallback when a
+required field couldn't be matched at all; it just silently proceeded
+with `price: 0`.
+
+**Fix:**
+- New `lib/csv-column-match.ts`: `normalizeHeader()` (parenthetical
+  stripped first, fixing root cause 1) and `matchColumns()` -- a
+  synonym map for Name/Rate (required) and Category/Unit (optional),
+  most-specific-synonym-first per field so a real "Name" column is
+  never shadowed by a "Description" column that merely comes first in
+  the file, and ambiguity detection (a header matching more than one
+  field's synonym list is excluded from all of them, never guessed).
+- `app/components/price-book.tsx`: when Name or Rate can't be
+  confidently matched, a new "Match your columns" screen shows the
+  customer's actual CSV headers and lets them manually map Name*,
+  Rate/Price*, Category, Unit before anything imports -- required, not
+  optional, applies even to a completely unrecognized file. Once
+  resolved (automatically or by hand), the existing preview/import flow
+  is unchanged. A row whose Rate cell is empty in a *correctly matched*
+  column still imports at $0 (that's the customer's own data gap, not a
+  matching failure) but is now visibly flagged per row ("blank in
+  file"), distinct from a column-match failure and distinct from a
+  correctly-priced $0 item.
+- `lib/csv-parse.ts`: header casing is no longer lowercased at parse
+  time, so the mapping screen shows the customer's real header text
+  ("Rate (CAD)", not "rate (cad)"). Every consumer already matches
+  case-insensitively via `normalizeHeader()`, so nothing depended on the
+  old lowercasing.
+- No dedicated `unit` column exists on `tpe_pricebook_items` -- a
+  matched Unit value is folded into the description field, labelled
+  (`Unit: {value}`), the same pattern already used for `keywords`,
+  rather than silently discarded.
+- The existing older, narrower alias lists for description/
+  labour_price/material_price/taxable/active/keywords are untouched
+  (still resolved via the pre-existing `resolveCol()`), just now
+  excluding whatever headers the new Name/Rate/Category/Unit system
+  already claimed, so one column can't do double duty. A real
+  regression was caught and fixed during verification here: the first
+  pass didn't account for those legacy-resolved columns when computing
+  the "unrecognized columns" banner, so importing the app's own
+  Download Template started incorrectly reporting "Unrecognized
+  columns skipped: description, taxable, active, keywords" even though
+  all four were still being used correctly -- fixed by having the
+  row-builder report which legacy columns it actually resolved back to
+  the caller.
+
+**Verification run:**
+- `npx tsc --noEmit` -- clean. `npx next build` -- clean.
+- Manual browser verification (see the caveat above about how the test
+  account was created) against all four required scenarios,
+  screenshotted:
+  1. The exact reported bug shape (Name/Category/Unit/Rate (CAD)
+     headers) -- real prices ($450/$225/$250), not $0.00. Also actually
+     imported end-to-end and confirmed saved correctly.
+  2. A file with no recognizable headers at all (Foo/Bar/Baz) -- the
+     mapping screen appeared; mapped Foo->Name, Bar->Rate manually,
+     confirmed the resulting preview was correct (Category defaulted to
+     "General" as specified for an unmapped optional field).
+  3. The app's own `downloadTemplate()` output, reconstructed verbatim
+     -- imports exactly as before (this is where the legacy-columns
+     regression above was caught and fixed).
+  4. A file where Rate matches correctly but one row's cell is blank --
+     that row visibly flagged "blank in file" (amber highlight, no
+     `error`), the other rows unaffected, import button stays enabled.
+- `tests/smoke/csv-import-rate-column-matching.spec.ts` added (pure
+  `matchColumns()`/`normalizeHeader()` assertions only, deliberately no
+  live signup -- see the ACTION NEEDED entry above for why). Proven as a
+  real regression lock: temporarily reverted `normalizeHeader()` to its
+  pre-fix form, reran -- 2 of 3 tests failed with `"rate_cad"` exactly
+  as the real bug produced, then restored the fix and reran, 3/3 passed.
+
+**Files changed:** `lib/csv-column-match.ts` (new), `lib/csv-parse.ts`,
+`app/components/price-book.tsx`,
+`tests/smoke/csv-import-rate-column-matching.spec.ts` (new).
+
+**Exact next action:** Greg reviews the diff and decides whether to
+commit -- and, separately and more urgently, checks the Stripe Dashboard
+per the ACTION NEEDED entry above.
+
+## INVESTIGATION ONLY, NO CODE CHANGED: Payment reminder SMS missing business name and payment link (2026-09-01 21:35 PT)
+
+**Trigger:** Greg received a real reminder SMS reading "Invoice
+#b91588a2 for CA$350.00 remains outstanding as of August 4, 2026.
+Please arrange payment at your earliest convenience. Reply STOP to
+stop text reminders." -- no business name, no payment link.
+
+**Findings, all confirmed against source and live data, nothing
+assumed:**
+
+1. **Message templates.** One shared builder, `lib/payment-reminder-message.ts`'s
+   `buildPaymentReminderSms()`, handles all four stages via a switch:
+   `pre_due`, `overdue_1`, `overdue_2`, `overdue_ongoing` -- matching
+   this file's own "Reminder stages" description above, not five. Found
+   no separate "firm" or "final notice" stage anywhere in the repo
+   (grepped `SPEC.md` and the codebase); if Greg is recalling a richer
+   staging scheme from elsewhere, that's not what's implemented today.
+   The received text is an exact match for the `overdue_2` template
+   (`remains outstanding as of ${dueDateText}.`), confirming which stage
+   actually fired.
+
+2. **Business name: present in the template, empty for Greg's account.**
+   The builder does include a `businessName` field (`"{Business}: "`
+   prefix, omitted entirely when blank -- by design, not a placeholder
+   like "your contractor"). The cron route (`app/api/cron/payment-reminders/route.ts`)
+   correctly selects `tpe_businesses.name` and passes it through
+   (`smsBusinessName = business?.name?.trim() || ""`). Queried the real
+   `tpe_businesses` row for `gchansen@gmail.com` (business id
+   `28ba3f1e-beed-405b-96cd-6fa233eaa81c`, plan pro/complimentary)
+   directly via Supabase: `name` is `""`. Confirmed via
+   `app/api/auth/signup/route.ts` that every business row is created
+   with `name: ""` at signup by design -- it's only ever filled in
+   later via the Profile page, never collected at signup. This is why
+   9 of the 10 real business rows in the table are also `name: ""` --
+   consistent with "never visited Profile to set it," not a bug. Greg
+   needs to fill in **Business Name on the Profile page** for his own
+   account if he wants the "{Business}: " prefix to show.
+
+3. **Payment link: present in the template, not configured for Greg's
+   account, links are never sent a different way.** Same builder:
+   `"Pay here: {link}."` when `tpe_businesses.payment_link` is set,
+   else the exact fallback text Greg received, `"Please arrange
+   payment at your earliest convenience."` -- this is the documented,
+   intentional either/or (see `payment-reminder-message.ts`'s own
+   comment and the DECISIONS.md entry on this). Confirmed via the same
+   query: `payment_link` is `null` for Greg's account. No separate
+   channel sends a link when SMS omits it -- the reminder email
+   (`buildPaymentReminderEmailHtml`) uses the identical field and would
+   show the identical fallback (no "Pay Now" button) if unset there
+   too. He needs to fill in **Payment Link on the Profile page**
+   (PayPal link or e-transfer email) if he wants it included.
+
+4. **SMS sender card icon: confirmed not controlled by this codebase
+   at all.** Grepped the whole repo for any sender-branding/RCS/Verified-
+   SMS asset config -- none exists. The "old clipboard-and-checkmark"
+   mark Greg is describing was the pre-redesign brand mark, already
+   fully swapped in-app (favicons, `apple-touch-icon.png`, app icons,
+   nav/wordmark -- see the brand-mark rollout entries further down this
+   file), but none of those files feed an SMS sender card; that's a
+   distinct asset from a distinct system (Twilio's Sender/RCS Business
+   Messaging or carrier-side Verified-SMS business profile, configured
+   directly in the Twilio Console, not in this repo or its env vars).
+   Not something a code change here can touch -- needs updating
+   directly in Twilio's console (or Google's Business Messages partner
+   console if that's how the RCS sender profile is registered), a
+   separate, non-code task.
+
+**No code changed this session.** Nothing to commit.
+
+**Exact next action:** Greg's call --
+(a) fill in Business Name and Payment Link on his own Profile to see
+the reminder texts change immediately (no code change needed, already
+works), and/or
+(b) separately update the Twilio/RCS sender profile's branding image
+outside this repo, and/or
+(c) if the "five-stage" reminder cadence he described is something he
+actually wants built (as opposed to a misremembering of today's four),
+say so and it can be scoped as real feature work.
 
 ## MERGED, PUSHED: Canadian pricing badge, geo-gated (2026-09-01 08:27 PT)
 

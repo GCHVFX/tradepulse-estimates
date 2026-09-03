@@ -2,6 +2,15 @@
 
 import { useState, useEffect, useRef } from "react";
 import { parseCSV } from "@/lib/csv-parse";
+import { matchColumns, normalizeHeader, type MatchableField } from "@/lib/csv-column-match";
+
+const MAPPING_FIELD_LABELS: Record<MatchableField, string> = {
+  name: "Item Name *",
+  rate: "Rate / Price *",
+  category: "Category",
+  unit: "Unit",
+};
+const MAPPING_FIELDS: MatchableField[] = ["name", "rate", "category", "unit"];
 
 interface PriceBookItem {
   id: string;
@@ -53,11 +62,29 @@ export function PriceBook() {
     taxable: boolean;
     active: boolean;
     error: string;
+    /** Rate/Price column was confidently matched, but this row's own cell
+     * was genuinely empty in the source file -- a gap in the customer's
+     * data, not a column-matching failure. Still imports at $0, but must
+     * stay visibly distinct from a correctly-priced item, never silently
+     * indistinguishable from one. */
+    priceBlank: boolean;
   }
   const [importRows, setImportRows] = useState<ImportRow[] | null>(null);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ imported: number; updated: number; errors: string[] } | null>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
+
+  // CSV column mapping fallback: shown instead of a preview whenever Name
+  // or Rate/Price can't be confidently matched (exactly or via the
+  // synonym map in lib/csv-column-match.ts) -- required, not optional,
+  // since importing without a real price column is exactly the silent
+  // $0.00 corruption bug this exists to prevent.
+  const [csvHeaders, setCsvHeaders] = useState<string[] | null>(null);
+  const [csvRawRows, setCsvRawRows] = useState<Record<string, string>[] | null>(null);
+  const [showMapping, setShowMapping] = useState(false);
+  // "" = not yet chosen. Category/Unit may stay "" (optional); Name/Rate
+  // must be set before the mapping screen's confirm button is enabled.
+  const [mapping, setMapping] = useState<Record<MatchableField, string>>({ name: "", rate: "", category: "", unit: "" });
 
   useEffect(() => {
     fetch("/api/price-book")
@@ -175,16 +202,6 @@ export function PriceBook() {
     URL.revokeObjectURL(url);
   }
 
-  function normalizeHeader(h: string): string {
-    return h
-      .toLowerCase()
-      .trim()
-      .replace(/[\s-]+/g, "_")
-      .replace(/[^a-z0-9_]/g, "")
-      .replace(/_+/g, "_")
-      .replace(/^_|_$/g, "");
-  }
-
   function resolveCol(headers: string[], aliases: string[]): string | null {
     const normalizedAliases = aliases.map(normalizeHeader);
     for (const header of headers) {
@@ -215,56 +232,148 @@ export function PriceBook() {
     return true;
   }
 
+  /**
+   * Builds the import preview from already-resolved columns -- shared by
+   * both the direct auto-matched path and the manual-mapping confirm path,
+   * so a customer who mapped columns by hand gets exactly the same row
+   * handling (including the blank-price flag below) as an automatic match.
+   *
+   * `cols.name` and `cols.rate` are the caller's contract: both must be a
+   * real header string, never null/empty, by the time this runs. Category
+   * and Unit may be null (optional, fall back to blank/"General").
+   */
+  function buildImportRows(
+    allHeaders: string[],
+    rows: Record<string, string>[],
+    cols: { name: string; rate: string; category: string | null; unit: string | null },
+    claimedHeaders: Set<string>
+  ): { rows: ImportRow[]; legacyColumns: string[] } {
+    const remaining = allHeaders.filter((h) => !claimedHeaders.has(h));
+    const descCol = resolveCol(remaining, ["description", "details", "notes", "scope"]);
+    const labourCol = resolveCol(remaining, ["labour_price", "labor_price", "labour", "labor", "labour_rate", "labor_rate"]);
+    const materialCol = resolveCol(remaining, ["material_price", "materials", "parts", "parts_price", "material_cost"]);
+    const taxCol = resolveCol(remaining, ["taxable", "tax", "gst", "charge_tax"]);
+    const activeCol = resolveCol(remaining, ["active", "enabled", "status"]);
+    const keywordsCol = resolveCol(remaining, ["keywords", "aliases", "tags"]);
+    const legacyColumns = [descCol, labourCol, materialCol, taxCol, activeCol, keywordsCol].filter(
+      (h): h is string => !!h
+    );
+
+    const importRows = rows.map((row) => {
+      const name = csvVal(row, cols.name);
+      const labourStr = csvVal(row, labourCol);
+      const priceStr = csvVal(row, cols.rate);
+      const labourPrice = parseMoney(labourStr) || parseMoney(priceStr);
+      const materialStr = csvVal(row, materialCol);
+      const materialPrice = parseMoney(materialStr);
+      const desc = csvVal(row, descCol);
+      const keywords = csvVal(row, keywordsCol);
+      // No dedicated `unit` column on tpe_pricebook_items -- folded into
+      // the description, labelled, rather than silently discarded. Same
+      // pattern this file already uses for `keywords` below.
+      const unitVal = csvVal(row, cols.unit);
+      const unitLabel = unitVal ? `Unit: ${unitVal}` : "";
+      const fullDesc = [desc, unitLabel, keywords].filter(Boolean).join(" | ");
+      return {
+        name,
+        description: fullDesc,
+        category: csvVal(row, cols.category) || "General",
+        price: labourPrice,
+        materialPrice,
+        taxable: csvBool(row, taxCol, true),
+        active: csvBool(row, activeCol, true),
+        error: !name ? "Name is required" : "",
+        // The Rate column IS matched (guaranteed by this function's own
+        // contract) -- a blank cell here is a real gap in this row's own
+        // data, not a column-match failure, so it's flagged, not an error.
+        priceBlank: !labourStr && !priceStr,
+      };
+    });
+
+    return { rows: importRows, legacyColumns };
+  }
+
   function handleCSVFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
       const { headers, rows } = parseCSV(reader.result as string);
+      const match = matchColumns(headers);
 
-      const nameCol = resolveCol(headers, ["item_name", "name", "service", "service_name", "item", "item_description", "task"]);
-      const descCol = resolveCol(headers, ["description", "details", "notes", "scope"]);
-      const catCol = resolveCol(headers, ["category", "type", "group", "section"]);
-      const priceCol = resolveCol(headers, ["price", "unit_price", "rate", "cost", "total", "amount"]);
-      const labourCol = resolveCol(headers, ["labour_price", "labor_price", "labour", "labor", "labour_rate", "labor_rate"]);
-      const materialCol = resolveCol(headers, ["material_price", "materials", "parts", "parts_price", "material_cost"]);
-      const taxCol = resolveCol(headers, ["taxable", "tax", "gst", "charge_tax"]);
-      const activeCol = resolveCol(headers, ["active", "enabled", "status"]);
-      const keywordsCol = resolveCol(headers, ["keywords", "aliases", "tags"]);
+      setImportResult(null);
+      setImportRows(null);
+      setShowMapping(false);
 
-      const recognized = [nameCol, descCol, catCol, priceCol, labourCol, materialCol, taxCol, activeCol, keywordsCol].filter(Boolean) as string[];
-      const unrecognized = headers.filter((h) => !recognized.includes(h) && h.trim());
+      if (!match.isComplete) {
+        // Name and/or Rate couldn't be confidently matched -- do not
+        // import anything, including partially. Show the customer their
+        // actual headers and let them map the required fields by hand.
+        // Applies even to a completely unrecognized file: this screen is
+        // the fallback for "accept whatever the customer has," not a
+        // dead end.
+        setCsvHeaders(headers);
+        setCsvRawRows(rows);
+        setMapping({
+          name: match.columns.name ?? "",
+          rate: match.columns.rate ?? "",
+          category: match.columns.category ?? "",
+          unit: match.columns.unit ?? "",
+        });
+        setShowMapping(true);
+        return;
+      }
 
-      const parsed: ImportRow[] = rows.map((row) => {
-        const name = csvVal(row, nameCol);
-        const labourStr = csvVal(row, labourCol);
-        const priceStr = csvVal(row, priceCol);
-        const labourPrice = parseMoney(labourStr) || parseMoney(priceStr);
-        const materialStr = csvVal(row, materialCol);
-        const materialPrice = parseMoney(materialStr);
-        const desc = csvVal(row, descCol);
-        const keywords = csvVal(row, keywordsCol);
-        const fullDesc = [desc, keywords].filter(Boolean).join(" | ");
-        return {
-          name,
-          description: fullDesc,
-          category: csvVal(row, catCol) || "General",
-          price: labourPrice,
-          materialPrice,
-          taxable: csvBool(row, taxCol, true),
-          active: csvBool(row, activeCol, true),
-          error: !name ? "Name is required" : "",
-        };
-      });
+      const claimed = new Set(
+        [match.columns.name, match.columns.rate, match.columns.category, match.columns.unit].filter(
+          (h): h is string => !!h
+        )
+      );
+      const { rows: parsed, legacyColumns } = buildImportRows(
+        headers,
+        rows,
+        {
+          name: match.columns.name!,
+          rate: match.columns.rate!,
+          category: match.columns.category ?? null,
+          unit: match.columns.unit ?? null,
+        },
+        claimed
+      );
 
       setImportRows(parsed);
-      setImportResult(null);
-      if (unrecognized.length > 0) {
-        setImportResult({ imported: 0, updated: 0, errors: [`Unrecognized columns skipped: ${unrecognized.join(", ")}`] });
+      const recognized = new Set([...claimed, ...legacyColumns]);
+      const unrecognized = headers.filter((h) => !recognized.has(h) && !match.ambiguousHeaders.includes(h) && h.trim());
+      if (unrecognized.length > 0 || match.ambiguousHeaders.length > 0) {
+        const notes: string[] = [];
+        if (unrecognized.length > 0) notes.push(`Unrecognized columns skipped: ${unrecognized.join(", ")}`);
+        if (match.ambiguousHeaders.length > 0) notes.push(`Ambiguous columns skipped: ${match.ambiguousHeaders.join(", ")}`);
+        setImportResult({ imported: 0, updated: 0, errors: notes });
       }
     };
     reader.readAsText(file);
     if (csvInputRef.current) csvInputRef.current.value = "";
+  }
+
+  function handleConfirmMapping() {
+    if (!csvHeaders || !csvRawRows || !mapping.name || !mapping.rate) return;
+    const claimed = new Set([mapping.name, mapping.rate, mapping.category, mapping.unit].filter(Boolean));
+    const { rows: parsed } = buildImportRows(
+      csvHeaders,
+      csvRawRows,
+      { name: mapping.name, rate: mapping.rate, category: mapping.category || null, unit: mapping.unit || null },
+      claimed
+    );
+    setImportRows(parsed);
+    setImportResult(null);
+    setShowMapping(false);
+  }
+
+  function handleCancelMapping() {
+    setShowMapping(false);
+    setCsvHeaders(null);
+    setCsvRawRows(null);
+    setMapping({ name: "", rate: "", category: "", unit: "" });
   }
 
   async function handleConfirmImport() {
@@ -402,10 +511,20 @@ export function PriceBook() {
       {/* Divider */}
       <div className="border-t border-zinc-800" />
 
-      {/* Custom line items */}
-      <div className="flex flex-col gap-3">
+      {/* Common line items + CSV import, merged into one section: this is
+          the data every future AI-generated estimate draws from, so it
+          gets more visual weight than a field label above -- via
+          typography and spacing only (no colour block/badge/tint), reusing
+          the h2 sub-heading treatment already established in
+          profile-form.tsx's "Reviews & payment reminders" section rather
+          than inventing a new one. Manual add and CSV import are equal
+          peers underneath it (same button treatment, side by side);
+          Download Template is demoted to a small secondary link below
+          them, since it serves a different, less common case (starting
+          from scratch) than the two primary paths (already has a list). */}
+      <section className="flex flex-col gap-4 pt-2">
         <div>
-          <p className="text-sm font-medium text-zinc-400">Common line items</p>
+          <h2 className="text-base font-semibold text-white">Common line items</h2>
           <p className="text-xs text-zinc-400 mt-1">
             Material prices on estimates include your markup. Customers see final prices only.
           </p>
@@ -538,26 +657,29 @@ export function PriceBook() {
           )
         )}
 
-        {!showAddForm && (
+        <div className="flex gap-3">
+          {!showAddForm && (
+            <button
+              type="button"
+              onClick={() => setShowAddForm(true)}
+              className="flex-1 border border-dashed border-amber-500/40 bg-amber-500/5 text-amber-500 hover:border-amber-500 hover:bg-amber-500/10 font-medium text-sm rounded-xl py-3 transition-colors min-h-[44px] flex items-center justify-center gap-2"
+            >
+              <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4" aria-hidden="true">
+                <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+              Add item
+            </button>
+          )}
           <button
             type="button"
-            onClick={() => setShowAddForm(true)}
-            className="w-full border border-dashed border-amber-500/40 bg-amber-500/5 text-amber-500 hover:border-amber-500 hover:bg-amber-500/10 font-medium text-sm rounded-xl py-3 transition-colors min-h-[44px] flex items-center justify-center gap-2"
+            onClick={() => csvInputRef.current?.click()}
+            className="flex-1 border border-dashed border-amber-500/40 bg-amber-500/5 text-amber-500 hover:border-amber-500 hover:bg-amber-500/10 font-medium text-sm rounded-xl py-3 transition-colors min-h-[44px] flex items-center justify-center gap-2"
           >
             <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4" aria-hidden="true">
-              <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              <path d="M3 10v3h10v-3M8 2v8m0-8L5 5m3-3l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            Add item
+            Import CSV
           </button>
-        )}
-
-        <div className="border-t border-zinc-800 pt-3 mt-1" />
-
-        <div>
-          <p className="text-sm font-medium text-zinc-400">Import from CSV</p>
-          <p className="text-xs text-zinc-400 mt-1">
-            Upload a spreadsheet to add items in bulk. Existing items with the same name are updated.
-          </p>
         </div>
 
         <input
@@ -568,28 +690,13 @@ export function PriceBook() {
           onChange={handleCSVFile}
         />
 
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => csvInputRef.current?.click()}
-            className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white font-medium text-sm rounded-xl py-3 transition-colors min-h-[44px] flex items-center justify-center gap-2"
-          >
-            <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4" aria-hidden="true">
-              <path d="M3 10v3h10v-3M8 2v8m0-8L5 5m3-3l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            Import CSV
-          </button>
-          <button
-            type="button"
-            onClick={downloadTemplate}
-            className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white font-medium text-sm rounded-xl py-3 transition-colors min-h-[44px] flex items-center justify-center gap-2"
-          >
-            <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4" aria-hidden="true">
-              <path d="M3 10v3h10v-3M8 2v8m0 0L5 7m3 3l3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            Download Template
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={downloadTemplate}
+          className="self-start min-h-[44px] flex items-center text-xs text-zinc-400 hover:text-zinc-300 underline underline-offset-2 transition-colors"
+        >
+          Don&apos;t have a list yet? Download a blank template
+        </button>
 
         {importResult && (
           <div className={`rounded-xl border px-4 py-3 text-sm ${importResult.errors.length > 0 ? "border-amber-800 bg-amber-950 text-amber-300" : "border-green-800 bg-green-950 text-green-300"}`}>
@@ -614,6 +721,54 @@ export function PriceBook() {
           </div>
         )}
 
+        {showMapping && csvHeaders && (
+          <div className="rounded-xl border border-amber-800/60 bg-amber-950/20 p-4 flex flex-col gap-3">
+            <div>
+              <p className="text-white text-sm font-medium">Match your columns</p>
+              <p className="text-xs text-zinc-400 mt-1">
+                We couldn&apos;t confidently match every required column in this file. Choose which column is which below. Nothing imports until you confirm. Name and Rate/Price are required; Category and Unit are optional.
+              </p>
+            </div>
+            <p className="text-xs text-zinc-500">
+              Your file&apos;s columns: {csvHeaders.join(", ")}
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {MAPPING_FIELDS.map((field) => (
+                <div key={field} className="flex flex-col gap-1.5">
+                  <label className="text-sm font-medium text-zinc-400">{MAPPING_FIELD_LABELS[field]}</label>
+                  <select
+                    className={inputClass}
+                    value={mapping[field]}
+                    onChange={(e) => setMapping((m) => ({ ...m, [field]: e.target.value }))}
+                  >
+                    <option value="">{field === "name" || field === "rate" ? "-- Select column --" : "(none)"}</option>
+                    {csvHeaders.map((h) => (
+                      <option key={h} value={h}>{h}</option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleConfirmMapping}
+                disabled={!mapping.name || !mapping.rate}
+                className="flex-1 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-semibold text-sm rounded-lg py-2.5 transition-colors min-h-[40px]"
+              >
+                Continue
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelMapping}
+                className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white text-sm rounded-lg py-2.5 transition-colors min-h-[40px]"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
         {importRows && (
           <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 flex flex-col gap-3">
             <p className="text-white text-sm font-medium">
@@ -621,6 +776,11 @@ export function PriceBook() {
               {importRows.some((r) => r.error) && (
                 <span className="text-red-400 font-normal ml-2">
                   ({importRows.filter((r) => r.error).length} with errors)
+                </span>
+              )}
+              {importRows.some((r) => !r.error && r.priceBlank) && (
+                <span className="text-amber-400 font-normal ml-2">
+                  ({importRows.filter((r) => !r.error && r.priceBlank).length} with a blank price in the file)
                 </span>
               )}
             </p>
@@ -636,10 +796,17 @@ export function PriceBook() {
                 </thead>
                 <tbody>
                   {importRows.map((row, i) => (
-                    <tr key={i} className={row.error ? "bg-red-950/30" : ""}>
+                    <tr key={i} className={row.error ? "bg-red-950/30" : row.priceBlank ? "bg-amber-950/20" : ""}>
                       <td className="px-2.5 py-2 border-t border-zinc-700 text-white truncate max-w-[180px]">{row.name || <span className="text-red-400 italic">missing</span>}</td>
                       <td className="px-2.5 py-2 border-t border-zinc-700 text-zinc-400">{row.category}</td>
-                      <td className="px-2.5 py-2 border-t border-zinc-700 text-zinc-300 text-right">${row.price.toFixed(2)}</td>
+                      <td className="px-2.5 py-2 border-t border-zinc-700 text-zinc-300 text-right">
+                        ${row.price.toFixed(2)}
+                        {!row.error && row.priceBlank && (
+                          <span className="block text-amber-400 font-normal" title="This row's price cell was empty in the source file">
+                            blank in file
+                          </span>
+                        )}
+                      </td>
                       <td className="px-2.5 py-2 border-t border-zinc-700 text-red-400">{row.error}</td>
                     </tr>
                   ))}
@@ -657,7 +824,7 @@ export function PriceBook() {
               </button>
               <button
                 type="button"
-                onClick={() => { setImportRows(null); setImportResult(null); }}
+                onClick={() => { setImportRows(null); setImportResult(null); setCsvHeaders(null); setCsvRawRows(null); }}
                 className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white text-sm rounded-lg py-2.5 transition-colors min-h-[40px]"
               >
                 Cancel
@@ -665,7 +832,7 @@ export function PriceBook() {
             </div>
           </div>
         )}
-      </div>
+      </section>
     </div>
   );
 }
