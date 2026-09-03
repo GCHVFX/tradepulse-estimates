@@ -1,6 +1,6 @@
 # TradePulse handoff
 
-Updated: 2026-09-02 22:31 PT (merged `fix/mobile-hero-photo-crop-v2` and `fix/trade-tabs-scroll-affordance` into `main` with `--no-ff`, about to push to `origin/main` -- Greg reviewed and gave the explicit go-ahead to merge both. See the two entries directly below for what each fixes. Unrelated to the mobile-nav/legal-pages/CSV-import/trade-tabs-overflow/hero-crop-v1 work further below, all of which is already merged to `main` and confirmed live in production.)
+Updated: 2026-09-02 22:37 PT (merged `fix/mobile-hero-photo-crop-v2` (7fea349, merge 5559e5d) and `fix/trade-tabs-scroll-affordance` (f472a3f, merge fbe3c1e) into `main` with `--no-ff` -- Greg reviewed and gave the explicit go-ahead to merge both. Pushed to `origin/main`, production deployment `dpl_HS3X4Cb28VAK7tEvSwRNE5wRCi31` (commit `fbe3c1e`) reached Ready, aliased to `tradepulse-estimates.com`, and **confirmed live by fetching the real canonical URL directly**: the hero's mobile CSS now reads `background-position: 56% 38%; background-size: 100%`, and the trade-tabs fade overlay's exact class list (`hidden max-[379px]:block pointer-events-none absolute inset-y-0 right-0 w-10 transition-opacity duration-150`) is present in the served markup -- both fixes' own fingerprints, not just a green deploy status. See the two entries directly below for what each fixes. Unrelated to the mobile-nav/legal-pages/CSV-import/trade-tabs-overflow/hero-crop-v1 work further below, all of which is already merged to `main` and confirmed live in production.)
 
 ## Mobile hero photo crop v2: head was missing from the frame (2026-09-02 22:14 PT)
 
@@ -64,8 +64,11 @@ the demo widget's top edge, and did one more size-reduction pass (105%
 record the reasoning above).
 
 **Exact next action:** none required -- committed as `7fea349`, merged
-to `main` with `--no-ff`, Greg's explicit go-ahead given for this
-merge.
+to `main` (`5559e5d`, `--no-ff`, Greg's explicit go-ahead), pushed, and
+confirmed live at `https://tradepulse-estimates.com` (deployment
+`dpl_HS3X4Cb28VAK7tEvSwRNE5wRCi31`, commit `fbe3c1e`) -- the live
+mobile hero CSS reads `background-position: 56% 38%; background-size:
+100%`.
 
 ## Trade tabs scroll affordance: rest state looked broken, not scrollable (2026-09-02 22:24 PT)
 
@@ -134,8 +137,12 @@ of the next tab -- already communicates.
 `tests/smoke/trade-tabs-scroll-affordance.spec.ts` (new).
 
 **Exact next action:** none required -- committed as `f472a3f`, merged
-to `main` with `--no-ff`, Greg's explicit go-ahead given for this
-merge.
+to `main` (`fbe3c1e`, `--no-ff`, Greg's explicit go-ahead), pushed, and
+confirmed live at `https://tradepulse-estimates.com` (deployment
+`dpl_HS3X4Cb28VAK7tEvSwRNE5wRCi31`) -- the live markup carries the
+fade overlay's exact class list (`hidden max-[379px]:block
+pointer-events-none absolute inset-y-0 right-0 w-10
+transition-opacity duration-150`).
 
 ## Homepage trade tabs overflow the viewport at mobile widths, fixed (2026-09-02 21:07 PT)
 
