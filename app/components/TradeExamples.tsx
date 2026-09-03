@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 // Generic, hand-drawn trade icons matching the stroke style already used
 // elsewhere on the homepage (viewBox 0 0 20 20, stroke, no fill).
@@ -79,6 +79,41 @@ export function TradeExamples() {
   const [active, setActive] = useState(0);
   const example = EXAMPLES[active];
 
+  // Below max-[379px]:, the tab row scrolls instead of shrinking to fit (see
+  // the comment on the tablist itself). A bare clipped tab at the right edge
+  // reads as broken, not scrollable -- there's no visual signal that more
+  // content exists, just a button cut off mid-rectangle. canScrollRight
+  // drives a fade-out overlay at the right edge (transparent to this
+  // section's own page background, #EADCC0) that's only shown while there's
+  // actually more to scroll to, fading out once the row is scrolled all the
+  // way -- a fade that stayed visible after Painting is fully in view would
+  // itself be misleading, implying unseen content that isn't there.
+  const tablistRef = useRef<HTMLDivElement>(null);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  useEffect(() => {
+    const el = tablistRef.current;
+    if (!el) return;
+
+    const checkScroll = () => {
+      // 2px slack for sub-pixel rounding, not a real remaining scroll distance.
+      setCanScrollRight(el.scrollWidth - el.clientWidth - el.scrollLeft > 2);
+    };
+
+    checkScroll();
+    // Re-check once web fonts finish loading: a font swap changes each tab's
+    // text width, which changes scrollWidth -- the very first measurement
+    // above can be taken before that swap, mismeasuring how much (if any)
+    // of the row is actually scrollable.
+    document.fonts?.ready?.then(checkScroll);
+    el.addEventListener('scroll', checkScroll, { passive: true });
+    window.addEventListener('resize', checkScroll);
+    return () => {
+      el.removeEventListener('scroll', checkScroll);
+      window.removeEventListener('resize', checkScroll);
+    };
+  }, []);
+
   return (
     <div>
       {/* Tabs. The three pills (icon + label, full text, no shrinking) need
@@ -106,30 +141,56 @@ export function TradeExamples() {
           even though the row itself scrolls -- confirmed this was
           actually happening (Plumbing's icon was cut off on the left,
           not just Painting on the right, contrary to how the bug was
-          originally described). */}
-      <div
-        role="tablist"
-        aria-label="Trade examples"
-        className="flex justify-center gap-2 mb-6 max-[379px]:justify-start max-[379px]:overflow-x-auto max-[379px]:snap-x max-[379px]:snap-proximity max-[379px]:[&::-webkit-scrollbar]:hidden"
-        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-      >
-        {EXAMPLES.map((e, i) => (
-          <button
-            key={e.trade}
-            role="tab"
-            aria-selected={i === active}
-            onClick={() => setActive(i)}
-            className="min-h-11 inline-flex items-center gap-2 px-4 rounded-lg text-sm font-semibold transition shrink-0 snap-start"
-            style={
-              i === active
-                ? { background: '#0D1B2E', color: 'white' }
-                : { background: '#F1F5F9', color: '#475569' }
-            }
-          >
-            {e.icon}
-            {e.trade}
-          </button>
-        ))}
+          originally described).
+
+          The wrapper below is `relative` so the fade overlay (a sibling,
+          not a child, of the scrolling row) stays fixed at the row's own
+          right edge while the tabs scroll underneath it -- putting the
+          fade inside the scrolling element itself would drag it along
+          with the content instead of anchoring it to the viewport edge. */}
+      <div className="relative mb-6">
+        <div
+          ref={tablistRef}
+          role="tablist"
+          aria-label="Trade examples"
+          className="flex justify-center gap-2 max-[379px]:justify-start max-[379px]:overflow-x-auto max-[379px]:snap-x max-[379px]:snap-proximity max-[379px]:[&::-webkit-scrollbar]:hidden"
+          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+        >
+          {EXAMPLES.map((e, i) => (
+            <button
+              key={e.trade}
+              role="tab"
+              aria-selected={i === active}
+              onClick={() => setActive(i)}
+              className="min-h-11 inline-flex items-center gap-2 px-4 rounded-lg text-sm font-semibold transition shrink-0 snap-start"
+              style={
+                i === active
+                  ? { background: '#0D1B2E', color: 'white' }
+                  : { background: '#F1F5F9', color: '#475569' }
+              }
+            >
+              {e.icon}
+              {e.trade}
+            </button>
+          ))}
+        </div>
+        {/* pointer-events-none: this sits on top of the last tab's own tap
+            target and must never intercept the click. Hidden above 379px
+            (the same breakpoint the scrolling itself is gated on) since
+            there's nothing to hint at once the row no longer scrolls.
+            No chevron/arrow: this is a touch-swipe context (narrow phone
+            widths only), where horizontal swipe is already the expected
+            gesture on a chip/tab row -- an arrow icon here would spend
+            scarce width on a 320px screen restating what the fade (and the
+            already-visible sliver of the next tab) already communicates. */}
+        <div
+          aria-hidden="true"
+          className="hidden max-[379px]:block pointer-events-none absolute inset-y-0 right-0 w-10 transition-opacity duration-150"
+          style={{
+            background: 'linear-gradient(to right, rgba(234,220,192,0) 0%, #EADCC0 65%)',
+            opacity: canScrollRight ? 1 : 0,
+          }}
+        />
       </div>
 
       {/* Panel */}
