@@ -1,6 +1,6 @@
 # TradePulse handoff
 
-Updated: 2026-09-02 (merged `fix/mobile-nav-crowding`, `fix/legal-pages-kraft-and-disclosures`, and `fix/csv-import-column-matching` into `main`, then pushed to `origin/main` for Vercel production. **The Stripe cleanup action item below is still open, separate, and unresolved -- check it.** Entries for all three kept below, most recent first. Unrelated to the Canadian-badge and redesign threads further down, both of which stay closed out.)
+Updated: 2026-09-02 20:41 PT (merged `fix/mobile-nav-crowding`, `fix/legal-pages-kraft-and-disclosures`, and `fix/csv-import-column-matching` into `main`, pushed to `origin/main`. Production deployment `dpl_G2YEoF1AJUsQdDYk4Sj4AhoCvssE` (commit `52bafd1`) reached Ready, aliased to `tradepulse-estimates.com`, confirmed live by fetching the real canonical URL directly (not assumed from the API alone) -- homepage 200, and `/privacy` actually serving the new `bg-white` light theme and the new "approximate location" disclosure text. **The Stripe cleanup action item below is still open, separate, and unresolved -- check it.** Entries for all three merged branches kept below, most recent first. Unrelated to the Canadian-badge and redesign threads further down, both of which stay closed out.)
 
 ## Rates screen: "Common line items" + "Import from CSV" merged into one section (2026-09-01 22:30 PT, committed 2026-09-02 20:24 PT, merged to main 2026-09-02)
 
