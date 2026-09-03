@@ -232,6 +232,30 @@ export default async function LandingPage() {
         @media (max-width: 639px) {
           .nav-lockup span { font-size: 17px !important; }
         }
+        /* The 17px shrink above isn't enough on its own below ~390px: the
+           bar has no explicit gap between the wordmark and the right-hand
+           CTA/hamburger group, so it's entirely dependent on justify-between
+           leaving slack, and there just isn't any at these widths. Measured
+           on the real rendered nav, not guessed: at 375px the gap was only
+           7.4px; at 360px and 320px it was 0px, with the CTA and hamburger
+           themselves visibly compressed narrower than their padding wants
+           (CTA 77.3px vs its natural 98.9px at 320px) -- this is the
+           reported "crowding" bug. At 390px and up the gap is already a
+           comfortable 22px+ with nothing compressed, so this rule only
+           needs to apply below that. Dropping "Estimates" (its own span,
+           targeted structurally so wordmark.tsx -- shared by every other
+           RowLockup usage sitewide -- doesn't need a className added just
+           for this one nav instance) frees ~55px, which is more than the
+           roughly 15-50px shortfall across 320-375px and restores the CTA
+           and hamburger to their natural, uncompressed size everywhere in
+           that range. Chosen over shrinking the font further (already at
+           17px, smaller risks illegibility) or tightening the CTA's
+           padding (would still need dropping something at 320px anyway,
+           since the shortfall there exceeds what padding alone can give
+           back). See HANDOFF.md for the full per-width measurements. */
+        @media (max-width: 389px) {
+          .nav-lockup span span + span { display: none; }
+        }
         .noise::after {
           content: '';
           position: absolute;
