@@ -203,9 +203,23 @@ export default async function LandingPage() {
            on desktop -- 32% 18% (tuned for the wide desktop crop) put the
            visible window over the tree canopy on the left, missing the
            person entirely. Tuned separately by checking the rendered result,
-           not computed once and assumed correct. */
+           not computed once and assumed correct.
+           v2: 56% 24% / 140% (previous mobile crop) showed the phone but cut
+           his head off entirely -- the whole photo (top to bottom) renders
+           into a fixed-height band whose vertical placement is set by the
+           ypos%, and at 140% zoom that band was tall enough that the head
+           landed behind the Try-free/Sign-in buttons instead of in the
+           clear space below them. Fixed by both reducing the zoom (140% ->
+           100%, shrinking the head-to-phone span so it fits in one clear
+           gap) and moving ypos% down (24% -> 38%) to slide that band lower,
+           landing the head+phone span in the gap between the Sign-in
+           button and the demo widget below. Confirmed against real
+           screenshots at 320/360/375/390/412px, not computed once and
+           assumed correct -- the 412px width was the tightest fit (phone
+           nearly touching the demo widget) and needed an extra size
+           reduction pass to clear it. */
         @media (max-width: 767px) {
-          .hero-photo { background-position: 56% 24%; background-size: 140%; }
+          .hero-photo { background-position: 56% 38%; background-size: 100%; }
         }
         @media (min-width: 768px) {
           .hero-photo {
