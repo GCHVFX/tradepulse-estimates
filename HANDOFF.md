@@ -1,6 +1,82 @@
 # TradePulse handoff
 
-Updated: 2026-09-02 21:31 PT (the Stripe cleanup item below is now resolved -- confirmed directly in the Stripe Dashboard on 2026-09-01, 10:04:34pm: customer permanently deleted, subscription cancelled. That confirmation happened outside any Claude Code session, so the doc had kept flagging it as open until now. Prior entry: merged `fix/mobile-nav-crowding`, `fix/legal-pages-kraft-and-disclosures`, and `fix/csv-import-column-matching` into `main`, pushed to `origin/main`. Production deployment `dpl_G2YEoF1AJUsQdDYk4Sj4AhoCvssE` (commit `52bafd1`) reached Ready, aliased to `tradepulse-estimates.com`, confirmed live by fetching the real canonical URL directly (not assumed from the API alone) -- homepage 200, and `/privacy` actually serving the new `bg-white` light theme and the new "approximate location" disclosure text. Entries for all three merged branches kept below, most recent first. Unrelated to the Canadian-badge and redesign threads further down, both of which stay closed out.)
+Updated: 2026-09-02 21:35 PT (Trade-tabs mobile-overflow bug fixed on branch `fix/trade-tabs-mobile-overflow`, committed. The Stripe cleanup item further below is resolved -- confirmed directly in the Stripe Dashboard on 2026-09-01, 10:04:34pm: customer permanently deleted, subscription cancelled. That confirmation happened outside any Claude Code session, so the doc had kept flagging it as open until now. Unrelated to the mobile-nav/legal-pages/CSV-import work below it, all of which is merged to `main` and confirmed live in production.)
+
+## Homepage trade tabs overflow the viewport at mobile widths, fixed (2026-09-02 21:07 PT)
+
+**Status:** implemented on new branch `fix/trade-tabs-mobile-overflow`,
+cut from `main` (after confirming the branch was clean via
+`git status`/`git branch`). Not committed.
+
+**Bug (confirmed by screenshot):** on the homepage's "See what
+TradePulse creates" section, the three trade tabs (Plumbing/Electrical/
+Painting) overflowed the viewport at mobile widths. Worse than
+originally described: it wasn't just Painting clipped at the right --
+Plumbing was clipped at the left too (a `flex justify-center` row that's
+wider than its container overflows symmetrically on both sides, and a
+sitewide `overflow-x-hidden` wrapper on the page's root div clips
+whatever escapes past the viewport edge on either side).
+
+**Root cause, measured via `getBoundingClientRect()`, not guessed:**
+the three pills (icon + label, `px-4` each, `gap-2` between) need
+376.6px unbroken. Measured at 320/360/375/390/412px (the same range
+used for the earlier nav-wordmark fix): clipped at 320px (-28.3px),
+360px (-8.3px), and 375px (-0.8px, just barely); clean at 390px
+(+6.7px to spare) and 412px. The real crossover is exactly viewport
+width 376.6px, not any Tailwind breakpoint.
+
+**Fix:** below a precisely measured custom breakpoint
+(`max-[379px]:`, a few px of margin above the exact 376.6px threshold),
+the tab row scrolls horizontally (`overflow-x-auto`, `justify-start`,
+scroll-snap) instead of shrinking text/icons to force a fit -- every
+tab stays fully legible and tappable at its natural size, and the
+approach scales cleanly if a fourth trade is ever added. `justify-start`
+while scrollable is deliberate, not incidental: `justify-center` on an
+overflowing *scrollable* row makes the first tab permanently
+unreachable, since the browser clamps negative scroll offset to 0
+rather than letting you scroll left past center. **A real mistake was
+caught and corrected during this session, before verification, not
+after:** the first pass used the generic `sm:` (640px) Tailwind
+breakpoint for the switchover, which is far above the actual 376.6px
+threshold -- that would have unnecessarily put 390px and 412px (already
+fine before this fix) into scroll mode too, exactly the kind of
+guessed-breakpoint mistake the nav-wordmark fix's own history warns
+about. Corrected to the measured `max-[379px]:` value before commit.
+
+**Verification run:**
+- `npx tsc --noEmit` -- clean. `npx next build` -- clean.
+- Re-measured all five widths after the fix: 320/360/375px now
+  correctly scroll (`overflow-x: auto`, `justify-content: flex-start`),
+  with the first tab fully in view at rest and the last tab reachable
+  by scrolling to the end. 390/412px (and desktop, checked at 1280px)
+  are byte-for-byte unchanged from before the fix
+  (`overflow-x: visible`, `justify-content: center`, all three tabs
+  fully visible with no scrolling) -- confirmed via computed style
+  readback, not assumed.
+- Tapping a tab still switches the active example correctly
+  (`aria-selected` flips, the panel content updates), confirmed both
+  via a real click and a dispatched click event at a scrolling width.
+- `tests/smoke/trade-tabs-mobile-overflow.spec.ts` added (6 tests: the
+  three overflow widths must scroll with the first tab unclipped and
+  the last tab reachable; the two comfortable widths must show all
+  three with no scrolling; tapping switches the active example).
+  Proven as a real regression lock, not a tautology: temporarily
+  reverted the fix and reran -- the three narrow-width tests failed
+  with the exact pre-fix numbers (-28.3px, -8.3px, -0.8px, matching the
+  original measurements precisely), then restored the fix and reran,
+  6/6 passed.
+
+**Files changed:** `app/components/TradeExamples.tsx`,
+`tests/smoke/trade-tabs-mobile-overflow.spec.ts` (new).
+
+**Exact next action:** none required -- committed on
+`fix/trade-tabs-mobile-overflow`. Screenshots were taken at
+320/360/375/390px and sent; a desktop (1280px) screenshot could not be
+captured due to a recurring Browser-pane rendering issue this session
+(black frame regardless of page state) -- confirmed correct instead via
+computed-style readback (`justify-content: center`, `overflow-x:
+visible`, all tabs fully visible), the same fallback used earlier in
+this session for the same capture issue.
 
 ## Rates screen: "Common line items" + "Import from CSV" merged into one section (2026-09-01 22:30 PT, committed 2026-09-02 20:24 PT, merged to main 2026-09-02)
 

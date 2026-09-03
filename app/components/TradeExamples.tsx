@@ -81,15 +81,45 @@ export function TradeExamples() {
 
   return (
     <div>
-      {/* Tabs */}
-      <div role="tablist" aria-label="Trade examples" className="flex justify-center gap-2 mb-6">
+      {/* Tabs. The three pills (icon + label, full text, no shrinking) need
+          376.6px unbroken -- measured via getBoundingClientRect, not
+          guessed. Centered content is allowed to overflow into this
+          section's own 24px side padding without clipping (that's why
+          390px/412px were already fine pre-fix, eating a few px of
+          padding on each side) -- the real math, confirmed against the
+          measured numbers at 320/375/390px: clipping starts below
+          viewport 376.6px, not at the `sm:` (640px) breakpoint. An
+          earlier pass here used `sm:` for the switchover and caught its
+          own mistake in review: that unnecessarily put 390-412px (already
+          fine) into scroll mode too, right after the nav-wordmark fix's
+          own lesson about not guessing a breakpoint. `max-[379px]:` (a
+          few px of margin above the exact 376.6px threshold) is used
+          instead, so nothing changes at any width where this already
+          displayed correctly. Below that width, this row scrolls
+          horizontally rather than shrinking text/icons to force a fit
+          (illegible the same way the nav fix's first pass under-shot) --
+          every tab stays fully legible and tappable at its natural size,
+          and it scales cleanly if a fourth trade is ever added.
+          `justify-start` while scrollable is deliberate: `justify-center`
+          on an overflowing flex row clips the portion that would sit
+          "before center," making the first tab unreachable by scrolling
+          even though the row itself scrolls -- confirmed this was
+          actually happening (Plumbing's icon was cut off on the left,
+          not just Painting on the right, contrary to how the bug was
+          originally described). */}
+      <div
+        role="tablist"
+        aria-label="Trade examples"
+        className="flex justify-center gap-2 mb-6 max-[379px]:justify-start max-[379px]:overflow-x-auto max-[379px]:snap-x max-[379px]:snap-proximity max-[379px]:[&::-webkit-scrollbar]:hidden"
+        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+      >
         {EXAMPLES.map((e, i) => (
           <button
             key={e.trade}
             role="tab"
             aria-selected={i === active}
             onClick={() => setActive(i)}
-            className="min-h-11 inline-flex items-center gap-2 px-4 rounded-lg text-sm font-semibold transition"
+            className="min-h-11 inline-flex items-center gap-2 px-4 rounded-lg text-sm font-semibold transition shrink-0 snap-start"
             style={
               i === active
                 ? { background: '#0D1B2E', color: 'white' }
