@@ -136,9 +136,24 @@ export default function ContactPage() {
           <aside className="hidden rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-sm sm:block sm:p-6">
             <p className="text-xs font-semibold uppercase tracking-widest text-amber-400">Before you email</p>
             <h2 className="mt-2 text-lg font-bold">Include these details</h2>
-            <p className="mt-3 text-sm leading-relaxed" style={{ color: "#F7F2E9" }}>
-              The email address on your account, what you were trying to do, what happened instead (including any error message), and a screenshot when the problem is visual.
-            </p>
+            <ul className="mt-3 space-y-1.5 text-sm leading-relaxed" style={{ color: "#F7F2E9" }}>
+              <li className="flex gap-2">
+                <span className="text-amber-500 shrink-0 mt-1">•</span>
+                The email address on your account
+              </li>
+              <li className="flex gap-2">
+                <span className="text-amber-500 shrink-0 mt-1">•</span>
+                What you were trying to do
+              </li>
+              <li className="flex gap-2">
+                <span className="text-amber-500 shrink-0 mt-1">•</span>
+                What happened instead, including any error message
+              </li>
+              <li className="flex gap-2">
+                <span className="text-amber-500 shrink-0 mt-1">•</span>
+                A screenshot, if the problem is visual
+              </li>
+            </ul>
             <p className="mt-4 border-t border-white/10 pt-3 text-xs leading-relaxed" style={{ color: "#9A8F79" }}>
               Never send your password or full payment-card details by email.
             </p>

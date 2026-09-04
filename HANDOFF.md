@@ -1,6 +1,70 @@
 # TradePulse handoff
 
-Updated: 2026-09-03 18:38 PT (`EMAIL_DOMAIN` switched from `trytradepulse.com` to `tradepulse-estimates.com` in `lib/email-addresses.ts` -- the actual Resend sending domain for every transactional email path (estimate sends, password resets, payment reminders, plus two internal-only alerts). Merged to `main` and pushed on Greg's explicit go-ahead **without the planned real-send verification**, which was blocked by Claude Code's own permission classifier, not by anything wrong with the code -- see the entry directly below for exactly what was and wasn't verified. Unrelated to the earlier `SUPPORT_EMAIL` move or the hero-crop/trade-tabs work further below, all of which is already merged to `main` and confirmed live in production.)
+Updated: 2026-09-03 19:12 PT (Contact page's "Before you email" card restructured from a run-on sentence into a bulleted list, committed directly to `main`, small contained change, no branch. Separately: **the `EMAIL_DOMAIN` real-send verification gap from the entry below is now closed** -- a password reset triggered against production right after that merge still showed `estimates@trytradepulse.com`; diagnosed (not assumed) via Resend's own send log and the exact deployment-ready timestamp, and it was neither Supabase's native mailer nor a stale deploy, just two resets triggered a few minutes/seconds before the new build actually went `Ready` and started serving. See the two entries directly below for both. Unrelated to the hero-crop/trade-tabs work further below, all of which is already merged to `main` and confirmed live in production.)
+
+## Contact page "Before you email" card: bulleted (2026-09-03 19:12 PT)
+
+**Status:** committed directly to `main` -- small, contained copy
+restructure, no branch, same convention as the earlier CLAUDE.md
+Critical Rules edit.
+
+**What:** the card's detail list was one run-on sentence. Restructured
+into four bullets, reusing the sitewide amber-dot list pattern already
+established elsewhere (`electrical-cost`, `plumbing-cost`,
+`plumbing-estimate-template`, `estimate-markdown.tsx`:
+`<li className="flex gap-2 ..."><span className="text-amber-500
+shrink-0 mt-1">•</span>{item}</li>`) rather than inventing a new
+one -- neither `/contact` itself nor the FAQ accordion (where the brief
+suggested checking first) actually had an existing list pattern of
+their own, so the sitewide convention was the right one to match
+instead. Card styling, heading, and the "Never send your password..."
+line below are unchanged.
+
+**Verification run:** screenshot of the rendered card at desktop
+width, sent. `npx tsc --noEmit` -- clean. `npx next build` -- clean.
+
+**Files changed:** `app/contact/page.tsx` (one block, `<p>` -> `<ul>`).
+
+**Exact next action:** none required -- committed and pushed.
+
+## EMAIL_DOMAIN real-send verification: resolved, diagnosed not assumed (2026-09-03 18:49 PT)
+
+**What was reported:** a password reset triggered against production
+after the `EMAIL_DOMAIN` merge (see entry below) still showed
+`estimates@trytradepulse.com`, with a raw Supabase
+`.../auth/v1/verify?...type=recovery` link that didn't look like an
+"app-generated" format.
+
+**Investigated per explicit instruction, no fix proposed until
+diagnosed:**
+- Grepped the whole codebase for `resetPasswordForEmail` -- zero
+  matches. The only reset-flow code is
+  `app/api/send-reset-email/route.ts`, called directly by the login
+  page's forgot-password button. That route calls
+  `supabaseAdmin.auth.admin.generateLink({ type: 'recovery' })` (which
+  only generates a link, does not send email) then sends the actual
+  email itself via Resend. The raw Supabase verify-link format is
+  exactly what this route always embeds -- not a sign Supabase's own
+  mailer fired instead.
+- Confirmed the deployed production commit: `dpl_A3CFDsbHqbjMQy9pF13n67cVBiGr`,
+  commit `2d4c0be` -- an exact match for the pushed merge, aliased to
+  `tradepulse-estimates.com`. Not a stale deploy.
+- Checked Resend's own send log directly rather than guessing further:
+  two "Reset your TradePulse password" emails, both `delivered`, both
+  `from: estimates@trytradepulse.com` -- sent `01:35:55 UTC` and
+  `01:42:06 UTC`. The fix's own deployment became `Ready` at
+  `01:42:12.513 UTC`. Both sends landed before that, by ~6.5 minutes
+  and ~6 seconds respectively -- both served by the *previous*
+  production deployment (`cdafc22`, the `SUPPORT_EMAIL`-only commit,
+  where `EMAIL_DOMAIN` was still `trytradepulse.com`), not a defect in
+  the fix itself.
+
+**Conclusion:** the domain switch works as intended; the two observed
+emails were a deploy-transition timing artifact, not a bug. No code
+changed as part of this diagnosis.
+
+**Exact next action:** none required. A password reset triggered any
+time after `2026-09-04 01:42:12 UTC` will show the new domain.
 
 ## Estimates/transactional sending domain switched (2026-09-03 18:38 PT)
 
