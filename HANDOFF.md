@@ -1,6 +1,102 @@
 # TradePulse handoff
 
-Updated: 2026-09-03 19:12 PT (Contact page's "Before you email" card restructured from a run-on sentence into a bulleted list, committed directly to `main`, small contained change, no branch. Separately: **the `EMAIL_DOMAIN` real-send verification gap from the entry below is now closed** -- a password reset triggered against production right after that merge still showed `estimates@trytradepulse.com`; diagnosed (not assumed) via Resend's own send log and the exact deployment-ready timestamp, and it was neither Supabase's native mailer nor a stale deploy, just two resets triggered a few minutes/seconds before the new build actually went `Ready` and started serving. See the two entries directly below for both. Unrelated to the hero-crop/trade-tabs work further below, all of which is already merged to `main` and confirmed live in production.)
+Updated: 2026-09-03 20:30 PT (Shared nav/footer refactor implemented on branch `refactor/shared-nav-footer`, cut from `main`. **Not merged -- explicitly held for Greg's review**, per his own instruction that this touches every public page and a subtle regression could slip past a quick look. The audit found the divergence was much bigger than assumed (4 different nav patterns, 5+ different footer patterns across the public pages, three pages with no nav at all) -- see the entry directly below for the full audit, the scope Greg actually confirmed, and the pixel-diff verification. Unrelated to the contact-page bullet list or the `EMAIL_DOMAIN` work below it, both already merged to `main` and live in production.)
+
+## Shared nav/footer refactor (2026-09-03 20:30 PT)
+
+**Status:** implemented on branch `refactor/shared-nav-footer`, cut
+from `main`. Committed. **Not merged -- do not merge without Greg
+reviewing this one specifically**, per his own instruction: this
+touches every public page, and a careless swap could break formatting
+site-wide.
+
+**Audit, done first (per instruction):** the brief assumed home was
+the only page not sharing a component and that one "most complete"
+footer could be extracted and applied everywhere. The actual audit
+found far more divergence:
+- **Nav, four different patterns:** home uses `MarketingNav` (sticky,
+  hamburger, `#how-it-works`/`#pricing` anchors). trades/electricians/
+  plumbers share one byte-identical simpler static `<header>` (wordmark
+  + Sign in only, no hamburger, no anchors, not sticky). plumbing-cost/
+  electrical-cost/plumbing-estimate-template have **no header at all**.
+  contact has its own bespoke static header (wordmark + Back home +
+  Sign in, solid white, not sticky) built for a support page.
+- **Footer, five-plus different patterns:** home's rich two-part
+  footer (logo + nav + CTA, then a legal-links bar). trades/
+  electricians/plumbers' plainer version (domain line hidden on
+  mobile, then Support/Terms/Privacy). plumbing-cost/electrical-cost's
+  single combined footer (domain line always visible). plumbing-
+  estimate-template's identical structure but dark-themed colours
+  (`#9A8F79`/`#F7F2E9` vs `#5C4A2E`/`#26211B`) -- a deliberate
+  difference driven by that page's own theme, not drift. contact's own
+  "TradePulse · British Columbia, Canada" + Home/Terms/Privacy footer.
+  `/share/[id]`'s minimal "Powered by TradePulse" line. `/demo`'s mock
+  app-UI bottom nav (not a marketing footer at all).
+
+**Scope confirmed with Greg before writing any component** (four
+questions, all resolved to the recommended option):
+1. plumbing-cost/electrical-cost/plumbing-estimate-template stay
+   nav-less -- out of scope, not given `MarketingNav`.
+2. trades/electricians/plumbers get their **own** extracted shared
+   header (not swapped to `MarketingNav` -- that would have added a
+   hamburger menu and two anchor links that only resolve on the
+   homepage, a real behavior change, not cleanup).
+3. Footer consolidated as **one shared component per cluster**
+   (matching each cluster's current content), not one universal
+   footer applied everywhere.
+4. contact, `/share/[id]`, and `/demo` are out of scope entirely --
+   left exactly as they are.
+
+**What was built:**
+- `app/components/trade-page-header.tsx` (`TradePageHeader`) -- the
+  trades/electricians/plumbers header, extracted verbatim.
+- `app/components/trade-page-footer.tsx` (`TradePageFooter`) -- their
+  footer, extracted verbatim (two stacked `<footer>`s, domain line
+  `hidden sm:block`).
+- `app/components/content-page-footer.tsx` (`ContentPageFooter`) --
+  plumbing-cost/electrical-cost/plumbing-estimate-template's footer,
+  with a `variant: "light" | "dark"` prop to preserve the deliberate
+  colour difference rather than picking one for everyone.
+- `app/components/marketing-footer.tsx` (`MarketingFooter`) -- home's
+  own footer, extracted so home isn't the one page left inlining raw
+  markup once every other cluster has a shared component. Same prop
+  shape as `MarketingNav` (`hasLoggedInUser`, `hasAccess`, `ctaHref`).
+- Seven pages updated to use the new components: `app/page.tsx`,
+  `app/trades/page.tsx`, `app/electricians/page.tsx`,
+  `app/plumbers/page.tsx`, `app/plumbing-cost/page.tsx`,
+  `app/electrical-cost/page.tsx`,
+  `app/plumbing-estimate-template/page.tsx`. Now-unused imports
+  (`RowLockup`, `CANONICAL_DOMAIN`, `SUPPORT_EMAIL` where applicable)
+  removed from each.
+
+**Verification, per page not just once:** screenshotted the nav/header
+region and the footer region of all 7 affected pages, at 375px and
+1280px, before and after -- 28 screenshot pairs. Compared with a real
+pixel-diff script (canvas byte comparison, not eyeballing), not just a
+visual skim. Result: 26 of 28 pairs at 0.000%-0.004% difference
+(sub-pixel font-rendering noise). The other 2 (home's hero/nav region
+only, not the footer) showed ~4% at first -- traced to the homepage's
+own entrance/fade-in animation settling at a slightly different frame
+between two separate captures, confirmed by visual inspection showing
+identical content/layout with only a few px of vertical offset, not a
+real difference. Home's own footer region: 0.000% both widths.
+
+One real verification wrinkle worth recording: capturing the true
+page-bottom needed `scrollTo({ top, behavior: "instant" })`, not a
+plain `scrollTo(x, y)` -- the homepage sets `html { scroll-behavior:
+smooth }` for its own anchor links, so a plain scrollTo inherited that
+and animated, landing at a non-deterministic partial scroll position
+whenever the fixed wait was shorter than the animation (which it
+initially was, giving false "60%+ different" readings before this was
+caught and fixed).
+
+`npx tsc --noEmit` -- clean. `npx next build` -- clean.
+
+**Files changed:** 4 new shared components (above) + 7 pages updated
+to use them.
+
+**Exact next action:** Greg reviews the branch and the screenshots
+(sent), then decides whether to merge. Not merged yet, on purpose.
 
 ## Contact page "Before you email" card: bulleted (2026-09-03 19:12 PT)
 

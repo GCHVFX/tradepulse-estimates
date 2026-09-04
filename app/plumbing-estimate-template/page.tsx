@@ -3,8 +3,8 @@ import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { PLUMBING_ESTIMATE_TEMPLATE } from "./content";
-import { CANONICAL_URL, CANONICAL_DOMAIN } from "@/lib/site-url";
-import { SUPPORT_EMAIL } from "@/lib/email-addresses";
+import { ContentPageFooter } from "@/app/components/content-page-footer";
+import { CANONICAL_URL } from "@/lib/site-url";
 
 export const metadata: Metadata = {
   title: "Plumbing Estimate Template: How to Write Quotes That Close Jobs",
@@ -150,19 +150,7 @@ export default function PlumbingEstimateTemplatePage() {
         </article>
       </main>
 
-      <footer className="text-center py-8 text-sm" style={{ color: "#9A8F79" }}>
-        <p>
-          TradePulse Estimates,{" "}
-          <a href={CANONICAL_URL} className="hover:text-[#F7F2E9] transition-colors">
-            {CANONICAL_DOMAIN}
-          </a>
-        </p>
-        <div className="mt-2 flex items-center justify-center gap-4 text-xs flex-wrap">
-          <a href={`mailto:${SUPPORT_EMAIL}`} className="hover:text-[#F7F2E9] transition-colors">{SUPPORT_EMAIL}</a>
-          <a href="/terms" className="hover:text-[#F7F2E9] transition-colors">Terms of Service</a>
-          <a href="/privacy" className="hover:text-[#F7F2E9] transition-colors">Privacy Policy</a>
-        </div>
-      </footer>
+      <ContentPageFooter variant="dark" />
     </div>
   );
 }
