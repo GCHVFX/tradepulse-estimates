@@ -1,14 +1,13 @@
 # TradePulse handoff
 
-Updated: 2026-09-03 20:30 PT (Shared nav/footer refactor implemented on branch `refactor/shared-nav-footer`, cut from `main`. **Not merged -- explicitly held for Greg's review**, per his own instruction that this touches every public page and a subtle regression could slip past a quick look. The audit found the divergence was much bigger than assumed (4 different nav patterns, 5+ different footer patterns across the public pages, three pages with no nav at all) -- see the entry directly below for the full audit, the scope Greg actually confirmed, and the pixel-diff verification. Unrelated to the contact-page bullet list or the `EMAIL_DOMAIN` work below it, both already merged to `main` and live in production.)
+Updated: 2026-09-03 20:47 PT (Shared nav/footer refactor merged to `main` (`2a92150`, `--no-ff`, no conflicts) and pushed, after Greg reviewed the branch on localhost. Production deployment `dpl_ChVwioTDisYZwP5XLwghJzDk9Esw` (commit `2a92150`) reached Ready, aliased to `tradepulse-estimates.com`, and **confirmed live by fetching all 7 affected pages directly**: all return 200, and the actual served HTML carries each new component's fingerprint -- `TradePageHeader`'s exact class list on `/trades`, the dark-variant hover colour from `ContentPageFooter` on `/plumbing-estimate-template`, and two "How it works" links on `/` (nav + the new `MarketingFooter`'s own nav row). See the entry directly below for the full audit, the scope Greg confirmed before any component was written, and the pixel-diff verification. Unrelated to the contact-page bullet list or the `EMAIL_DOMAIN` work further below, both already merged to `main` and live in production.)
 
 ## Shared nav/footer refactor (2026-09-03 20:30 PT)
 
 **Status:** implemented on branch `refactor/shared-nav-footer`, cut
-from `main`. Committed. **Not merged -- do not merge without Greg
-reviewing this one specifically**, per his own instruction: this
-touches every public page, and a careless swap could break formatting
-site-wide.
+from `main` at `436b2b0`. Committed (`ef09bb8`), reviewed by Greg on
+localhost, merged to `main` (`2a92150`, `--no-ff`), pushed, and
+confirmed live.
 
 **Audit, done first (per instruction):** the brief assumed home was
 the only page not sharing a component and that one "most complete"
@@ -95,8 +94,15 @@ caught and fixed).
 **Files changed:** 4 new shared components (above) + 7 pages updated
 to use them.
 
-**Exact next action:** Greg reviews the branch and the screenshots
-(sent), then decides whether to merge. Not merged yet, on purpose.
+**Exact next action:** none required -- committed as `ef09bb8`, merged
+to `main` (`2a92150`, `--no-ff`, no conflicts), pushed, and confirmed
+live at `https://tradepulse-estimates.com` (deployment
+`dpl_ChVwioTDisYZwP5XLwghJzDk9Esw`) -- all 7 affected pages return 200
+and the served HTML carries each new component's own fingerprint
+(`TradePageHeader`'s class list on `/trades`, the dark-variant hover
+colour from `ContentPageFooter` on `/plumbing-estimate-template`, two
+"How it works" links on `/` confirming `MarketingFooter`'s own nav
+row rendered).
 
 ## Contact page "Before you email" card: bulleted (2026-09-03 19:12 PT)
 
