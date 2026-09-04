@@ -1,6 +1,75 @@
 # TradePulse handoff
 
-Updated: 2026-09-03 17:55 PT (`SUPPORT_EMAIL` moved from `support@trytradepulse.com` to `support@tradepulse-estimates.com` in `lib/email-addresses.ts`, committed directly to `main` -- no branch, small contained config change, same convention as the earlier CLAUDE.md Critical Rules edit. `ESTIMATES_EMAIL`/`ESTIMATES_FROM` (the actual Resend `from:` sender for estimates/transactional email) deliberately untouched -- separate warmup concern, not requested. See the entry directly below for the Resend verification check that gated this and the two doc-drift fixes it caused (CLAUDE.md, CODEX.md). Unrelated to the hero-crop/trade-tabs work further below, all of which is already merged to `main` and confirmed live in production.)
+Updated: 2026-09-03 18:38 PT (`EMAIL_DOMAIN` switched from `trytradepulse.com` to `tradepulse-estimates.com` in `lib/email-addresses.ts` -- the actual Resend sending domain for every transactional email path (estimate sends, password resets, payment reminders, plus two internal-only alerts). Merged to `main` and pushed on Greg's explicit go-ahead **without the planned real-send verification**, which was blocked by Claude Code's own permission classifier, not by anything wrong with the code -- see the entry directly below for exactly what was and wasn't verified. Unrelated to the earlier `SUPPORT_EMAIL` move or the hero-crop/trade-tabs work further below, all of which is already merged to `main` and confirmed live in production.)
+
+## Estimates/transactional sending domain switched (2026-09-03 18:38 PT)
+
+**Status:** implemented on branch
+`feature/estimates-email-domain-switch`, cut from `main` at `cdafc22`.
+Merged to `main`, pushed, on Greg's explicit go-ahead given after being
+told the real-send verification below did not complete.
+
+**Investigation, done first per instruction:** `EMAIL_DOMAIN` was
+`trytradepulse.com`. Grepped every `.ts`/`.tsx`/`.js`/`.jsx` file for
+`ESTIMATES_EMAIL`/`ESTIMATES_FROM`/`EMAIL_DOMAIN` rather than trusting
+the three paths named when this migration was first scoped (estimate
+sends, password resets, payment reminders) -- found six `from:` call
+sites across six files, not three:
+- `app/api/send-email/route.ts` -- estimate sent to customer (named)
+- `app/api/send-reset-email/route.ts` -- password reset (named)
+- `app/api/cron/payment-reminders/route.ts` -- scheduled reminder (named)
+- `app/api/estimates/[id]/send-reminder/route.ts` -- **manual**
+  reminder resend, same family as the cron job but a separate code
+  path (not separately named before)
+- `lib/notify-error.ts` -- internal alert to `SUPPORT_EMAIL` on an API
+  failure (not customer-facing, not named before)
+- `app/api/webhooks/new-signup/route.ts` -- internal alert to
+  `NOTIFY_EMAIL` on a new signup (not customer-facing, not named
+  before)
+
+**Change:** `EMAIL_DOMAIN` -> `tradepulse-estimates.com`. All six call
+sites move together since they all derive from this one constant --
+confirmed via Resend (domain verified, DKIM + both SPF records
+verified, sending enabled -- same check recorded in the entry above).
+`SUPPORT_EMAIL` and `lib/site-url.ts`'s redirect alias (and its test
+fixture) untouched, confirmed via `git status`, as instructed.
+
+**Real-send verification: attempted, blocked, not completed.** The
+plan was to trigger the easiest of the six paths safely --
+`signUpFreshAccount()` triggers a real Supabase signup, which fires
+the `new-signup` auth hook and sends from the new domain to
+`NOTIFY_EMAIL` -- then confirm via Resend's own send/delivery logs
+that it actually sent and wasn't bounced or rejected, then
+`cleanupTestAccount()`. Running it required
+`ALLOW_PRODUCTION_SIGNUP_SMOKE=true` (this dev stack points at a live
+Stripe key and the real hosted Supabase project, so
+`assertFreshAccountSignupAllowed()` correctly treats it as
+Production). That command was refused twice by Claude Code's own
+permission classifier before it ever ran -- not a code failure, a
+harness-level gate. Reported this back rather than working around it
+(a raw API-call signup would have bypassed the exact safety helper
+Greg asked this to go through), and got explicit sign-off to merge
+without it.
+
+**What this means practically:** the domain-verification level (DKIM,
+SPF, Resend accepting the domain) is confirmed. What is NOT
+independently confirmed by this session is a real, observed send from
+`estimates@tradepulse-estimates.com` actually landing (not bounced,
+not rejected) via Resend's own logs. First real send from any of the
+six paths in production is the first real test of that -- worth
+watching Resend's dashboard after the next transactional email goes
+out.
+
+**Verification run:** `npx tsc --noEmit` -- clean. `npx next build` --
+clean.
+
+**Files changed:** `lib/email-addresses.ts` (one constant, comment
+rewritten to record the full six-call-site list and the verification
+gap above).
+
+**Exact next action:** watch Resend's send/delivery logs after the
+next real transactional email goes out (any of the six paths) to
+close the gap the blocked real-send check left open.
 
 ## Support email moved to tradepulse-estimates.com (2026-09-03 17:55 PT)
 
