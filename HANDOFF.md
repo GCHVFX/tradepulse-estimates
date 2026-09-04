@@ -1,6 +1,69 @@
 # TradePulse handoff
 
-Updated: 2026-09-02 22:54 PT (two small bounded follow-ups: (1) the mobile hero photo crop was reverted from the v2 attempt (`56% 24%`, `background-size: 140%`) back to the original shipped crop (`56% 28%`, no `background-size` override) -- explicit decision by Greg, not a bug; (2) the trade-tabs scroll fade was one-sided (right edge only), leaving a hard cut with no fade on the tab exiting to the left once scrolled -- fixed to show a fade on whichever edge(s) currently have hidden content. See the two entries directly below. Unrelated to the mobile-nav/legal-pages/CSV-import/trade-tabs-overflow work further below, all of which is already merged to `main` and confirmed live in production.)
+Updated: 2026-09-03 17:55 PT (`SUPPORT_EMAIL` moved from `support@trytradepulse.com` to `support@tradepulse-estimates.com` in `lib/email-addresses.ts`, committed directly to `main` -- no branch, small contained config change, same convention as the earlier CLAUDE.md Critical Rules edit. `ESTIMATES_EMAIL`/`ESTIMATES_FROM` (the actual Resend `from:` sender for estimates/transactional email) deliberately untouched -- separate warmup concern, not requested. See the entry directly below for the Resend verification check that gated this and the two doc-drift fixes it caused (CLAUDE.md, CODEX.md). Unrelated to the hero-crop/trade-tabs work further below, all of which is already merged to `main` and confirmed live in production.)
+
+## Support email moved to tradepulse-estimates.com (2026-09-03 17:55 PT)
+
+**What:** Zoho Mail went live for inbound `support@tradepulse-estimates.com`.
+Checked whether Resend can also send/reference that address before touching
+anything -- inbound (MX/Zoho) and outbound (SPF/DKIM/Resend) are separate
+concerns, and one being live doesn't confirm the other.
+
+**Resend verification check (via the Resend MCP, `list-domains` +
+`get-domain`):** `tradepulse-estimates.com` domain status `verified`,
+sending `enabled`, and all three DNS records individually `verified`:
+DKIM (`resend._domainkey` TXT), SPF (`send` MX to
+`feedback-smtp.us-east-1.amazonses.com`), SPF (`send` TXT,
+`v=spf1 include:amazonses.com ~all`). Cleared to proceed.
+
+**Change:** `SUPPORT_EMAIL` in `lib/email-addresses.ts` now hardcodes
+`support@tradepulse-estimates.com` directly, decoupled from the shared
+`EMAIL_DOMAIN` constant (previously `` `support@${EMAIL_DOMAIN}` ``, which
+would have also silently moved `ESTIMATES_EMAIL`/`ESTIMATES_FROM` --
+the actual Resend `from:` sender for the high-volume transactional path
+(estimate sends, password resets, payment reminders) -- if `EMAIL_DOMAIN`
+itself had been flipped instead). That sender stays on
+`trytradepulse.com` on purpose: sending reputation warmup for that path
+is a separate, not-yet-authorized migration, unrelated to the support
+address (which is only ever a `to:`/mailto/display address, confirmed by
+grep -- never a Resend `from:` sender, so it doesn't carry the same
+warmup concern).
+
+**Grep confirmed** zero remaining hardcoded references to
+`support@trytradepulse.com` in any `.ts`/`.tsx`/`.js`/`.jsx` file --
+`SUPPORT_EMAIL` was already the single source every usage imports from.
+`lib/site-url.ts` and its redirect-alias test fixture untouched, as
+instructed -- that `trytradepulse.com` reference is a permanent redirect
+for old share links/QR codes in the wild, a separate concern despite
+sharing the domain string.
+
+**Two doc-drift fixes, direct consequence of the change (not a broader
+cleanup):** `CLAUDE.md` and `CODEX.md` (the live project-instructions
+files for Claude Code and Codex, not changelogs) both documented
+`POST /api/notify-error` as emailing `support@trytradepulse.com` by
+name -- that route uses `SUPPORT_EMAIL` as its `to:` address (see
+`lib/notify-error.ts`), so the old address would have gone stale the
+instant this shipped. Updated both to the new address.
+
+**Left alone, flagged rather than fixed (out of scope):**
+`terms-of-service.md` and `privacy-policy.md` at the repo root still
+say `support@trytradepulse.com` in prose -- confirmed via grep that
+neither file is imported or read by any app code (they're standalone,
+unreferenced markdown, not the live `/terms`/`/privacy` pages, which
+already use `SUPPORT_EMAIL` correctly). `MIGRATION.md` also still
+shows the old address, but it's an explicitly dated, read-only
+discovery snapshot from 2026-08-26 ("Nothing in this document has been
+executed"), not a live source of truth -- left as the historical
+record it is, same as `HANDOFF.md`/`DECISIONS.md`'s own past entries.
+
+**Verification run:** `npx tsc --noEmit` -- clean. `npx next build` --
+clean. Grep for `support@trytradepulse\.com` across `*.{ts,tsx,js,jsx}`
+-- zero matches.
+
+**Files changed:** `lib/email-addresses.ts`, `CLAUDE.md`, `CODEX.md`.
+
+**Exact next action:** none required -- committed directly to `main`,
+not pushed (no push instruction given this time).
 
 ## Mobile hero photo crop: reverted v2 back to the original (2026-09-02 22:54 PT)
 

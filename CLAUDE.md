@@ -415,7 +415,7 @@ import { stripe } from "@/lib/stripe";
 - `POST /api/auth/login` — email/password sign in via `signInWithPassword`
 - `GET /auth/google` — starts Google OAuth (`signInWithOAuth`), redirects to `/auth/callback?next=` (default `/onboarding`); note: under `/auth`, not `/api`
 - `GET /api/exchange-recovery` — exchanges Supabase auth code for session (password reset flow)
-- `POST /api/notify-error` — emails `support@trytradepulse.com` on Anthropic API errors; always returns 200
+- `POST /api/notify-error` — emails `support@tradepulse-estimates.com` on Anthropic API errors; always returns 200
 - `POST /api/webhooks/new-signup` — Supabase auth hook → email notification on new signup; auth via `x-webhook-secret` header
 
 ---

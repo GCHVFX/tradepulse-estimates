@@ -392,7 +392,7 @@ import { stripe } from "@/lib/stripe";
 
 - `POST /api/auth/signup`: creates Supabase user, Stripe trial subscription, and `tpe_businesses` row
 - `GET /api/exchange-recovery`: exchanges Supabase auth code for session in password reset flow
-- `POST /api/notify-error`: emails `support@trytradepulse.com` on Anthropic API errors and always returns 200
+- `POST /api/notify-error`: emails `support@tradepulse-estimates.com` on Anthropic API errors and always returns 200
 - `POST /api/webhooks/new-signup`: Supabase auth hook -> email notification on new signup, auth via `x-webhook-secret` header
 
 ---
