@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { JsonLd } from "@/app/components/json-ld";
-import { CANONICAL_URL, CANONICAL_DOMAIN } from "@/lib/site-url";
-import { SUPPORT_EMAIL } from "@/lib/email-addresses";
+import { ContentPageFooter } from "@/app/components/content-page-footer";
+import { CANONICAL_URL } from "@/lib/site-url";
 
 export const metadata: Metadata = {
   title: "How Much Does a Plumber Cost in 2026? Real Pricing Guide",
@@ -252,19 +252,7 @@ export default function PlumbingCostPage() {
         </div>
       </main>
 
-      <footer className="text-center py-8 text-sm text-[#5C4A2E]">
-        <p>
-          TradePulse Estimates,{" "}
-          <a href={CANONICAL_URL} className="hover:text-[#26211B] transition-colors">
-            {CANONICAL_DOMAIN}
-          </a>
-        </p>
-        <div className="mt-2 flex items-center justify-center gap-4 text-xs flex-wrap">
-          <a href={`mailto:${SUPPORT_EMAIL}`} className="hover:text-[#26211B] transition-colors">{SUPPORT_EMAIL}</a>
-          <a href="/terms" className="hover:text-[#26211B] transition-colors">Terms of Service</a>
-          <a href="/privacy" className="hover:text-[#26211B] transition-colors">Privacy Policy</a>
-        </div>
-      </footer>
+      <ContentPageFooter variant="light" />
     </div>
   );
 }

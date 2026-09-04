@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { EstimateDemo } from "@/app/components/EstimateDemo";
 import { EstimateDemoElectrical } from "@/app/components/EstimateDemoElectrical";
-import { RowLockup } from "@/app/components/wordmark";
+import { TradePageHeader } from "@/app/components/trade-page-header";
+import { TradePageFooter } from "@/app/components/trade-page-footer";
 import { JsonLd } from "@/app/components/json-ld";
 import { STARTER_MONTHLY_PRICE_CAD } from "@/lib/plan-pricing";
-import { CANONICAL_URL, CANONICAL_DOMAIN } from "@/lib/site-url";
-import { SUPPORT_EMAIL } from "@/lib/email-addresses";
+import { CANONICAL_URL } from "@/lib/site-url";
 
 export const metadata: Metadata = {
   title: "Estimating Software for Electricians | TradePulse",
@@ -48,16 +48,7 @@ export default function ElectriciansPage() {
         }
       }} />
 
-      {/* Header */}
-      <header className="flex items-center justify-between px-6 pt-6 pb-2 max-w-lg mx-auto w-full">
-        <RowLockup variant="light" iconSize={44} textSize={36} />
-        <Link
-          href="/login"
-          className="text-sm font-medium text-[#5C4A2E] hover:text-[#26211B] transition-colors"
-        >
-          Sign in
-        </Link>
-      </header>
+      <TradePageHeader />
 
       <main className="flex-1 flex flex-col items-center px-6 pt-8 pb-36">
 
@@ -145,20 +136,7 @@ export default function ElectriciansPage() {
         <p className="text-center text-xs text-[#5C4A2E] mt-2">14-day free trial. No card required.</p>
       </div>
 
-      <footer className="hidden sm:block text-center py-8 text-sm text-[#5C4A2E]">
-        TradePulse Estimates,{" "}
-        <a href={CANONICAL_URL} className="hover:text-[#26211B] transition-colors">
-          {CANONICAL_DOMAIN}
-        </a>
-      </footer>
-
-      <footer className="border-t border-[#C9B384] mt-16 py-6 px-5 text-center">
-        <div className="flex items-center justify-center gap-6 text-xs text-[#5C4A2E] flex-wrap">
-          <a href={`mailto:${SUPPORT_EMAIL}`} className="hover:text-[#26211B] transition-colors">{SUPPORT_EMAIL}</a>
-          <a href="/terms" className="hover:text-[#26211B] transition-colors">Terms of Service</a>
-          <a href="/privacy" className="hover:text-[#26211B] transition-colors">Privacy Policy</a>
-        </div>
-      </footer>
+      <TradePageFooter />
     </div>
   );
 }
