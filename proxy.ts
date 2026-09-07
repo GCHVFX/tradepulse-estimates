@@ -24,6 +24,7 @@ const PUBLIC_PATHS = [
   "/plumbing-estimate-template",
   "/demo",
   "/go",
+  "/r",
   "/contact",
   "/privacy",
   "/terms",

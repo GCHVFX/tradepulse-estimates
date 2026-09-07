@@ -1,6 +1,37 @@
 # TradePulse handoff
 
-Updated: 2026-09-03 20:47 PT (Shared nav/footer refactor merged to `main` (`2a92150`, `--no-ff`, no conflicts) and pushed, after Greg reviewed the branch on localhost. Production deployment `dpl_ChVwioTDisYZwP5XLwghJzDk9Esw` (commit `2a92150`) reached Ready, aliased to `tradepulse-estimates.com`, and **confirmed live by fetching all 7 affected pages directly**: all return 200, and the actual served HTML carries each new component's fingerprint -- `TradePageHeader`'s exact class list on `/trades`, the dark-variant hover colour from `ContentPageFooter` on `/plumbing-estimate-template`, and two "How it works" links on `/` (nav + the new `MarketingFooter`'s own nav row). See the entry directly below for the full audit, the scope Greg confirmed before any component was written, and the pixel-diff verification. Unrelated to the contact-page bullet list or the `EMAIL_DOMAIN` work further below, both already merged to `main` and live in production.)
+Updated: 2026-09-06 23:06 PT (Minimal campaign signup attribution implemented and the additive production migration applied. Commit and deployment are the next steps.)
+
+## Campaign attribution links (2026-09-06 21:09 PT)
+
+**Status:** implemented and verified on branch `main`. The additive production
+Supabase migration was applied successfully at 2026-09-06 23:05 PT.
+
+**Campaign:** `https://tradepulse-estimates.com/r/CA2609A`; `CA2609A` means
+`Canada Bulk Outreach - September 2026`. The route sets the first-party
+HttpOnly `tp_campaign` cookie for 30 days and redirects to the canonical home
+page. Unknown codes redirect without setting attribution. Email and Google
+signup persist the allowed code to `tpe_businesses.outreach_campaign_code`.
+
+**Implementation files:**
+- `app/r/[code]/route.ts`: public opaque redirect route.
+- `lib/campaign-attribution.ts`: allowed campaign mapping, redirect, cookie,
+  and business-record attribution.
+- `app/api/auth/signup/route.ts` and `app/auth/callback/route.ts`: server-side
+  cookie resolution and persistence for both account-creation paths.
+- `proxy.ts`: makes `/r` public.
+- `tests/smoke/campaign-attribution.spec.ts` and
+  `playwright.unit.config.ts`: focused coverage and unit-suite inclusion.
+- `supabase/migrations/20260907000000_add_outreach_campaign_code.sql`: one
+  nullable text field on `tpe_businesses`; applied to production.
+
+**Verification actually run:**
+- `npm.cmd exec playwright test -- --config=playwright.unit.config.ts tests/smoke/campaign-attribution.spec.ts tests/smoke/no-business-access.spec.ts`:
+  19 passed.
+- `npx.cmd tsc --noEmit`: passed.
+- `git diff --check`: passed; Git emitted only existing LF-to-CRLF working
+  copy warnings.
+- production migration query: `Success. No rows returned`.
 
 ## Shared nav/footer refactor (2026-09-03 20:30 PT)
 

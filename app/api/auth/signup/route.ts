@@ -6,6 +6,10 @@ import { provisionNewAccount } from "@/lib/account-provisioning";
 import { createAccountProvisioningDependencies } from "@/lib/account-provisioning-server";
 import { currencyOrDefault } from "@/lib/currency";
 import { businessEstimateCurrencyPatch } from "@/lib/currency-db";
+import {
+  resolveRequestCampaignCode,
+  withBusinessCampaignAttribution,
+} from "@/lib/campaign-attribution";
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
@@ -44,6 +48,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
+  const campaignCode = resolveRequestCampaignCode(request);
+
   // Cookies from signUp are collected here and applied to the final response,
   // once the body (which now includes userId) is known.
   const pendingCookies: { name: string; value: string; options: Record<string, unknown> }[] = [];
@@ -79,7 +85,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       const { error: dbError } = await supabaseAdmin
         .from("tpe_businesses")
         .upsert(
-          {
+          withBusinessCampaignAttribution({
             owner_user_id: userId,
             name: "",
             slug: userId,
@@ -91,7 +97,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             email,
             ...businessEstimateCurrencyPatch(currency),
             ...(signupSource ? { signup_source: signupSource } : {}),
-          },
+          }, campaignCode),
           { onConflict: "owner_user_id" }
         );
 

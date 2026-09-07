@@ -11,6 +11,10 @@ import {
 } from '@/lib/oauth-intent';
 import { DEFAULT_CURRENCY, type Currency } from '@/lib/currency';
 import { businessEstimateCurrencyPatch } from '@/lib/currency-db';
+import {
+  resolveRequestCampaignCode,
+  withBusinessCampaignAttribution,
+} from '@/lib/campaign-attribution';
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
@@ -93,7 +97,9 @@ export async function GET(request: NextRequest) {
             searchParams.get(OAUTH_NONCE_PARAM)
           ) ?? DEFAULT_CURRENCY;
 
-        const provisioned = await ensureBusiness(user.id, user.email ?? undefined, signupCurrency);
+        const campaignCode = resolveRequestCampaignCode(request);
+
+        const provisioned = await ensureBusiness(user.id, user.email ?? undefined, signupCurrency, campaignCode);
         if (!provisioned) {
           // The Google identity is the person's own account, so it is always
           // preserved. Signing out stops a half-provisioned user from staying
@@ -127,7 +133,12 @@ async function businessExists(userId: string): Promise<boolean> {
 }
 
 // Returns true if the user already has (or now has) a business row + trial.
-async function ensureBusiness(userId: string, email?: string, currency: Currency = DEFAULT_CURRENCY): Promise<boolean> {
+async function ensureBusiness(
+  userId: string,
+  email?: string,
+  currency: Currency = DEFAULT_CURRENCY,
+  campaignCode: string | null = null
+): Promise<boolean> {
   const { data: existing } = await supabaseAdmin
     .from('tpe_businesses')
     .select('id')
@@ -144,7 +155,7 @@ async function ensureBusiness(userId: string, email?: string, currency: Currency
       const { error: dbError } = await supabaseAdmin
         .from('tpe_businesses')
         .upsert(
-          {
+          withBusinessCampaignAttribution({
             owner_user_id: userId,
             name: '',
             slug: userId,
@@ -156,7 +167,7 @@ async function ensureBusiness(userId: string, email?: string, currency: Currency
             signup_source: 'google',
             email: email ?? '',
             ...businessEstimateCurrencyPatch(currency),
-          },
+          }, campaignCode),
           { onConflict: 'owner_user_id' }
         );
 
