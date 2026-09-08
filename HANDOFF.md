@@ -1,15 +1,64 @@
 # TradePulse handoff
 
-Updated: 2026-09-08 08:10 PT (First-party outreach click tracking implemented, verified, and the additive production migration applied. Being committed and deployed now; see the follow-up note at the top of the section below for the outcome.)
+Updated: 2026-09-08 08:20 PT (First-party outreach click tracking committed, deployed to production, and confirmed live end to end: a real `/r/CA2609A` visit recorded exactly one new click row.)
 
-## Outreach click tracking (2026-09-08 08:10 PT, deploy outcome noted below)
+## Outreach click tracking: committed, deployed, confirmed live (2026-09-08 08:20 PT)
+
+**Status: shipped.** Commit `8cb39df55f92823d06d381264c1ba5e9d64a8aa6` ("Add
+outreach click tracking") pushed to `origin/main`. Vercel auto-deployed
+`dpl_9ixgJcDsYfksf3C1FJF7azb7tD8w` from that commit, reached `READY` (build
+completed in 55s, no errors), aliased to `tradepulse-estimates.com` and
+every other production alias. This is the established process for this
+repo -- push to `main`, Vercel deploys automatically -- confirmed against
+prior entries in this file, no manual `vercel deploy` used.
+
+**Production verification actually performed** (all read-only or read-write
+against data this feature owns; no signup was created, per instruction --
+signup attribution was already separately verified in the previous entry
+below and is architecturally untouched by this change, since click logging
+and signup attribution write at different times through different code
+paths that share only the campaign-code allowlist):
+
+1. Recorded the before count: `select count(*) from public.tpe_outreach_clicks where campaign_code = 'CA2609A'` → **0** (query run before the commit above, while the migration existed but the writing code was not yet deployed).
+2. Visited `https://tradepulse-estimates.com/r/CA2609A` in a real browser after deployment reached `READY`.
+3. Landed on `https://tradepulse-estimates.com/` -- the same canonical destination as every prior verification of this route, unchanged.
+4. Re-queried the same table: **1** row for `CA2609A`, `clicked_at` timestamped
+   `2026-09-08 15:19:32.173563+00`, matching the visit.
+5. **Before 0 → after 1: exactly one additional raw click row**, as required.
+6. Confirmed `tpe_businesses.outreach_campaign_code` behaviour is unchanged:
+   business count is still 12 (unchanged from the pre-deploy check), and
+   `with_campaign_code` is still 0 -- the click itself wrote nothing to
+   `tpe_businesses`, exactly as designed (attribution only happens at
+   signup, through the cookie the click set, not at click time). This is
+   also confirmed structurally: this session's diff (reviewed again before
+   committing) touches no line of `withBusinessCampaignAttribution`,
+   `resolveRequestCampaignCode`, or either signup route.
+- Deployment build logs (`errorsOnly`): no errors, `Build Completed in
+  /vercel/output [55s]`.
+
+**Reminder:** the `1` recorded above is a real verification click from this
+session, not a customer. Once real outreach email opens begin, expect
+`raw_click_count` to include email-security scanners and link-preview bots
+that pre-fetch the URL before a human opens the message -- there is still
+no bot filtering, by design. Treat the reporting query's count as an upper
+bound on human clicks, not a direct measurement.
+
+**Pre-existing, unrelated test failures:** re-confirmed via `git log -1` on
+each file that all four (`homepage-pricing.spec.ts` x2,
+`password-reset-canonical-host.spec.ts` x1, and the four spec files
+`unit-suite-completeness.spec.ts` reports as never wired into `testMatch`)
+were last touched by commits from 2026-08-25 through 2026-09-02, entirely
+before this session, and are byte-identical to `HEAD` in this session's
+diff. Not fixed, per instruction.
+
+---
+
+## Outreach click tracking (2026-09-08 08:10 PT)
 
 **Status:** implemented and verified on branch `main`. The additive production
 Supabase migration was applied successfully at 2026-09-08 (checked via
 `pg_class`/`information_schema` and an empirical `set local role anon`
-probe, both below). Being committed now; deployment and production
-verification follow immediately after and are recorded in the dated
-follow-up note at the top of this section once complete.
+probe, both below).
 
 **What this adds:** one first-party raw click log so TradePulse can measure
 its own outreach funnel (click, independent of whether the visitor ever
