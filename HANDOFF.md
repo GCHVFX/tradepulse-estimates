@@ -1,6 +1,160 @@
 # TradePulse handoff
 
-Updated: 2026-09-06 23:06 PT (Minimal campaign signup attribution implemented and the additive production migration applied. Commit and deployment are the next steps.)
+Updated: 2026-09-08 08:10 PT (First-party outreach click tracking implemented, verified, and the additive production migration applied. Being committed and deployed now; see the follow-up note at the top of the section below for the outcome.)
+
+## Outreach click tracking (2026-09-08 08:10 PT, deploy outcome noted below)
+
+**Status:** implemented and verified on branch `main`. The additive production
+Supabase migration was applied successfully at 2026-09-08 (checked via
+`pg_class`/`information_schema` and an empirical `set local role anon`
+probe, both below). Being committed now; deployment and production
+verification follow immediately after and are recorded in the dated
+follow-up note at the top of this section once complete.
+
+**What this adds:** one first-party raw click log so TradePulse can measure
+its own outreach funnel (click, independent of whether the visitor ever
+signs up), which `tpe_businesses.outreach_campaign_code` alone cannot show
+because it is only ever set at signup. `/r/CA2609A` visits now: (1) resolve
+the campaign code exactly as before via `campaignCode()`, the existing
+allowlist -- no second definition of a valid code was created; (2) insert
+one row into the new `tpe_outreach_clicks` table; (3) set the same 30-day
+`tp_campaign` cookie and redirect to the canonical homepage, exactly as
+before. An invalid code still skips both the cookie and now also the click
+row, for the same reason (there is no real campaign to attribute to). The
+`/r/[code]` URL format, the redirect destination, the cookie shape, and both
+signup-attribution paths are byte-for-byte unchanged.
+
+**No new visitor identifier.** The app sets no pre-auth visitor/session
+cookie today, so there was nothing safe to reuse; a raw per-campaign count
+over a date range answers the stated question without one. The table stores
+only `id`, `campaign_code`, and `clicked_at` -- no IP address, user agent,
+referrer, email, or name, and no foreign key to `tpe_businesses` (a click
+happens before any business row exists for that visitor).
+
+**Migration:** `supabase/migrations/20260908000000_create_tpe_outreach_clicks.sql`.
+One new table, `create table if not exists`, RLS enabled with zero policies
+(same posture as `tpe_sms_suppressions`, `tpe_rate_limits`,
+`tpe_delivery_claims`, `tpe_photo_upload_reservations` -- verified against
+production: `anon`/`authenticated` have `rolbypassrls = false`, and a
+`begin; set local role anon; select count(*) ...; rollback;` probe against
+the live table returned 0 visible rows despite the table already carrying
+table-level grants, proving RLS -- not just the service-role convention --
+is what blocks the browser client). One compound index,
+`(campaign_code, clicked_at)`, covering both query shapes the reporting SQL
+below uses. Nothing in `tpe_businesses` or any other existing table was
+touched.
+
+**Implementation files:**
+- `lib/campaign-attribution.ts`: adds `recordOutreachClick` (the real
+  service-role writer, never throws) and an injectable `recordClick`
+  parameter on `createCampaignRedirectHandler` (defaults to the real
+  writer). The handler also wraps the call in its own try/catch, so a
+  failing write can never block the redirect or the cookie, regardless of
+  how the injected recorder itself behaves. Nothing else in this file
+  changed: `campaignCode`, `resolveRequestCampaignCode`,
+  `withBusinessCampaignAttribution`, `OUTREACH_CAMPAIGNS`, and the cookie
+  logic are untouched.
+- `app/r/[code]/route.ts`: unchanged -- still `export const GET =
+  createCampaignRedirectHandler();`.
+- `lib/database.types.ts`: regenerated from the live schema via the
+  Supabase MCP `generate_typescript_types` tool (per `AGENTS.md`: this file
+  is generated, never hand-edited). Picked up `tpe_outreach_clicks` as
+  intended, and incidentally also picked up `tpe_businesses.outreach_campaign_code`,
+  which the previous session's migration added on 2026-09-07 but never
+  regenerated the types for -- that drift is now fixed as a side effect,
+  unrelated to this feature. The rest of the diff is the type-generator's
+  own boilerplate formatting (`Enums: {}` shorthand, added parens around a
+  conditional type) from a newer generator version; semantically identical,
+  not a hand edit.
+- `tests/smoke/outreach-click-tracking.spec.ts` and
+  `playwright.unit.config.ts`: focused coverage and unit-suite inclusion.
+- `supabase/migrations/20260908000000_create_tpe_outreach_clicks.sql`: the
+  new table; applied to production.
+
+**Verification actually run:**
+- `npx.cmd tsc --noEmit`: passed (failed as expected before the migration
+  was applied and types regenerated -- `tpe_outreach_clicks` did not exist
+  in `Database` yet -- confirming the test isn't vacuous).
+- `npx.cmd eslint lib/campaign-attribution.ts tests/smoke/outreach-click-tracking.spec.ts playwright.unit.config.ts "app/r/[code]/route.ts"`:
+  no issues.
+- `npx.cmd playwright test --config=playwright.unit.config.ts`: 443 passed,
+  4 failed. All 4 failures are pre-existing and unrelated: `homepage-pricing.spec.ts`
+  (2 tests), `password-reset-canonical-host.spec.ts` (1 test), and
+  `unit-suite-completeness.spec.ts` flagging 4 already-tracked,
+  already-orphaned spec files (`csv-import-rate-column-matching.spec.ts`,
+  `nav-wordmark-no-crowding.spec.ts`, `trade-tabs-mobile-overflow.spec.ts`,
+  `trade-tabs-scroll-affordance.spec.ts`) that were never wired into
+  `testMatch`. Confirmed pre-existing via `git status --short` (none of
+  these files or their containing commits are touched by this session's
+  diff) and `git log -1` on those paths, which lands on a commit from
+  before this session started. Left alone per "do not touch unrelated
+  code" -- worth a separate session. This session's own 17 tests
+  (`outreach-click-tracking.spec.ts`, 12; `campaign-attribution.spec.ts`,
+  5, unchanged) all pass.
+- `npx.cmd next build`: passed; `/r/[code]` still builds as one dynamic
+  route.
+- `git diff --check`: passed; only the existing LF-to-CRLF working-copy
+  warnings.
+- Production RLS/grant verification (read-only): `pg_class.relrowsecurity`
+  true; `anon`/`authenticated` hold table-level grants but
+  `pg_roles.rolbypassrls = false` for both; a `set local role anon`
+  session-level probe against the live table returned `0` visible rows.
+  Security advisors: one new `rls_enabled_no_policy` INFO-level finding,
+  identical in kind to the 4 that already exist for the other
+  service-role-only `tpe_` tables -- not a new class of issue.
+- The exact reporting query below was run against production and returned
+  `raw_click_count 0, first_click_at null, most_recent_click_at null,
+  attributed_signups 0, signup_conversion_rate_pct null` -- correct, because
+  the table is genuinely empty (the writing code is not deployed yet), and
+  confirms the query itself is syntactically and referentially correct
+  against the live schema.
+- **Production functionality (the actual click write, end to end through
+  the deployed route) was NOT tested**, because the code that writes it is
+  not deployed. Hitting the live `/r/CA2609A` right now would only exercise
+  the old pre-existing code and would prove nothing about click logging.
+
+**Reporting query for campaign CA2609A** (Supabase SQL editor):
+
+```sql
+select
+  (select count(*) from public.tpe_outreach_clicks where campaign_code = 'CA2609A') as raw_click_count,
+  (select min(clicked_at) from public.tpe_outreach_clicks where campaign_code = 'CA2609A') as first_click_at,
+  (select max(clicked_at) from public.tpe_outreach_clicks where campaign_code = 'CA2609A') as most_recent_click_at,
+  (select count(*) from public.tpe_businesses where outreach_campaign_code = 'CA2609A') as attributed_signups,
+  case
+    when (select count(*) from public.tpe_outreach_clicks where campaign_code = 'CA2609A') = 0 then null
+    else round(
+      100.0 * (select count(*) from public.tpe_businesses where outreach_campaign_code = 'CA2609A')
+      / (select count(*) from public.tpe_outreach_clicks where campaign_code = 'CA2609A'),
+      1
+    )
+  end as signup_conversion_rate_pct;
+```
+
+This is RAW click tracking. Email-security scanners and automated
+link-preview bots will pre-fetch `/r/CA2609A` before a human ever opens the
+message, inflating `raw_click_count` above genuine human visits. No bot
+filtering was built, by design and by instruction.
+
+**Risks and unresolved items:**
+- Raw counts will overstate real human interest; there is no way to tell a
+  scanner hit from a person from this table alone. If this becomes
+  misleading in practice, the fix is a separate, deliberate task, not
+  something to patch in here.
+- `lib/database.types.ts` also picked up the previously-missing
+  `outreach_campaign_code` field (see above) -- worth knowing if a future
+  diff looks larger than expected for an unrelated change.
+- Four pre-existing, unrelated spec-file issues remain open (see
+  Verification above) -- not touched, flagged for separate follow-up.
+
+**Exact next step:** review this diff, then, if approved: commit
+(`supabase/migrations/20260908000000_create_tpe_outreach_clicks.sql`,
+`lib/campaign-attribution.ts`, `lib/database.types.ts`,
+`tests/smoke/outreach-click-tracking.spec.ts`, `playwright.unit.config.ts`,
+and this `HANDOFF.md` entry -- nothing else in the current working tree),
+push, deploy, then visit `https://tradepulse-estimates.com/r/CA2609A` and
+re-run the reporting query above to confirm `raw_click_count` is now `1`
+before calling production functionality verified.
 
 ## Campaign attribution links (2026-09-06 21:09 PT)
 

@@ -27,6 +27,7 @@ export type Database = {
           logo_url: string | null
           markup_percent: number
           name: string
+          outreach_campaign_code: string | null
           owner_user_id: string | null
           payment_link: string | null
           phone: string | null
@@ -54,6 +55,7 @@ export type Database = {
           logo_url?: string | null
           markup_percent?: number
           name: string
+          outreach_campaign_code?: string | null
           owner_user_id?: string | null
           payment_link?: string | null
           phone?: string | null
@@ -81,6 +83,7 @@ export type Database = {
           logo_url?: string | null
           markup_percent?: number
           name?: string
+          outreach_campaign_code?: string | null
           owner_user_id?: string | null
           payment_link?: string | null
           phone?: string | null
@@ -152,41 +155,6 @@ export type Database = {
           },
         ]
       }
-      tpe_estimate_generation_claims: {
-        Row: {
-          business_id: string
-          claim_type: string
-          created_at: string
-          expires_at: string
-          id: string
-          owner_user_id: string
-        }
-        Insert: {
-          business_id: string
-          claim_type: string
-          created_at?: string
-          expires_at?: string
-          id?: string
-          owner_user_id: string
-        }
-        Update: {
-          business_id?: string
-          claim_type?: string
-          created_at?: string
-          expires_at?: string
-          id?: string
-          owner_user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tpe_estimate_generation_claims_business_id_fkey"
-            columns: ["business_id"]
-            isOneToOne: false
-            referencedRelation: "tpe_businesses"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       tpe_estimate_changes: {
         Row: {
           change_type: string
@@ -224,6 +192,41 @@ export type Database = {
             columns: ["estimate_id"]
             isOneToOne: false
             referencedRelation: "tpe_estimates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tpe_estimate_generation_claims: {
+        Row: {
+          business_id: string
+          claim_type: string
+          created_at: string
+          expires_at: string
+          id: string
+          owner_user_id: string
+        }
+        Insert: {
+          business_id: string
+          claim_type: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          owner_user_id: string
+        }
+        Update: {
+          business_id?: string
+          claim_type?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          owner_user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tpe_estimate_generation_claims_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "tpe_businesses"
             referencedColumns: ["id"]
           },
         ]
@@ -525,6 +528,24 @@ export type Database = {
           },
         ]
       }
+      tpe_outreach_clicks: {
+        Row: {
+          campaign_code: string
+          clicked_at: string
+          id: string
+        }
+        Insert: {
+          campaign_code: string
+          clicked_at?: string
+          id?: string
+        }
+        Update: {
+          campaign_code?: string
+          clicked_at?: string
+          id?: string
+        }
+        Relationships: []
+      }
       tpe_payment_reminders: {
         Row: {
           business_id: string
@@ -820,12 +841,8 @@ export type Database = {
         Returns: Json
       }
     }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
+    Enums: {}
+    CompositeTypes: {}
   }
 }
 
@@ -837,12 +854,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -866,11 +883,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -891,11 +908,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -916,11 +933,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -933,11 +950,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

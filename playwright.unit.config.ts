@@ -42,6 +42,7 @@ export default defineConfig({
     "subscription-access.spec.ts",
     "pro-payments-entitlement.spec.ts",
     "campaign-attribution.spec.ts",
+    "outreach-click-tracking.spec.ts",
     "unit-suite-completeness.spec.ts",
   ],
   fullyParallel: false,
