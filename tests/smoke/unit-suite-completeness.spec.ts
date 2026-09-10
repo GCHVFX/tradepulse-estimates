@@ -54,6 +54,10 @@ const CANNOT_RUN_IN_UNIT_CONFIG = new Map<string, string>([
     "Signs up a real account and measures the fixed action bar against the bottom nav in a real browser. Geometry cannot be asserted without rendering.",
   ],
   [
+    "estimate-delete-related-rows.spec.ts",
+    "Signs up a real account and exercises DELETE /api/estimates against real Supabase rows across tpe_estimate_changes, tpe_payment_reminders, and tpe_estimate_photos.",
+  ],
+  [
     "generate-estimate.spec.ts",
     "Signs up a real account and exercises the live AI generation endpoint. Needs Supabase and the Anthropic API.",
   ],

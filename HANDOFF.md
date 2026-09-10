@@ -1,6 +1,146 @@
 # TradePulse handoff
 
-Updated: 2026-09-10 01:21 PT (Follow-up identity layout adjustment committed locally and focused checks passed; not deployed.)
+Updated: 2026-09-10 09:14 PT (Two production bug fixes -- estimate delete hang and post-generation scroll drift -- implemented and verified locally; not committed, not deployed.)
+
+## Estimate delete hang and post-generation scroll drift: root-caused and fixed (2026-09-10 09:14 PT)
+
+**Status:** both fixes implemented on branch `main`, working tree started from
+`cd7a3cb` ("Align estimate identity details"). Verified against the local dev
+server with real Supabase/Stripe test accounts (via `signUpFreshAccount()` /
+`cleanupTestAccount()`, `ALLOW_PRODUCTION_SIGNUP_SMOKE=true` since `.env.local`
+carries a live Stripe key regardless of target host). **Not committed, not
+deployed** -- review the diff below before either.
+
+### Bug 1: estimate delete hangs -- root cause
+
+`DELETE /api/estimates?id=` deleted the `tpe_estimates` row **first**, then
+conditionally cleaned up `tpe_estimate_photos`. Queried the live schema
+(`fctequqcwxyhmnjgxixg`) directly: `tpe_estimate_changes`, `tpe_estimate_photos`,
+and `tpe_payment_reminders` all reference `tpe_estimates` with `delete_rule =
+NO ACTION` (not `CASCADE` -- only `tpe_estimate_items`, `tpe_delivery_claims`,
+`tpe_photo_upload_reservations`, and `tpe_estimate_line_items` cascade). So the
+parent delete fails with a Postgres foreign-key violation for **any** estimate
+that was ever sent (`tpe_estimate_changes`, written by `/api/send-sms` and
+`/api/send-email`), invoiced (`tpe_payment_reminders`), or had a photo attached
+-- i.e. almost any estimate a contractor has actually used, not a fresh draft.
+`tests/smoke/helpers.ts`'s own `cleanupTestAccount()` already documents and
+works around exactly this ("Children are removed before parents so a FK
+constraint can't block ... the delete"), which is what confirmed the mechanism
+before touching any product code.
+
+The client (`DeleteEstimateButton`) compounded it: `await fetch(...)` was never
+checked for `res.ok`, and `deleting` was never reset to `false` on failure, so
+a 500 from the FK violation left the button showing `...` forever with no
+error -- exactly "sits there indefinitely" -- while `router.refresh()` still
+ran against a database row that was never actually removed, so it reappears
+on any reload/navigation.
+
+**Fix:** `app/api/estimates/route.ts` now deletes `tpe_estimate_photos` (+
+their storage objects), `tpe_estimate_changes`, and `tpe_payment_reminders` for
+the estimate **before** deleting the parent row, so the delete can actually
+succeed. `app/components/delete-estimate-button.tsx` now checks `res.ok`,
+resets `deleting` and shows an inline error message on failure (keeping the
+confirm/cancel UI so the user can retry), and only calls `router.refresh()` on
+a genuine success. No schema change; this was fixable entirely in application
+code once the blocking tables were identified.
+
+**Verified with a real test estimate, not just the UI:** inserted an estimate
+plus one blocking row in each of the three `NO ACTION` tables via the
+Supabase service-role client, then called the real DELETE route through
+Playwright. Pre-fix: `500`, and the estimate row was still present in the
+database afterward (`stillThere: true`) -- reproduced the actual bug, not a
+guess. Post-fix: `200`, and the estimate row plus all three child rows were
+confirmed gone from the database by direct query (`stillThere: false`), not
+merely absent from a re-rendered list.
+
+### Bug 2: post-generation scroll drift -- root cause
+
+Instrumented the real `/new` flow (MutationObserver + scrollTop/scrollHeight
+polling injected into the page) through a full AI generation. Found a 3-second
+`setInterval` (`app/new/page.tsx`, cycles the empty-textarea placeholder text)
+that ran **unconditionally** at the top of `NewPageInner`, not scoped to
+`FormView`. Since `NewPageInner` returns either `<FormView>` or
+`<EstimateView>` from the same render, every tick re-rendered `EstimateView`
+too while viewing a generated estimate. That re-render recreated the inline
+`ref={el => { el.style.height = 'auto'; el.style.height = el.scrollHeight +
+'px'; }}` callbacks on every textarea inside `EditableEstimateBody` (a new
+inline function forces React to detach/reattach the ref on every render),
+re-running the auto-resize measurement on a ~3s cadence with zero user input.
+Captured direct timing evidence: a DOM mutation batch recurred at **exactly
++3009ms** after the previous one settled, with the scroll position already at
+rest and no user interaction in between -- matching "jerky and slow... without
+further user input" precisely.
+
+**Fix:** the placeholder-rotation `useEffect` now only starts its interval
+while `view === "form"` (`app/new/page.tsx`), and tears it down via the
+existing cleanup whenever `view` changes away from `"form"`. The placeholder
+text is only ever visible in `FormView`, so this doesn't change any visible
+behaviour there -- it just stops the timer from running (and re-rendering
+`EstimateView`) once the user has moved on to viewing the generated estimate.
+`EditableEstimateBody`'s own auto-resize behaviour is untouched.
+
+**Verified with instrumented before/after runs:** pre-fix, a mutation batch
+recurred every ~3s indefinitely while idle (confirmed one recurrence at
+11847ms -> 14856ms, delta 3009ms). Post-fix, the same idle window (settling
+around 9057ms through the test's last sample at 13901ms, ~4.8s) produced
+**zero** further mutation batches, and `scrollTop`/`scrollHeight` stayed
+perfectly flat throughout.
+
+### Files changed
+
+- `app/api/estimates/route.ts` -- delete order fixed (Bug 1)
+- `app/components/delete-estimate-button.tsx` -- error handling fixed (Bug 1)
+- `app/new/page.tsx` -- placeholder interval scoped to `view === "form"` (Bug 2)
+- `tests/smoke/estimate-delete-related-rows.spec.ts` (new) -- permanent
+  regression lock for Bug 1
+- `tests/smoke/unit-suite-completeness.spec.ts` -- registered the new spec in
+  `CANNOT_RUN_IN_UNIT_CONFIG` (it needs a live Supabase account)
+
+No scroll-bug regression test was added: reproducing it needs the timed
+MutationObserver harness built for this session (real AI generation, a
+±3-second observation window), which doesn't fit this project's existing
+unit-safe or single-assertion smoke patterns. Flagging rather than forcing
+a low-value test in.
+
+### Verification actually run
+
+- `npx tsc --noEmit` -> passed, no errors.
+- `npx eslint` on all three changed files plus the new spec -> passed (one
+  pre-existing, unrelated warning: `handleSignOut` unused in `app/new/page.tsx`,
+  not touched by this diff).
+- `npx playwright test --config=playwright.unit.config.ts` -> 451 passed, the
+  same 4 pre-existing unrelated failures as documented in the prior entries
+  below (`homepage-pricing.spec.ts` x2, `password-reset-canonical-host.spec.ts`
+  x1, `unit-suite-completeness.spec.ts` x1 for specs not yet in that list --
+  unchanged in count and identity from before this session).
+- New regression test (`estimate-delete-related-rows.spec.ts`) run against the
+  pre-fix code (`git stash` on `route.ts` only) -> failed with the exact `500`
+  this bug produces, confirming the test actually locks in the regression.
+  Run again against the fix -> passed.
+- Manual before/after Playwright reproduction of both bugs against a real
+  local dev server (`npm run dev`, port 3000), described above.
+- All test accounts created during this session (several, including two that
+  leaked when an early diagnostic script's process was killed mid-run by an
+  external `timeout` wrapper before its `finally` cleanup could execute) were
+  confirmed removed: zero `tpe_businesses`/`auth.users` rows remain for any
+  `gchansen+audit-%` email, checked directly against the hosted database
+  after this session.
+- Not run: full `npm run build`, and no browser check of the actual production
+  build (only the dev server). No AI Control Centre CLI session was recorded
+  -- this session doesn't have a known path to that repository's `npm run
+  aicc --` command, so nothing was recorded rather than guessing one.
+
+### Next action
+
+Review the diff (`app/api/estimates/route.ts`,
+`app/components/delete-estimate-button.tsx`, `app/new/page.tsx`, the new spec,
+and the `unit-suite-completeness.spec.ts` registration), then commit and
+push/deploy only when explicitly authorized. After deployment, delete a real
+sent/invoiced estimate from a signed-in account and confirm it disappears
+permanently, and watch the estimate view after a real generation for a few
+seconds after scrolling to confirm the drift is gone.
+
+---
 
 ## Estimate identity layout follow-up (2026-09-10 01:21 PT)
 

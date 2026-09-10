@@ -944,12 +944,19 @@ function NewPageInner() {
   const [photoAnalysing, setPhotoAnalysing] = useState(false);
   const photoAnalysisRef = useRef<{ signature: string; description: string } | null>(null);
 
+  // Only needed while FormView's empty-textarea placeholder is on screen.
+  // Left running unconditionally, this re-renders EstimateView too (same
+  // component's return path), which recreates the inline ref callbacks on
+  // every textarea in EditableEstimateBody and re-runs their auto-resize
+  // measurement every 3s with no user input — the source of the post-
+  // generation scroll drift.
   useEffect(() => {
+    if (view !== "form") return;
     const interval = setInterval(() => {
       setPlaceholderIndex((prev) => (prev + 1) % jobPlaceholders.length);
     }, 3000);
     return () => clearInterval(interval);
-  }, []);
+  }, [view]);
 
   useEffect(() => {
     const key = searchParams.get("prefill");

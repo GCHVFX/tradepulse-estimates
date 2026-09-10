@@ -135,15 +135,12 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
   const id = searchParams.get("id");
   if (!id) return applyTo(NextResponse.json({ error: "id is required" }, { status: 400 }));
 
-  const { error } = await supabaseAdmin
-    .from("tpe_estimates")
-    .delete()
-    .eq("id", id)
-    .eq("business_id", business.id);
-
-  if (error) return applyTo(NextResponse.json({ error: error.message }, { status: 500 }));
-
-  // Best-effort: remove any attached photos so they don't outlive the estimate.
+  // tpe_estimate_changes, tpe_estimate_photos, and tpe_payment_reminders all
+  // reference tpe_estimates with delete_rule NO ACTION (not CASCADE), so the
+  // parent delete below fails with a foreign key violation whenever any of
+  // them has a row for this estimate — which happens for any estimate that
+  // was ever sent, invoiced, or had a photo attached. Remove those children
+  // first so the parent delete can actually succeed.
   const { data: photoRecords } = await supabaseAdmin
     .from("tpe_estimate_photos")
     .select("id, storage_path")
@@ -158,6 +155,17 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
       .delete()
       .eq("estimate_id", id);
   }
+
+  await supabaseAdmin.from("tpe_estimate_changes").delete().eq("estimate_id", id);
+  await supabaseAdmin.from("tpe_payment_reminders").delete().eq("estimate_id", id);
+
+  const { error } = await supabaseAdmin
+    .from("tpe_estimates")
+    .delete()
+    .eq("id", id)
+    .eq("business_id", business.id);
+
+  if (error) return applyTo(NextResponse.json({ error: error.message }, { status: 500 }));
 
   return applyTo(NextResponse.json({ success: true }));
 }
