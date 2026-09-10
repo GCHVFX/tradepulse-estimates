@@ -80,12 +80,8 @@ export default async function ShareEstimatePage({
                 logoUrl={logoUrl}
                 businessName={businessName}
                 showCompanyNameBelowLogo={showCompanyNameBelowLogo}
+                preparedBy={estimate.prepared_by}
               />
-              {preparedByText && (
-                <p className={`text-sm text-[#5C4A2E] ${logoUrl || businessName ? "mt-2" : ""}`}>
-                  {preparedByText}
-                </p>
-              )}
             </div>
           )}
 

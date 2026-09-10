@@ -151,6 +151,7 @@ export default async function EstimatePage({
                 logoUrl={logoUrl}
                 businessName={businessName}
                 showCompanyNameBelowLogo={showCompanyNameBelowLogo}
+                preparedBy={estimate.prepared_by}
               />
               <span className="mt-3 inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-500">
                 Website Quote Request
@@ -162,7 +163,6 @@ export default async function EstimatePage({
                 initialPhone={estimate.customer_phone ?? ""}
                 initialEmail={estimate.customer_email ?? ""}
                 initialAddress={estimate.job_address ?? ""}
-                preparedBy={estimate.prepared_by ?? ""}
                 companyName={businessName || undefined}
                 businessEmail={businessEmail || undefined}
                 dateStr={estimate.created_at ?? ""}
@@ -214,6 +214,7 @@ export default async function EstimatePage({
                 logoUrl={logoUrl}
                 businessName={businessName}
                 showCompanyNameBelowLogo={showCompanyNameBelowLogo}
+                preparedBy={estimate.prepared_by}
               />
               <span className="mt-3 inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-500">
                 Estimate
@@ -228,7 +229,6 @@ export default async function EstimatePage({
                 initialPhone={estimate.customer_phone ?? ""}
                 initialEmail={estimate.customer_email ?? ""}
                 initialAddress={estimate.job_address ?? ""}
-                preparedBy={estimate.prepared_by ?? ""}
                 companyName={businessName || undefined}
                 businessEmail={businessEmail || undefined}
                 dateStr={estimate.created_at ?? ""}

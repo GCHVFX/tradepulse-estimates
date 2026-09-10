@@ -95,7 +95,7 @@ test("estimate, share, and PDF use the shared identity behaviour", () => {
   const pdf = readFileSync(path.join(root, "lib/generate-pdf.ts"), "utf8");
 
   expect(companyHeader).toContain("estimateCompanyName");
-  expect(customerDetails).toContain("preparedByLabel");
+  expect(customerDetails).not.toContain("preparedByLabel");
   expect(sharePage).toContain("preparedByLabel");
   expect(sharePage).toContain("showCompanyNameBelowLogo={showCompanyNameBelowLogo}");
   expect(estimatePage).toContain("showCompanyNameBelowLogo={showCompanyNameBelowLogo}");

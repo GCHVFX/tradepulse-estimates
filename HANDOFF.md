@@ -1,6 +1,29 @@
 # TradePulse handoff
 
-Updated: 2026-09-10 01:11 PT (Estimate identity display controls implemented, the additive Supabase field applied and verified, and focused application/PDF checks passed. Prepared for the focused session commit; not pushed or deployed.)
+Updated: 2026-09-10 01:21 PT (Follow-up identity layout adjustment committed locally and focused checks passed; not deployed.)
+
+## Estimate identity layout follow-up (2026-09-10 01:21 PT)
+
+Moved `Prepared by <name>` into the shared company identity header so estimate
+editor/display and customer share now order company identity, Prepared by,
+estimate label/title, then Phone, Email, and Date. The PDF already had this
+ordering and was unchanged. The existing company-name preference and stored
+profile fields were preserved.
+
+Changed files: `app/components/company-estimate-header.tsx`,
+`app/components/customer-details-block.tsx`, `app/estimates/[id]/page.tsx`,
+`app/new/page.tsx`, `app/share/[id]/page.tsx`,
+`tests/smoke/estimate-identity-display.spec.ts`, and `HANDOFF.md`.
+
+Verification: focused estimate identity/display test -> 8 passed; `git diff
+--check` -> passed with line-ending warnings only. No full suite/build/browser
+test was run. Commit `Align estimate identity details` is pending; push is the
+next authorised action and deployment is intentionally excluded.
+
+Remaining risk: no authenticated browser verification was available; shared
+rendering code and focused tests cover the ordering.
+
+---
 
 ## Estimate identity display controls (2026-09-10 01:11 PT)
 

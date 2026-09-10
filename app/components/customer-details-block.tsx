@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect } from "react";
 import { formatPhoneInput } from "@/lib/format-phone";
-import { preparedByLabel } from "@/lib/estimate-identity";
 
 interface CustomerDetailsBlockProps {
   estimateId: string | null;
@@ -10,7 +9,6 @@ interface CustomerDetailsBlockProps {
   initialPhone: string;
   initialEmail: string;
   initialAddress: string;
-  preparedBy: string;
   dateStr: string;
   companyName?: string;
   businessEmail?: string;
@@ -24,7 +22,6 @@ export function CustomerDetailsBlock({
   initialPhone,
   initialEmail,
   initialAddress,
-  preparedBy,
   dateStr,
   companyName,
   businessEmail,
@@ -44,7 +41,6 @@ export function CustomerDetailsBlock({
     day: "numeric",
     year: "numeric",
   }).format(new Date(dateStr));
-  const preparedByText = preparedByLabel(preparedBy);
 
   // Auto-save while editing
   useEffect(() => {
@@ -178,7 +174,6 @@ export function CustomerDetailsBlock({
         {phone && <span className="block">Phone: {phone}</span>}
         {email && <span className="block">Email: {email}</span>}
         {address && <span className="block">Address: {address}</span>}
-        {preparedByText && <span className="block">{preparedByText}</span>}
         {businessEmail && (
           <a href={`mailto:${businessEmail}`} className="block text-sm text-amber-500 hover:text-amber-400 transition-colors">{businessEmail}</a>
         )}
