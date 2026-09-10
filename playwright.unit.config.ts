@@ -12,6 +12,7 @@ export default defineConfig({
     "estimate-grouped-pricing.spec.ts",
     "estimate-item-migration.spec.ts",
     "estimate-items-conversion.spec.ts",
+    "quote-template-locale.spec.ts",
     "plan-pricing.spec.ts",
     "stripe-webhook.spec.ts",
     "stripe-billing-recovery.spec.ts",

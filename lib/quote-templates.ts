@@ -1,3 +1,5 @@
+import { labourWord, type Currency } from "./currency";
+
 interface QuoteTemplate {
   title: string;
   scope: string;
@@ -205,6 +207,17 @@ export function matchTemplate(description: string): QuoteTemplate {
   return GENERIC_TEMPLATE;
 }
 
+/**
+ * The templates above are authored once, in Canadian English. This is the
+ * only word among them that differs between the two markets, so it is
+ * localized here rather than duplicating every template per currency.
+ */
+function localizeLabel(label: string, currency: Currency): string {
+  const word = labourWord(currency);
+  const capitalized = word === "labor" ? "Labor" : "Labour";
+  return label.replace(/\bLabour\b/g, capitalized).replace(/\blabour\b/g, word);
+}
+
 export function buildDraftSummary(
   template: QuoteTemplate,
   customerDescription: string,
@@ -212,10 +225,12 @@ export function buildDraftSummary(
   taxLabel = 'GST',
   taxRate = 5,
   photoNotes?: string,
+  currency: Currency = "cad",
 ): string {
   const remaining = [...(pricebookItems ?? [])];
   const lineItemRows = template.lineItems
-    .map((label) => {
+    .map((rawLabel) => {
+      const label = localizeLabel(rawLabel, currency);
       const match = remaining.length > 0 ? findBestMatch(label, remaining, template.title) : null;
       if (match && match.price > 0) {
         const idx = remaining.indexOf(match);

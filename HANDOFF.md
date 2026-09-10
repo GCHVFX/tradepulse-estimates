@@ -1,6 +1,133 @@
 # TradePulse handoff
 
-Updated: 2026-09-10 09:14 PT (Two production bug fixes -- estimate delete hang and post-generation scroll drift -- implemented and verified locally; not committed, not deployed.)
+Updated: 2026-09-10 09:36 PT (Canadian vs American English spelling added, derived from the existing estimate currency. Implemented and verified locally; not committed, not deployed.)
+
+## Canadian vs American English spelling, derived from estimate currency (2026-09-10 09:36 PT)
+
+**Status:** implemented and verified locally on branch `main`, working tree
+started from `cd7a3cb` ("Align estimate identity details") plus the
+still-uncommitted delete/scroll bug fixes from the entry below (both
+untouched by this task -- checked first, no overlapping files). **Not
+committed, not deployed.**
+
+**Source of truth used (no new schema):** `Currency` ('cad' | 'usd',
+`lib/currency.ts`), specifically `tpe_estimates.currency` -- the same
+immutable per-estimate snapshot that already decides CA$ vs US$ everywhere
+else, read via the existing `readEstimateCurrency()` / snapshotted at
+generation time via `readBusinessEstimateCurrency()` (`lib/currency-db.ts`).
+No geolocation, no new column, no settings screen.
+
+**What changed:**
+
+- `lib/currency.ts` -- two small pure functions derived from `Currency`:
+  `spellingInstructionForCurrency()` (returns exactly `"Use Canadian English
+  spelling."` or `"Use American English spelling."`) and `labourWord()`
+  (`"labour"` | `"labor"`).
+- `app/api/generate-estimate/route.ts` -- `SYSTEM_PROMPT` (a static constant)
+  became `buildSystemPrompt(currency)`. The one line that used to hard-code
+  `"Use Canadian English spelling throughout. Use 'labour' not 'labor'..."`
+  is now `spellingInstructionForCurrency(currency)`. The Line Items example
+  row's literal `"Labour"` is now `currency === "usd" ? "Labor" : "Labour"`
+  too -- left as `"Labour"` it risked getting echoed verbatim into a USD
+  estimate's own line items despite the instruction. The unrelated automotive
+  rule ("tire not tyre" etc., British vs. North American, not CA vs. US) is
+  untouched. `estimateCurrency` is now read once, before the Anthropic stream
+  is created, instead of after -- same value, just early enough to build the
+  prompt with it; nothing else about the read changed.
+- `lib/quote-templates.ts` -- the one hard-coded estimate-content word among
+  the static website-quote-to-draft templates ("Repair or replacement
+  labour", the water heater template) is now localized. `buildDraftSummary()`
+  takes an added `currency: Currency = "cad"` parameter (default preserves
+  prior behaviour for the one call site) and a new `localizeLabel()` swaps
+  `Labour`/`labour` for `Labor`/`labor` before the label is used, including
+  before it's matched against price-book items -- so a US contractor's
+  price-book item literally named "Labor" still matches correctly.
+- `app/components/estimate-actions.tsx` -- added a required `currency:
+  Currency` prop, passed through to `buildDraftSummary()`.
+- `app/estimates/[id]/page.tsx` -- one line: `currency={estimateCurrency}`
+  added to the existing `<EstimateActions>` call (the page already reads
+  `estimateCurrency` via `readEstimateCurrency()` for the pricing editor).
+
+**Consistency across surfaces:** `lib/generate-pdf.ts`, `app/share/[id]/
+page.tsx`, `app/components/editable-estimate-body.tsx`, and
+`lib/estimate-pricing-server.ts` were checked directly (grepped for
+Labour/Colour/Centre/Cheque) and hold no hard-coded spelling of their own --
+they all render whichever `summary` string is already stored, so once that
+string is correct once, PDF/share/editor inherit it automatically with no
+separate code path to drift. Price book / rates (`app/rates`, `price-book.tsx`,
+`profile-form.tsx`) and every marketing/SEO page were deliberately left
+untouched -- out of this task's scope (not an estimate-output surface).
+
+**Verification actually run:**
+
+- `npx tsc --noEmit` -> passed.
+- `npx eslint` on every changed file -> passed (one pre-existing, unrelated
+  error at `app/estimates/[id]/page.tsx:115`, the `<a>`-vs-`<Link>` warning
+  already noted in the delete-bug entry below; my diff there is a single
+  one-line addition, confirmed via `git diff`).
+- `npx playwright test --config=playwright.unit.config.ts` -> 454 passed
+  (451 before this task's 3 new pure tests), same 4 pre-existing unrelated
+  failures as every prior entry in this file, unchanged in identity.
+- New pure unit test `tests/smoke/quote-template-locale.spec.ts` (registered
+  in `playwright.unit.config.ts`'s `testMatch`, since it needs no live
+  services): confirms the water-heater template renders "labour" for `cad`
+  and "labor" for `usd`, that omitting `currency` still defaults to `cad`
+  (byte-identical to before this change), and that a template with no
+  "labour" wording is byte-identical across currencies (pricing untouched).
+- Extended `tests/smoke/generate-estimate.spec.ts` with two real, live
+  end-to-end tests against a real Supabase/Stripe test account
+  (`signUpFreshAccount()`/`cleanupTestAccount()`,
+  `ALLOW_PRODUCTION_SIGNUP_SMOKE=true`): a default (CAD) business's generated
+  estimate contains "labour" and not "labor"; a business whose
+  `estimate_currency` is set to `usd` (via the service-role client, the same
+  column the app itself reads) generates an estimate containing "labor" and
+  not "labour", with `US$` still rendering correctly (CAD/USD amount
+  behaviour unchanged). Both run against the real Anthropic API and the real
+  `/new` streaming flow, not a mock. Note: `EditableEstimateBody` renders
+  line-item text as textarea/input values, which `Element.innerText` does not
+  include -- the test reads both the plain rendered text and every
+  textarea/input value in `<main>` to see the same content a contractor
+  actually sees on screen.
+- All test accounts created during this session's verification were
+  confirmed removed afterward: zero `tpe_businesses`/`auth.users` rows remain
+  for any `gchansen+audit-%` email in the hosted database.
+
+**Pre-existing flakiness observed, not fixed (out of scope):** the original
+`generate-estimate.spec.ts` test ("renders a pricing summary") and my two new
+ones occasionally hit `tpe_estimate_generation_claims_business_id_fkey` on
+cleanup when `cleanupTestAccount()` runs immediately after the "Pricing
+Summary" heading becomes visible, which can happen slightly before the
+server's own claim-release (mid-stream, not full completion). My two new
+tests wait for the "Send Estimate" button to become enabled instead (a
+reliable post-completion signal) and did not reproduce it in their final
+runs; the original test's own wait condition was not touched, since changing
+it is unrelated to this task. Any leaked test account hit this during
+verification and was cleaned up manually with `cleanupTestAccount()` once the
+now-stale claim had released.
+
+**Remaining case where CA/US spelling could still diverge:** the system
+prompt's own instructional prose (not example content) mentions "labour"
+several more times in lowercase, mid-sentence, describing what a labour line
+item is (e.g. "Estimate labour hours the way..."). These are prompt-author
+language, not content the model is expected to echo verbatim the way the
+Line Items example row is, and `spellingInstructionForCurrency()` is stated
+as an unambiguous, overriding rule ahead of them. Left unchanged rather than
+rewriting every incidental mention, per this task's own scope boundary
+against unrelated copy changes -- flagging here rather than silently leaving
+it unverified. If a USD estimate is ever observed with a stray "labour" in
+body text outside a line item label, this is the first place to check.
+
+**Files changed:** `lib/currency.ts`, `lib/quote-templates.ts`,
+`app/api/generate-estimate/route.ts`, `app/components/estimate-actions.tsx`,
+`app/estimates/[id]/page.tsx`, `playwright.unit.config.ts`,
+`tests/smoke/generate-estimate.spec.ts`,
+`tests/smoke/quote-template-locale.spec.ts` (new), `HANDOFF.md`.
+
+**Next action:** review the diff, then commit and push/deploy only when
+explicitly authorized -- separately from the still-pending delete/scroll bug
+fix commit below, per instruction not to mix them.
+
+---
 
 ## Estimate delete hang and post-generation scroll drift: root-caused and fixed (2026-09-10 09:14 PT)
 

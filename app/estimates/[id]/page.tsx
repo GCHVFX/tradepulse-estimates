@@ -263,6 +263,7 @@ export default async function EstimatePage({
         estimateId={estimate.id}
         title={estimate.title ?? ""}
         summary={pricing.selected.summary}
+        currency={estimateCurrency}
         status={estimate.status}
         source={estimate.source ?? null}
         description={estimate.description ?? null}

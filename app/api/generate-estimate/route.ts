@@ -8,6 +8,7 @@ import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
 import { convertEstimateToStructuredItems } from "@/lib/estimate-item-migration";
 import { notifyInternalError } from "@/lib/notify-error";
 import { estimateCurrencyPatch, readBusinessEstimateCurrency } from "@/lib/currency-db";
+import { spellingInstructionForCurrency, type Currency } from "@/lib/currency";
 import { hasSubscriptionAccess, SUBSCRIPTION_ACCESS_COLUMNS } from "@/lib/subscription-access";
 import {
   claimEstimateGeneration,
@@ -18,7 +19,13 @@ import {
 
 const client = new Anthropic();
 
-const SYSTEM_PROMPT = `You are a professional contractor writing a job estimate for a customer. Turn the job description into a complete, professional estimate. Write it the way an experienced contractor would. Clear, specific, and direct. Ready to send with minimal editing.
+function buildSystemPrompt(currency: Currency): string {
+  // Capitalized so the Line Items example row below matches whichever
+  // spelling convention the instruction just below it asks for -- otherwise
+  // a literal "Labour" example risks getting echoed into a USD estimate's
+  // own line items despite the instruction to write American English.
+  const labourExample = currency === "usd" ? "Labor" : "Labour";
+  return `You are a professional contractor writing a job estimate for a customer. Turn the job description into a complete, professional estimate. Write it the way an experienced contractor would. Clear, specific, and direct. Ready to send with minimal editing.
 
 Rules:
 - Write like a contractor, not like software
@@ -30,7 +37,7 @@ Rules:
 - Do not use em dashes
 - Do not use: ensure, streamline, leverage, utilize, seamless, comprehensive, facilitate
 - Prices must be specific and labelled, never vague
-- Use Canadian English spelling throughout. Use 'labour' not 'labor', 'colour' not 'color', 'centre' not 'center'.
+- ${spellingInstructionForCurrency(currency)}
 - For automotive and vehicle parts, use American English spellings: tire not tyre, muffler not silencer, gas not petrol, truck not lorry.
 - Never show markup as a separate line item. Apply markup to material prices directly and list each material at its marked-up price. The customer sees final prices only.
 - In the Assumptions and Exclusions section, write each item as a plain bullet point. Do not use bold labels like **Included:**, **Excluded:**, or **Assumptions:**. Just write the assumption or exclusion directly.
@@ -46,7 +53,7 @@ Output must follow this exact structure:
    Line Items MUST be formatted as markdown pipe tables, not bullet points or plain text. Use this exact format:
    | Item | Qty | Unit | Rate | Cost |
    |------|-----|------|------|------|
-   | Labour | 3 | hrs | $95.00 | $285.00 |
+   | ${labourExample} | 3 | hrs | $95.00 | $285.00 |
    | Interior paint | 4 | gal | $62.00 | $248.00 |
    | Permit fee |  |  |  | $150.00 |
    Decide per item which type it is:
@@ -69,6 +76,7 @@ Output must follow this exact structure:
 8. Payment Terms (2 to 4 lines)
    Always include: "This estimate is valid for 30 days from the date above."
 9. Notes (omit if nothing relevant)`;
+}
 
 export async function POST(request: NextRequest) {
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -172,6 +180,13 @@ export async function POST(request: NextRequest) {
 
   const userMessage = lines.join("\n");
 
+  // Read the snapshot currency once, before the stream opens, so the value
+  // written to the row, the value the client renders with, and the spelling
+  // convention the AI is told to write in are all the same read. /new has no
+  // estimate row to query, so the response header is how it learns the
+  // snapshot instead of guessing from the business setting.
+  const estimateCurrency = await readBusinessEstimateCurrency(supabaseAdmin, business.id);
+
   const claimInput = { businessId: business.id, ownerUserId: user.id };
   let claimedStream;
   try {
@@ -181,7 +196,7 @@ export async function POST(request: NextRequest) {
       start: () => client.messages.stream({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 8192,
-        system: SYSTEM_PROMPT,
+        system: buildSystemPrompt(estimateCurrency),
         messages: [{ role: "user", content: userMessage }],
       }),
     });
@@ -222,12 +237,6 @@ export async function POST(request: NextRequest) {
   const safeCustomerEmail = typeof customerEmail === "string" ? customerEmail.trim() : "";
   const safeJobAddress = typeof jobAddress === "string" ? jobAddress.trim() : "";
   const safePreparedBy = business?.prepared_by ?? "";
-
-  // Read the snapshot currency once, before the stream opens, so the value
-  // written to the row and the value the client renders with are the same
-  // read. /new has no estimate row to query, so the response header is how
-  // it learns the snapshot instead of guessing from the business setting.
-  const estimateCurrency = await readBusinessEstimateCurrency(supabaseAdmin, business.id);
 
   const readable = new ReadableStream({
     async start(controller) {

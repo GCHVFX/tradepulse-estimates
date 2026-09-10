@@ -52,6 +52,25 @@ export function currencyPrefix(currency: Currency): string {
 }
 
 /**
+ * English spelling convention for estimate text, derived from the same
+ * Currency value that already distinguishes the Canadian and US markets --
+ * never a second geolocation source. CAD estimates are written in Canadian
+ * English, USD estimates in American English.
+ */
+export function spellingInstructionForCurrency(currency: Currency): string {
+  return currency === "usd" ? "Use American English spelling." : "Use Canadian English spelling.";
+}
+
+/**
+ * "labour" vs "labor" -- the one hard-coded estimate-content word this app
+ * renders outside the AI prompt (the static quote-conversion templates in
+ * lib/quote-templates.ts).
+ */
+export function labourWord(currency: Currency): "labour" | "labor" {
+  return currency === "usd" ? "labor" : "labour";
+}
+
+/**
  * Renders an amount with an unambiguous currency prefix.
  *
  * `decimals` mirrors the two existing estimate formatters: whole dollars for

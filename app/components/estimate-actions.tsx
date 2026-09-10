@@ -9,11 +9,16 @@ import { Spinner } from "./spinner";
 import { matchTemplate, buildDraftSummary } from "@/lib/quote-templates";
 import type { PricebookItem } from "@/lib/quote-templates";
 import { CANONICAL_URL } from "@/lib/site-url";
+import type { Currency } from "@/lib/currency";
 
 interface EstimateActionsProps {
   estimateId: string;
   title: string;
   summary: string;
+  /** The estimate's own immutable currency snapshot -- the same value that
+   * already distinguishes the Canadian and US markets -- used to pick the
+   * matching English spelling when converting a website-quote draft. */
+  currency: Currency;
   status?: string | null;
   source?: string | null;
   description?: string | null;
@@ -43,6 +48,7 @@ export function EstimateActions({
   estimateId,
   title,
   summary,
+  currency,
   status,
   source,
   description,
@@ -289,7 +295,7 @@ export function EstimateActions({
         body: JSON.stringify({
           id: estimateId,
           title: template.title,
-          summary: buildDraftSummary(template, customerDesc, pricebookItems, taxLabel, taxRate, photoNotes || undefined),
+          summary: buildDraftSummary(template, customerDesc, pricebookItems, taxLabel, taxRate, photoNotes || undefined, currency),
           status: "draft",
         }),
       });
