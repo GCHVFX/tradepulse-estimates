@@ -7,6 +7,7 @@ import { supabaseAdmin } from "@/lib/supabase-server";
 import { allAmountsInLabel } from "@/lib/currency";
 import { readEstimateCurrency } from "@/lib/currency-db";
 import { CANONICAL_URL } from "@/lib/site-url";
+import { preparedByLabel } from "@/lib/estimate-identity";
 
 export default async function ShareEstimatePage({
   params,
@@ -35,7 +36,7 @@ export default async function ShareEstimatePage({
   const businessPromise = estimate.business_id
     ? supabaseAdmin
         .from("tpe_businesses")
-        .select("name, logo_url")
+        .select("name, logo_url, show_company_name_below_logo")
         .eq("id", estimate.business_id)
         .maybeSingle()
     : Promise.resolve({ data: null });
@@ -52,6 +53,8 @@ export default async function ShareEstimatePage({
   const estimateCurrency = await readEstimateCurrency(supabaseAdmin, id);
   const businessName = business?.name ?? "";
   const logoUrl = business?.logo_url ?? null;
+  const showCompanyNameBelowLogo = business?.show_company_name_below_logo ?? true;
+  const preparedByText = preparedByLabel(estimate.prepared_by);
 
   const photoUrls: string[] = [];
   if (photoRecords && photoRecords.length > 0) {
@@ -71,12 +74,16 @@ export default async function ShareEstimatePage({
         <div className="bg-white rounded-2xl border border-[#C9B384] shadow-sm p-6">
 
           {/* Business letterhead */}
-          {(logoUrl || businessName || estimate.prepared_by) && (
+          {(logoUrl || businessName || preparedByText) && (
             <div className="pb-5 mb-5 border-b border-[#C9B384]">
-              <CompanyEstimateHeader logoUrl={logoUrl} businessName={businessName} />
-              {estimate.prepared_by && (
+              <CompanyEstimateHeader
+                logoUrl={logoUrl}
+                businessName={businessName}
+                showCompanyNameBelowLogo={showCompanyNameBelowLogo}
+              />
+              {preparedByText && (
                 <p className={`text-sm text-[#5C4A2E] ${logoUrl || businessName ? "mt-2" : ""}`}>
-                  {estimate.prepared_by}
+                  {preparedByText}
                 </p>
               )}
             </div>
@@ -144,6 +151,8 @@ export default async function ShareEstimatePage({
             summary={pricing.selected.summary}
             businessName={businessName}
             logoUrl={logoUrl}
+            showCompanyNameBelowLogo={showCompanyNameBelowLogo}
+            preparedBy={estimate.prepared_by}
             photoUrls={estimate.include_photos ? photoUrls : []}
             currency={estimateCurrency}
           />

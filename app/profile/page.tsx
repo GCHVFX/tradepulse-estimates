@@ -33,7 +33,7 @@ export default async function ProfilePage({
 
   const { data } = await supabaseAdmin
     .from("tpe_businesses")
-    .select(`id, name, phone, email, logo_url, prepared_by, google_review_link, payment_link, ${SUBSCRIPTION_ACCESS_COLUMNS}`)
+    .select(`id, name, phone, email, logo_url, show_company_name_below_logo, prepared_by, google_review_link, payment_link, ${SUBSCRIPTION_ACCESS_COLUMNS}`)
     .eq("owner_user_id", user.id)
     .maybeSingle();
 
@@ -42,6 +42,7 @@ export default async function ProfilePage({
     phone: data?.phone ?? "",
     email: data?.email ?? "",
     logo_url: data?.logo_url ?? "",
+    show_company_name_below_logo: data?.show_company_name_below_logo ?? true,
     prepared_by: data?.prepared_by ?? "",
     google_review_link: data?.google_review_link ?? "",
     payment_link: data?.payment_link ?? "",

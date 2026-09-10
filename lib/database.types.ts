@@ -33,6 +33,7 @@ export type Database = {
           phone: string | null
           plan: string
           prepared_by: string
+          show_company_name_below_logo: boolean
           signup_source: string | null
           slug: string
           stripe_customer_id: string | null
@@ -61,6 +62,7 @@ export type Database = {
           phone?: string | null
           plan?: string
           prepared_by?: string
+          show_company_name_below_logo?: boolean
           signup_source?: string | null
           slug: string
           stripe_customer_id?: string | null
@@ -89,6 +91,7 @@ export type Database = {
           phone?: string | null
           plan?: string
           prepared_by?: string
+          show_company_name_below_logo?: boolean
           signup_source?: string | null
           slug?: string
           stripe_customer_id?: string | null

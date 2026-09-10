@@ -29,7 +29,7 @@ export default async function EstimatePage({
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("id, logo_url, name, email, phone, plan, google_review_link, payment_link")
+    .select("id, logo_url, name, show_company_name_below_logo, email, phone, plan, google_review_link, payment_link")
     .eq("owner_user_id", user.id)
     .maybeSingle();
 
@@ -83,6 +83,7 @@ export default async function EstimatePage({
 
   const logoUrl = business?.logo_url ?? null;
   const businessName = business?.name ?? "";
+  const showCompanyNameBelowLogo = business?.show_company_name_below_logo ?? true;
   const businessEmail = business?.email ?? "";
   const businessPhone = business?.phone ?? "";
   const isPro = business?.plan === "pro";
@@ -146,7 +147,11 @@ export default async function EstimatePage({
         {isQuoteRequest ? (
           <>
             <div className="bg-white rounded-2xl p-5 mt-2">
-              <CompanyEstimateHeader logoUrl={logoUrl} businessName={businessName} />
+              <CompanyEstimateHeader
+                logoUrl={logoUrl}
+                businessName={businessName}
+                showCompanyNameBelowLogo={showCompanyNameBelowLogo}
+              />
               <span className="mt-3 inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-500">
                 Website Quote Request
               </span>
@@ -205,7 +210,11 @@ export default async function EstimatePage({
         ) : (
           <>
             <div className="bg-white rounded-2xl p-5 mt-2">
-              <CompanyEstimateHeader logoUrl={logoUrl} businessName={businessName} />
+              <CompanyEstimateHeader
+                logoUrl={logoUrl}
+                businessName={businessName}
+                showCompanyNameBelowLogo={showCompanyNameBelowLogo}
+              />
               <span className="mt-3 inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-500">
                 Estimate
               </span>

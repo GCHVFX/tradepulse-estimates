@@ -9,6 +9,7 @@ interface ProfileBody {
   phone?: unknown;
   email?: unknown;
   logo_url?: unknown;
+  show_company_name_below_logo?: unknown;
   prepared_by?: unknown;
   google_review_link?: unknown;
   payment_link?: unknown;
@@ -21,7 +22,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const { data, error } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("id, name, phone, email, logo_url, prepared_by, google_review_link, payment_link, plan, subscription_status, trial_ends_at")
+    .select("id, name, phone, email, logo_url, show_company_name_below_logo, prepared_by, google_review_link, payment_link, plan, subscription_status, trial_ends_at")
     .eq("owner_user_id", user.id)
     .maybeSingle();
 
@@ -93,6 +94,9 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         phone: typeof body.phone === "string" ? body.phone.trim() : "",
         email: typeof body.email === "string" ? body.email.trim() : "",
         logo_url: typeof body.logo_url === "string" ? body.logo_url.trim() : "",
+        ...(typeof body.show_company_name_below_logo === "boolean"
+          ? { show_company_name_below_logo: body.show_company_name_below_logo }
+          : {}),
         prepared_by: typeof body.prepared_by === "string" ? body.prepared_by.trim() : "",
         google_review_link: googleReviewLink,
         payment_link: paymentLink,

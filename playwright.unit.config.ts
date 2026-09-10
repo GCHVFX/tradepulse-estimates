@@ -22,6 +22,7 @@ export default defineConfig({
     "smoke-safety.spec.ts",
     "currency.spec.ts",
     "currency-rendering.spec.ts",
+    "estimate-identity-display.spec.ts",
     "account-deletion.spec.ts",
     "bottom-nav.spec.ts",
     "signup-currency-layout.spec.ts",

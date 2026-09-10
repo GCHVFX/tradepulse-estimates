@@ -8,6 +8,8 @@ interface DownloadPdfButtonProps {
   summary: string;
   businessName?: string;
   logoUrl?: string | null;
+  showCompanyNameBelowLogo?: boolean;
+  preparedBy?: string | null;
   photoUrls?: string[];
   /** The estimate's snapshot currency. Required. */
   currency: Currency;
@@ -18,6 +20,8 @@ export function DownloadPdfButton({
   summary,
   businessName,
   logoUrl,
+  showCompanyNameBelowLogo,
+  preparedBy,
   photoUrls,
   currency,
 }: DownloadPdfButtonProps) {
@@ -28,6 +32,8 @@ export function DownloadPdfButton({
         generateEstimatePDF(title, summary, {
           businessName,
           logoUrl,
+          showCompanyNameBelowLogo,
+          preparedBy,
           photoUrls,
           currency,
         })

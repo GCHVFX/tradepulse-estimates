@@ -1,6 +1,75 @@
 # TradePulse handoff
 
-Updated: 2026-09-08 08:20 PT (First-party outreach click tracking committed, deployed to production, and confirmed live end to end: a real `/r/CA2609A` visit recorded exactly one new click row.)
+Updated: 2026-09-10 01:11 PT (Estimate identity display controls implemented, the additive Supabase field applied and verified, and focused application/PDF checks passed. Prepared for the focused session commit; not pushed or deployed.)
+
+## Estimate identity display controls (2026-09-10 01:11 PT)
+
+**Status:** implemented and focused verification passed on branch `main`. The
+working tree started from `1b604a9` ("Record production deployment confirmation
+for outreach click tracking"). The session changes are prepared for a focused
+commit at the end of this workflow; no push or deployment is authorized or
+performed.
+
+**Behaviour changed:** Profile now shows `Show company name below logo` beside
+the logo/company controls whenever a logo exists. The persisted preference is
+on by default. With a logo and the preference off, the estimate editor/display,
+customer share page, and PDF hide only the separate company-name line below the
+logo. Without a logo, those surfaces always show the stored company name. The
+stored name remains unchanged and the email route continues to use it normally.
+A non-blank profile name is now rendered as `Prepared by <name>` on the estimate,
+share page, and PDF; blank names render no prepared-by line.
+
+**Schema:** added only
+`public.tpe_businesses.show_company_name_below_logo boolean not null default
+true` in migration
+`supabase/migrations/20260910074638_add_show_company_name_below_logo.sql`. The
+migration is applied to hosted Supabase. Generated `lib/database.types.ts`
+received only the three corresponding Row/Insert/Update type entries; unrelated
+live-schema drift was deliberately excluded.
+
+**Files changed:**
+
+- `app/api/profile/route.ts`
+- `app/components/company-estimate-header.tsx`
+- `app/components/customer-details-block.tsx`
+- `app/components/download-pdf-button.tsx`
+- `app/components/profile-form.tsx`
+- `app/estimates/[id]/page.tsx`
+- `app/new/page.tsx`
+- `app/profile/page.tsx`
+- `app/share/[id]/page.tsx`
+- `lib/database.types.ts`
+- `lib/estimate-identity.ts` (new)
+- `lib/generate-pdf.ts`
+- `lib/hooks/use-business-profile.ts`
+- `playwright.unit.config.ts`
+- `supabase/migrations/20260910074638_add_show_company_name_below_logo.sql` (new)
+- `tests/smoke/estimate-identity-display.spec.ts` (new)
+- `HANDOFF.md`
+
+**Verification actually run:**
+
+- `npm.cmd exec playwright test -- --config=playwright.unit.config.ts tests/smoke/estimate-identity-display.spec.ts` -> 8 passed. This covers logo + name with the preference on, logo-only with it off, no-logo fallback, direct shared-header output, labelled/blank prepared-by output, estimate/share/PDF wiring, unchanged email identity, and Profile/API/schema persistence wiring.
+- `npx.cmd tsc --noEmit` -> passed. A malformed generated `.next/dev/types/validator.ts` left by the stopped development server was inspected and removed first; no source file was removed.
+- `npx.cmd eslint lib/estimate-identity.ts lib/generate-pdf.ts app/components/company-estimate-header.tsx app/components/download-pdf-button.tsx app/api/profile/route.ts app/profile/page.tsx "app/share/[id]/page.tsx" tests/smoke/estimate-identity-display.spec.ts playwright.unit.config.ts` -> passed.
+- `git diff --check` -> passed; Git emitted only line-ending conversion warnings.
+- `git diff --exit-code -- app/api/send-email/route.ts` -> passed, confirming the email route is unchanged.
+- Generated three real PDFs through `generateEstimatePDF`: logo/preference on, logo/preference off, and no-logo/preference off with a blank profile name. Text extraction and rendered-page inspection confirmed the required company-name and prepared-by states, a visible logo in both logo cases, no blank prepared-by line, and clean layout. Temporary PDFs and rendered images were removed.
+- Hosted Supabase checks confirmed the migration is present, the field is boolean/NOT NULL/default true, and all 12 existing rows read true with zero nulls. A transaction-only update proved false persists, then rolled back; the follow-up count remained 12 true, 0 false, 0 null. Security and performance advisors showed no new finding attributable to this field.
+- A wider lint attempt over all touched application files was not used as the focused pass because it encountered the existing `@next/next/no-html-link-for-pages` error at `app/estimates/[id]/page.tsx:115` plus six existing warnings. The changed lines are covered by TypeScript, focused ESLint, and the focused tests above.
+
+**Remaining risk:** no authenticated browser session was available, so the
+editor/share routes were not manually exercised end to end in a signed-in
+browser. Their common header/helper behaviour is directly tested and their
+server-to-component/PDF prop wiring is covered by the focused test. The hosted
+schema is already additive and backward-compatible, but the application change
+will not be live until this focused commit is reviewed, pushed, and deployed.
+
+**Next action:** review the focused commit, then push/deploy only when explicitly
+authorized. After deployment, perform one signed-in Profile/editor check and one
+customer share-page check with a real test estimate.
+
+---
 
 ## Outreach click tracking: committed, deployed, confirmed live (2026-09-08 08:20 PT)
 

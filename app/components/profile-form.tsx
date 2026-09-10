@@ -25,6 +25,7 @@ interface Profile {
   phone: string;
   email: string;
   logo_url: string;
+  show_company_name_below_logo: boolean;
   prepared_by: string;
   google_review_link: string;
   payment_link: string;
@@ -62,6 +63,9 @@ export function ProfileForm({
   );
   const [paymentLink, setPaymentLink] = useState(profile.payment_link);
   const [logoUrl, setLogoUrl] = useState(profile.logo_url);
+  const [showCompanyNameBelowLogo, setShowCompanyNameBelowLogo] = useState(
+    profile.show_company_name_below_logo
+  );
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [uploadError, setUploadError] = useState("");
@@ -161,6 +165,7 @@ export function ProfileForm({
             phone,
             email,
             logo_url: logoUrlRef.current,
+            show_company_name_below_logo: showCompanyNameBelowLogo,
             prepared_by: preparedBy,
             google_review_link: linkToSave,
             payment_link: paymentLink,
@@ -177,7 +182,7 @@ export function ProfileForm({
     return () => {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     };
-  }, [name, phone, email, preparedBy, googleReviewLink, paymentLink, estimateCurrency]);
+  }, [name, phone, email, preparedBy, googleReviewLink, paymentLink, estimateCurrency, showCompanyNameBelowLogo]);
 
   async function handleCopy() {
     await navigator.clipboard.writeText(referralUrl);
@@ -267,7 +272,7 @@ export function ProfileForm({
       const res = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phone, email, logo_url: url, prepared_by: preparedBy, google_review_link: googleReviewLink, payment_link: paymentLink, estimate_currency: estimateCurrency }),
+        body: JSON.stringify({ name, phone, email, logo_url: url, show_company_name_below_logo: showCompanyNameBelowLogo, prepared_by: preparedBy, google_review_link: googleReviewLink, payment_link: paymentLink, estimate_currency: estimateCurrency }),
       });
 
       if (!res.ok) throw new Error("Failed to save logo.");
@@ -294,7 +299,7 @@ export function ProfileForm({
       const res = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phone, email, logo_url: "", prepared_by: preparedBy, google_review_link: googleReviewLink, payment_link: paymentLink, estimate_currency: estimateCurrency }),
+        body: JSON.stringify({ name, phone, email, logo_url: "", show_company_name_below_logo: showCompanyNameBelowLogo, prepared_by: preparedBy, google_review_link: googleReviewLink, payment_link: paymentLink, estimate_currency: estimateCurrency }),
       });
 
       if (!res.ok) throw new Error("Failed to remove logo.");
@@ -358,7 +363,7 @@ export function ProfileForm({
       const res = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phone, email, logo_url: logoUrlRef.current, prepared_by: preparedBy, google_review_link: linkToSave, payment_link: paymentLink }),
+        body: JSON.stringify({ name, phone, email, logo_url: logoUrlRef.current, show_company_name_below_logo: showCompanyNameBelowLogo, prepared_by: preparedBy, google_review_link: linkToSave, payment_link: paymentLink }),
       });
 
       if (!res.ok) {
@@ -517,6 +522,17 @@ export function ProfileForm({
               autoComplete="organization"
             />
             <p className="text-zinc-400 text-xs">Used on estimates, emails, texts, and review requests.</p>
+            {logoUrl && (
+              <label className="flex min-h-11 items-center gap-3 text-sm text-zinc-300">
+                <input
+                  type="checkbox"
+                  checked={showCompanyNameBelowLogo}
+                  onChange={(event) => setShowCompanyNameBelowLogo(event.target.checked)}
+                  className="h-5 w-5 rounded border-zinc-600 bg-zinc-900 text-amber-500 accent-amber-500"
+                />
+                <span>Show company name below logo</span>
+              </label>
+            )}
           </div>
         </div>
 

@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 interface BusinessProfile {
   logoUrl: string | null;
   businessName: string;
+  showCompanyNameBelowLogo: boolean;
   businessEmail: string;
   preparedBy: string;
   isPro: boolean;
@@ -19,6 +20,7 @@ export function useBusinessProfile(): BusinessProfile {
   const [profile, setProfile] = useState<BusinessProfile>({
     logoUrl: null,
     businessName: "",
+    showCompanyNameBelowLogo: true,
     businessEmail: "",
     preparedBy: "",
     isPro: false,
@@ -30,10 +32,11 @@ export function useBusinessProfile(): BusinessProfile {
   useEffect(() => {
     fetch("/api/profile")
       .then((r) => r.json())
-      .then((d: { profile?: { logo_url?: string; name?: string; email?: string; prepared_by?: string; plan?: string; google_review_link?: string | null; ai_photo_estimates_remaining?: number | null } }) => {
+      .then((d: { profile?: { logo_url?: string; name?: string; show_company_name_below_logo?: boolean; email?: string; prepared_by?: string; plan?: string; google_review_link?: string | null; ai_photo_estimates_remaining?: number | null } }) => {
         setProfile({
           logoUrl: d?.profile?.logo_url ?? null,
           businessName: d?.profile?.name ?? "",
+          showCompanyNameBelowLogo: d?.profile?.show_company_name_below_logo ?? true,
           businessEmail: d?.profile?.email ?? "",
           preparedBy: d?.profile?.prepared_by ?? "",
           isPro: d?.profile?.plan === "pro",

@@ -1,9 +1,12 @@
 import jsPDF from "jspdf";
 import { allAmountsInLabel, type Currency } from "@/lib/currency";
+import { estimateCompanyName, preparedByLabel } from "@/lib/estimate-identity";
 
 interface GenerateEstimatePdfOptions {
   businessName?: string;
   logoUrl?: string | null;
+  showCompanyNameBelowLogo?: boolean;
+  preparedBy?: string | null;
   photoUrls?: string[];
   /**
    * Snapshot currency of the estimate. Required: the label under the pricing
@@ -127,6 +130,12 @@ export async function generateEstimatePDF(
 
   const businessName = options.businessName?.trim() ?? "";
   const logoDataUrl = options.logoUrl ? await loadImageAsDataUrl(options.logoUrl) : null;
+  const displayedBusinessName = estimateCompanyName({
+    businessName,
+    logoUrl: logoDataUrl,
+    showCompanyNameBelowLogo: options.showCompanyNameBelowLogo,
+  });
+  const preparedByText = preparedByLabel(options.preparedBy);
 
   // --- Header: stacked logo then name ---
   if (logoDataUrl) {
@@ -136,12 +145,20 @@ export async function generateEstimatePDF(
     y += logoH + 3;
   }
 
-  if (businessName) {
+  if (displayedBusinessName) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(14);
     doc.setTextColor(20, 20, 20);
-    doc.text(businessName, ml, y);
+    doc.text(displayedBusinessName, ml, y);
     y += 6;
+  }
+
+  if (preparedByText) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(92, 74, 46);
+    doc.text(preparedByText, ml, y);
+    y += 5;
   }
 
   doc.setFont("helvetica", "bold");

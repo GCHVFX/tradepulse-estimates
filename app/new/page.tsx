@@ -149,6 +149,7 @@ interface EstimateViewProps {
   needsProfileSetup: boolean;
   logoUrl: string | null;
   businessName: string;
+  showCompanyNameBelowLogo: boolean;
   businessEmail: string;
   preparedBy: string;
   customerName: string;
@@ -204,6 +205,7 @@ function EstimateView({
   needsProfileSetup,
   logoUrl,
   businessName,
+  showCompanyNameBelowLogo,
   businessEmail,
   preparedBy,
   customerName,
@@ -280,7 +282,11 @@ function EstimateView({
         {estimate && (
           <div className="mt-2 pb-2">
             <div className="bg-white rounded-2xl p-5 mt-2">
-              <CompanyEstimateHeader logoUrl={logoUrl} businessName={businessName} />
+              <CompanyEstimateHeader
+                logoUrl={logoUrl}
+                businessName={businessName}
+                showCompanyNameBelowLogo={showCompanyNameBelowLogo}
+              />
               <span className="mt-3 inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-500">
                 Estimate
               </span>
@@ -926,7 +932,7 @@ function NewPageInner() {
   const [estimateCurrency, setEstimateCurrency] = useState<Currency>(DEFAULT_CURRENCY);
   const [showSendSheet, setShowSendSheet] = useState(false);
   const [customerDetailsSaved, setCustomerDetailsSaved] = useState(false);
-  const { logoUrl, businessName, businessEmail, preparedBy, isPro, aiPhotoEstimatesRemaining, isLoading: profileLoading } = useBusinessProfile();
+  const { logoUrl, businessName, showCompanyNameBelowLogo, businessEmail, preparedBy, isPro, aiPhotoEstimatesRemaining, isLoading: profileLoading } = useBusinessProfile();
   const [jobTitle, setJobTitle] = useState("");
   const [isFirstTime, setIsFirstTime] = useState(false);
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
@@ -1179,6 +1185,7 @@ function NewPageInner() {
         needsProfileSetup={needsProfileSetup}
         logoUrl={logoUrl}
         businessName={businessName}
+        showCompanyNameBelowLogo={showCompanyNameBelowLogo}
         businessEmail={businessEmail}
         preparedBy={preparedBy}
         customerName={customerName}
