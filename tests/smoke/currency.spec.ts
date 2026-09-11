@@ -192,6 +192,10 @@ test("signup reads the country server-side and never geolocates the browser", ()
 
 test("email signup passes the validated currency into provisioning", () => {
   const route = code("app/api/auth/signup/route.ts");
+  expect(route).toContain('password.trim().length < 8');
+  expect(route).toContain('This password has appeared in a known data breach. Please choose a different password.');
+  expect(route).toContain('authErrorMessage?.toLowerCase().includes("password is known to be weak")');
+  expect(route).not.toContain("Password must contain");
   expect(route).toContain("currencyOrDefault(body.currency)");
   expect(route).toContain("businessEstimateCurrencyPatch(currency)");
   expect(route).toMatch(/\{ userId, email, plan, currency, deleteAuthUserOnFailure: true \}/);

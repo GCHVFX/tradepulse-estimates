@@ -68,8 +68,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
 
   if (signUpError || !data.user) {
+    const authErrorMessage = signUpError?.message;
+    const userFacingError = authErrorMessage?.toLowerCase().includes("password is known to be weak")
+      ? "This password has appeared in a known data breach. Please choose a different password."
+      : authErrorMessage ?? "Failed to create account";
     return NextResponse.json(
-      { error: signUpError?.message ?? "Failed to create account" },
+      { error: userFacingError },
       { status: 400 }
     );
   }

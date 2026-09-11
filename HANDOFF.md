@@ -1,5 +1,21 @@
 # TradePulse handoff
 
+Updated: 2026-09-10 02:31 PT (Mapped Supabase leaked-password signup errors to clear breach guidance.)
+
+## Signup password error copy (2026-09-10 02:31 PT)
+
+Signup keeps the existing eight-character minimum and delegates compromised
+password detection to Supabase Auth. Only the known-weak-password response is
+mapped to clear breach guidance; other Auth errors retain their existing copy.
+No Supabase Auth configuration was changed.
+
+Files: `app/api/auth/signup/route.ts`, `tests/smoke/currency.spec.ts`,
+`HANDOFF.md`.
+
+Verification: focused currency/auth wiring tests and `git diff --check` passed.
+
+---
+
 Updated: 2026-09-10 02:25 PT (Formatted complete +1 customer phone numbers on estimate-facing displays.)
 
 ## Estimate phone display formatting (2026-09-10 02:25 PT)
