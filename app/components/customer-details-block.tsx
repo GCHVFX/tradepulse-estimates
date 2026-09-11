@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { formatPhoneInput } from "@/lib/format-phone";
+import { formatPhoneDisplay, formatPhoneInput } from "@/lib/format-phone";
 
 interface CustomerDetailsBlockProps {
   estimateId: string | null;
@@ -172,7 +172,7 @@ export function CustomerDetailsBlock({
     <div className="mb-4 flex items-start justify-between gap-2">
       <div className="text-zinc-400 text-xs leading-relaxed">
         {name && <span className="block">Prepared for: {name}</span>}
-        {phone && <span className="block">Phone: {phone}</span>}
+        {phone && <span className="block">Phone: {formatPhoneDisplay(phone)}</span>}
         {email && <span className="block">Email: {email}</span>}
         {address && <span className="block">Address: {address}</span>}
         {businessEmail && (

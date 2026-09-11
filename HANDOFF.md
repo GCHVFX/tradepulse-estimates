@@ -1,5 +1,21 @@
 # TradePulse handoff
 
+Updated: 2026-09-10 02:25 PT (Formatted complete +1 customer phone numbers on estimate-facing displays.)
+
+## Estimate phone display formatting (2026-09-10 02:25 PT)
+
+Complete E.164 +1 customer phone numbers now display as `604-619-5724` on
+estimate and share views, while stored values and SMS/provider values remain
+unchanged. Unrecognised formats remain unchanged.
+
+Files: `lib/format-phone.ts`, `app/components/customer-details-block.tsx`,
+`app/share/[id]/page.tsx`, `tests/smoke/estimate-identity-display.spec.ts`,
+`HANDOFF.md`.
+
+Verification: focused identity-display tests and `git diff --check` passed.
+
+---
+
 Updated: 2026-09-10 02:20 PT (Polished estimate identity alignment and fixed BC-local estimate date rendering.)
 
 ## Estimate header and local date polish (2026-09-10 02:20 PT)

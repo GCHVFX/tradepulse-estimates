@@ -6,6 +6,7 @@ import {
   preparedByLabel,
 } from "../../lib/estimate-identity";
 import { CompanyEstimateHeader } from "../../app/components/company-estimate-header";
+import { formatPhoneDisplay } from "../../lib/format-phone";
 
 const root = path.resolve(__dirname, "../..");
 
@@ -80,6 +81,12 @@ test("Prepared by is labelled only when a profile name exists", () => {
   expect(preparedByLabel(null)).toBe("");
 });
 
+test("display formatting only formats complete +1 numbers", () => {
+  expect(formatPhoneDisplay("+16046195724")).toBe("604-619-5724");
+  expect(formatPhoneDisplay("+441234567890")).toBe("+441234567890");
+  expect(formatPhoneDisplay("6046195724")).toBe("6046195724");
+});
+
 test("estimate, share, and PDF use the shared identity behaviour", () => {
   const companyHeader = readFileSync(
     path.join(root, "app/components/company-estimate-header.tsx"),
@@ -107,6 +114,8 @@ test("estimate, share, and PDF use the shared identity behaviour", () => {
   expect(companyHeader).toContain("text-xs text-[#8A7350]");
   expect(customerDetails).toContain('timeZone: "America/Vancouver"');
   expect(sharePage).toContain('timeZone: "America/Vancouver"');
+  expect(customerDetails).toContain("formatPhoneDisplay(phone)");
+  expect(sharePage).toContain("formatPhoneDisplay(estimate.customer_phone)");
 });
 
 test("email identity still comes from the stored company name", () => {

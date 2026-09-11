@@ -8,6 +8,7 @@ import { allAmountsInLabel } from "@/lib/currency";
 import { readEstimateCurrency } from "@/lib/currency-db";
 import { CANONICAL_URL } from "@/lib/site-url";
 import { preparedByLabel } from "@/lib/estimate-identity";
+import { formatPhoneDisplay } from "@/lib/format-phone";
 
 export default async function ShareEstimatePage({
   params,
@@ -99,7 +100,7 @@ export default async function ShareEstimatePage({
               <span className="block">Prepared for: {estimate.customer_name}</span>
             )}
             {estimate.customer_phone && (
-              <span className="block">Phone: {estimate.customer_phone}</span>
+              <span className="block">Phone: {formatPhoneDisplay(estimate.customer_phone)}</span>
             )}
             {estimate.customer_email && (
               <span className="block">Email: {estimate.customer_email}</span>
