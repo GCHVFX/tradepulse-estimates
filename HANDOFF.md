@@ -1,5 +1,22 @@
 # TradePulse handoff
 
+Updated: 2026-09-10 02:20 PT (Polished estimate identity alignment and fixed BC-local estimate date rendering.)
+
+## Estimate header and local date polish (2026-09-10 02:20 PT)
+
+The shared estimate identity header now centres the logo and secondary
+Prepared by line with tighter spacing. Saved `created_at` timestamps now render
+using the contractor's `America/Vancouver` calendar date on estimate and share
+surfaces, avoiding UTC day rollover without changing stored dates.
+
+Files: `app/components/company-estimate-header.tsx`,
+`app/components/customer-details-block.tsx`, `app/share/[id]/page.tsx`,
+`tests/smoke/estimate-identity-display.spec.ts`, `HANDOFF.md`.
+
+Verification: focused identity-display tests and `git diff --check` passed.
+
+---
+
 Updated: 2026-09-10 02:13 PT (Alternate SMS recipients now use the number entered in the send sheet.)
 
 ## Alternate SMS recipients (2026-09-10 02:13 PT)

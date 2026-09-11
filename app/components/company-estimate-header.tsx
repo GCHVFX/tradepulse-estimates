@@ -23,14 +23,14 @@ export function CompanyEstimateHeader({
   if (!logoUrl && !displayedBusinessName && !preparedByText) return null;
 
   return (
-    <div className="flex flex-col gap-2 mb-5">
+    <div className="flex flex-col items-center gap-1 mb-3">
       {logoUrl && (
         <Image
           src={logoUrl}
           alt={businessName || "Company logo"}
           width={160}
           height={48}
-          className="object-contain object-left rounded"
+          className="object-contain object-center rounded"
           unoptimized
         />
       )}
@@ -40,7 +40,7 @@ export function CompanyEstimateHeader({
         </p>
       )}
       {preparedByText && (
-        <p className="text-sm text-[#5C4A2E] leading-tight">
+        <p className="text-xs text-[#8A7350] leading-tight">
           {preparedByText}
         </p>
       )}

@@ -113,6 +113,7 @@ export default async function ShareEstimatePage({
                 month: "long",
                 day: "numeric",
                 year: "numeric",
+                timeZone: "America/Vancouver",
               })}
             </span>
           </div>

@@ -40,6 +40,7 @@ export function CustomerDetailsBlock({
     month: "long",
     day: "numeric",
     year: "numeric",
+    timeZone: "America/Vancouver",
   }).format(new Date(dateStr));
 
   // Auto-save while editing

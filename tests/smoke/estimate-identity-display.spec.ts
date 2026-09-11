@@ -102,6 +102,11 @@ test("estimate, share, and PDF use the shared identity behaviour", () => {
   expect(newEstimatePage).toContain("showCompanyNameBelowLogo={showCompanyNameBelowLogo}");
   expect(pdf).toContain("estimateCompanyName");
   expect(pdf).toContain("preparedByLabel");
+  expect(companyHeader).toContain("items-center");
+  expect(companyHeader).toContain("object-center");
+  expect(companyHeader).toContain("text-xs text-[#8A7350]");
+  expect(customerDetails).toContain('timeZone: "America/Vancouver"');
+  expect(sharePage).toContain('timeZone: "America/Vancouver"');
 });
 
 test("email identity still comes from the stored company name", () => {
