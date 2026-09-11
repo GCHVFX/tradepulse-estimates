@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { parseCSV } from "@/lib/csv-parse";
 import { matchColumns, normalizeHeader, type MatchableField } from "@/lib/csv-column-match";
+import { findSingleHourlyLabourRate } from "@/lib/csv-labour";
 
 const MAPPING_FIELD_LABELS: Record<MatchableField, string> = {
   name: "Item Name *",
@@ -70,6 +71,7 @@ export function PriceBook() {
     priceBlank: boolean;
   }
   const [importRows, setImportRows] = useState<ImportRow[] | null>(null);
+  const [importLabourRate, setImportLabourRate] = useState<number | null>(null);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ imported: number; updated: number; errors: string[] } | null>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
@@ -247,7 +249,7 @@ export function PriceBook() {
     rows: Record<string, string>[],
     cols: { name: string; rate: string; category: string | null; unit: string | null },
     claimedHeaders: Set<string>
-  ): { rows: ImportRow[]; legacyColumns: string[] } {
+  ): { rows: ImportRow[]; legacyColumns: string[]; labourRate: number | null } {
     const remaining = allHeaders.filter((h) => !claimedHeaders.has(h));
     const descCol = resolveCol(remaining, ["description", "details", "notes", "scope"]);
     const labourCol = resolveCol(remaining, ["labour_price", "labor_price", "labour", "labor", "labour_rate", "labor_rate"]);
@@ -259,7 +261,7 @@ export function PriceBook() {
       (h): h is string => !!h
     );
 
-    const importRows = rows.map((row) => {
+    const parsedRows = rows.map((row) => {
       const name = csvVal(row, cols.name);
       const labourStr = csvVal(row, labourCol);
       const priceStr = csvVal(row, cols.rate);
@@ -289,8 +291,15 @@ export function PriceBook() {
         priceBlank: !labourStr && !priceStr,
       };
     });
+    const labourMatch = findSingleHourlyLabourRate(
+      parsedRows.map((row, index) => ({ name: row.name, category: row.category, unit: csvVal(rows[index] ?? {}, cols.unit), price: row.price }))
+    );
 
-    return { rows: importRows, legacyColumns };
+    return {
+      rows: parsedRows.filter((_row, index) => index !== labourMatch?.index),
+      legacyColumns,
+      labourRate: labourMatch?.rate ?? null,
+    };
   }
 
   function handleCSVFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -303,6 +312,7 @@ export function PriceBook() {
 
       setImportResult(null);
       setImportRows(null);
+      setImportLabourRate(null);
       setShowMapping(false);
 
       if (!match.isComplete) {
@@ -329,7 +339,7 @@ export function PriceBook() {
           (h): h is string => !!h
         )
       );
-      const { rows: parsed, legacyColumns } = buildImportRows(
+      const { rows: parsed, legacyColumns, labourRate } = buildImportRows(
         headers,
         rows,
         {
@@ -342,6 +352,7 @@ export function PriceBook() {
       );
 
       setImportRows(parsed);
+      setImportLabourRate(labourRate);
       const recognized = new Set([...claimed, ...legacyColumns]);
       const unrecognized = headers.filter((h) => !recognized.has(h) && !match.ambiguousHeaders.includes(h) && h.trim());
       if (unrecognized.length > 0 || match.ambiguousHeaders.length > 0) {
@@ -358,13 +369,14 @@ export function PriceBook() {
   function handleConfirmMapping() {
     if (!csvHeaders || !csvRawRows || !mapping.name || !mapping.rate) return;
     const claimed = new Set([mapping.name, mapping.rate, mapping.category, mapping.unit].filter(Boolean));
-    const { rows: parsed } = buildImportRows(
+    const { rows: parsed, labourRate } = buildImportRows(
       csvHeaders,
       csvRawRows,
       { name: mapping.name, rate: mapping.rate, category: mapping.category || null, unit: mapping.unit || null },
       claimed
     );
     setImportRows(parsed);
+    setImportLabourRate(labourRate);
     setImportResult(null);
     setShowMapping(false);
   }
@@ -379,30 +391,37 @@ export function PriceBook() {
   async function handleConfirmImport() {
     if (!importRows) return;
     const valid = importRows.filter((r) => !r.error);
-    if (valid.length === 0) return;
+    if (valid.length === 0 && importLabourRate === null) return;
     setImporting(true);
     try {
-      const res = await fetch("/api/price-book-items/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          items: valid.map((r) => ({
-            name: r.name,
-            description: r.description || undefined,
-            category: r.category,
-            price: r.price,
-            material_price: r.materialPrice,
-            taxable: r.taxable,
-            active: r.active,
-          })),
-        }),
-      });
-      const data = await res.json() as { imported: number; updated: number; errors: string[] };
+      let data = { imported: 0, updated: 0, errors: [] as string[] };
+      if (valid.length > 0) {
+        const res = await fetch("/api/price-book-items/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            items: valid.map((r) => ({
+              name: r.name,
+              description: r.description || undefined,
+              category: r.category,
+              price: r.price,
+              material_price: r.materialPrice,
+              taxable: r.taxable,
+              active: r.active,
+            })),
+          }),
+        });
+        data = await res.json() as { imported: number; updated: number; errors: string[] };
+      }
+      if (importLabourRate !== null) {
+        setRates((current) => ({ ...current, labour_rate: importLabourRate }));
+      }
       setImportResult(data);
       const listRes = await fetch("/api/price-book");
       const listData = await listRes.json() as { items: PriceBookItem[] };
       setItems(listData.items);
       setImportRows(null);
+      setImportLabourRate(null);
     } catch {
       setImportResult({ imported: 0, updated: 0, errors: ["Import failed. Try again."] });
     } finally {
@@ -460,7 +479,7 @@ export function PriceBook() {
             />
           </div>
           <div className="flex flex-col gap-1.5 flex-1">
-            <label className="text-sm font-medium text-zinc-400">Minimum job amount</label>
+            <label className="text-sm font-medium text-zinc-400">Deposit required over</label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 text-sm pointer-events-none select-none">$</span>
               <input
@@ -778,6 +797,11 @@ export function PriceBook() {
                   ({importRows.filter((r) => r.error).length} with errors)
                 </span>
               )}
+              {importLabourRate !== null && (
+                <span className="text-amber-400 font-normal ml-2">
+                  (hourly labour rate detected: ${importLabourRate.toFixed(2)}/hr)
+                </span>
+              )}
               {importRows.some((r) => !r.error && r.priceBlank) && (
                 <span className="text-amber-400 font-normal ml-2">
                   ({importRows.filter((r) => !r.error && r.priceBlank).length} with a blank price in the file)
@@ -817,14 +841,14 @@ export function PriceBook() {
               <button
                 type="button"
                 onClick={handleConfirmImport}
-                disabled={importing || importRows.every((r) => !!r.error)}
+                disabled={importing || (importLabourRate === null && importRows.every((r) => !!r.error))}
                 className="flex-1 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-semibold text-sm rounded-lg py-2.5 transition-colors min-h-[40px]"
               >
-                {importing ? "Importing..." : `Import ${importRows.filter((r) => !r.error).length} items`}
+                {importing ? "Importing..." : importLabourRate !== null && importRows.filter((r) => !r.error).length === 0 ? "Set labour rate" : `Import ${importRows.filter((r) => !r.error).length} items`}
               </button>
               <button
                 type="button"
-                onClick={() => { setImportRows(null); setImportResult(null); setCsvHeaders(null); setCsvRawRows(null); }}
+                onClick={() => { setImportRows(null); setImportLabourRate(null); setImportResult(null); setCsvHeaders(null); setCsvRawRows(null); }}
                 className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white text-sm rounded-lg py-2.5 transition-colors min-h-[40px]"
               >
                 Cancel

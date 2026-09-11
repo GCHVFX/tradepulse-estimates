@@ -1,5 +1,28 @@
 # TradePulse handoff
 
+Updated: 2026-09-10 01:31 PT (CSV labour-rate recognition and deposit-threshold copy completed locally; committed below, not pushed.)
+
+## CSV labour-rate recognition and deposit-threshold copy (2026-09-10 01:31 PT)
+
+Changed the Rates label to `Deposit required over` without changing the stored
+field or behaviour. CSV import now applies exactly one positive-priced row whose
+name/category identifies labour and whose unit is hourly to `Labour rate ($/hr)`,
+excluding that row from common items. Non-hourly labour-looking charges and
+multiple hourly labour rows retain the existing import path.
+
+Files: `app/components/price-book.tsx`, `lib/csv-labour.ts`,
+`tests/smoke/csv-import-rate-column-matching.spec.ts`,
+`playwright.unit.config.ts`, and `HANDOFF.md`.
+
+Verification: focused CSV/rates tests -> 7 passed; `npx.cmd tsc --noEmit` ->
+passed; `git diff --check` -> passed with line-ending warnings only.
+
+Next outstanding TradePulse demo issues remain the Twilio inbound STOP/START
+configuration and acceptance test, followed by the queued production homepage
+review. No schema change, push, or deployment was made for this task.
+
+---
+
 Updated: 2026-09-10 16:53 PT (Both the delete/scroll fix and the CA/US spelling work committed as two separate commits, pushed to origin/main, auto-deployed by Vercel, and confirmed live in production with focused checks.)
 
 ## Delete/scroll fix + CA/US spelling: committed, pushed, deployed, confirmed live (2026-09-10 16:53 PT)
