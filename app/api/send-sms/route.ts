@@ -98,7 +98,7 @@ if (!hasAccess) return applyTo(NextResponse.json({ error: "Subscription required
   // Verify ownership of estimate
   const { data: estimate } = await supabaseAdmin
     .from("tpe_estimates")
-    .select("id, customer_phone, customer_name")
+    .select("id, customer_phone, customer_name, sent_at")
     .eq("id", estimateId)
     .eq("business_id", business.id)
     .maybeSingle();
@@ -163,13 +163,13 @@ if (!hasAccess) return applyTo(NextResponse.json({ error: "Subscription required
       channel: "sms",
       recipient: suppressionKey,
       action: "estimate-send",
-      stage: "initial",
+      stage: estimate.sent_at ? `resend-${estimate.sent_at}` : "initial",
     });
   } catch {
     return applyTo(NextResponse.json({ error: "Unable to prepare SMS delivery" }, { status: 503 }));
   }
   if (!claimId) {
-    return applyTo(NextResponse.json({ error: "This estimate was already sent by SMS to this customer" }, { status: 409 }));
+    return applyTo(NextResponse.json({ error: "This SMS send is already in progress" }, { status: 409 }));
   }
 
   try {

@@ -78,7 +78,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // Verify ownership of estimate
   const { data: estimate } = await supabaseAdmin
     .from("tpe_estimates")
-    .select("id, customer_name, customer_email")
+    .select("id, customer_name, customer_email, sent_at")
     .eq("id", estimateId)
     .eq("business_id", business.id)
     .maybeSingle();
@@ -101,13 +101,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       channel: "email",
       recipient,
       action: "estimate-send",
-      stage: "initial",
+      stage: estimate.sent_at ? `resend-${estimate.sent_at}` : "initial",
     });
   } catch {
     return applyTo(NextResponse.json({ error: "Unable to prepare email delivery" }, { status: 503 }));
   }
   if (!claimId) {
-    return applyTo(NextResponse.json({ error: "This estimate was already sent by email to this customer" }, { status: 409 }));
+    return applyTo(NextResponse.json({ error: "This email send is already in progress" }, { status: 409 }));
   }
 
   // Pinned to the canonical host, never SITE_URL. A share link is a

@@ -177,6 +177,8 @@ export function SendEstimateSheet({
       ? "Send via SMS"
       : panel === "email"
       ? "Send via Email"
+      : currentStatus === "sent"
+      ? "Resend Estimate"
       : "Send Estimate";
 
   return (

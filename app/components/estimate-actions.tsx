@@ -418,7 +418,7 @@ export function EstimateActions({
               onClick={handleSendClick}
               className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
             >
-              Send Estimate
+              Resend Estimate
             </button>
           </>
         ) : (

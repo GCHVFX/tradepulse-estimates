@@ -1,5 +1,28 @@
 # TradePulse handoff
 
+Updated: 2026-09-10 01:52 PT (Estimate email/SMS resending enabled through the existing send flow; committed locally, not pushed.)
+
+## Estimate resending (2026-09-10 01:52 PT)
+
+Previously sent estimates can now be sent again by email or SMS. First sends
+retain `Send Estimate`; later sends show `Resend Estimate`. Existing recipient
+validation, provider calls, `sent_at` updates, and failure handling remain in
+place. Delivery claims use the current sent timestamp so concurrent duplicate
+requests remain guarded without a schema change or send-history addition.
+
+Files: `app/api/send-email/route.ts`, `app/api/send-sms/route.ts`,
+`app/components/estimate-actions.tsx`, `app/components/send-estimate-sheet.tsx`,
+`tests/smoke/estimate-resending.spec.ts`, `playwright.unit.config.ts`, and
+`HANDOFF.md`.
+
+Verification: focused resend tests -> 3 passed; `npx.cmd tsc --noEmit` ->
+passed; `git diff --check` -> passed with line-ending warnings only.
+
+Remaining demo issue: grouped-pricing verification warning remains outstanding.
+No schema change, push, or deployment was made for this task.
+
+---
+
 Updated: 2026-09-10 01:44 PT (Estimate line-item copies are now editable and persist through existing structured estimate storage; committed locally, not pushed.)
 
 ## Editable estimate line-item copies (2026-09-10 01:44 PT)
