@@ -1,5 +1,22 @@
 # TradePulse handoff
 
+Updated: 2026-09-10 02:38 PT (Clarified profile trial billing copy based on Stripe payment-method state.)
+
+## Trial billing copy (2026-09-10 02:38 PT)
+
+Profile trial messaging now distinguishes no-card trials from trials with a
+Stripe default payment method and scheduled Starter billing. No-card users see
+`No credit card required.` and `Choose a Plan`; scheduled billing shows the
+currency-aware Starter price and trial end date. No billing state is changed by
+rendering.
+
+Files: `app/profile/page.tsx`, `app/components/profile-form.tsx`,
+`tests/smoke/subscription-access.spec.ts`, `HANDOFF.md`.
+
+Verification: focused subscription/profile tests and `git diff --check` passed.
+
+---
+
 Updated: 2026-09-10 02:31 PT (Mapped Supabase leaked-password signup errors to clear breach guidance.)
 
 ## Signup password error copy (2026-09-10 02:31 PT)

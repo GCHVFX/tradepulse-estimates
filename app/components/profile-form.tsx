@@ -42,6 +42,8 @@ export function ProfileForm({
   plan,
   openSection,
   businessId,
+  billingCurrency = "cad",
+  starterBillingScheduled = false,
 }: {
   profile: Profile;
   userId: string;
@@ -51,6 +53,8 @@ export function ProfileForm({
   plan?: string;
   openSection?: string;
   businessId?: string | null;
+  billingCurrency?: Currency;
+  starterBillingScheduled?: boolean;
 }) {
   const router = useRouter();
   const [name, setName] = useState(profile.name);
@@ -427,7 +431,7 @@ export function ProfileForm({
     ? Math.max(0, Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
     : 0;
   const trialEndFormatted = trialEndsAt
-    ? new Date(trialEndsAt).toLocaleDateString("en-CA", { month: "long", day: "numeric", year: "numeric" })
+    ? new Date(trialEndsAt).toLocaleDateString("en-CA", { month: "long", day: "numeric", year: "numeric", timeZone: "America/Vancouver" })
     : null;
 
   return (
@@ -843,24 +847,35 @@ export function ProfileForm({
               )}
             </div>
             <p className="text-xs text-zinc-400">TradePulse Estimates</p>
-            <p className="text-xs text-zinc-400">{formatMonthlyPlanPrice("starter", "cad")} after your trial ends</p>
-            {trialEndFormatted && (
-              <p className="text-xs text-zinc-400 mt-0.5">Your trial ends on {trialEndFormatted}.</p>
+            {starterBillingScheduled && trialEndFormatted ? (
+              <p className="text-xs text-zinc-400">{formatMonthlyPlanPrice("starter", billingCurrency)} starting {trialEndFormatted}.</p>
+            ) : (
+              <>
+                {trialEndFormatted && (
+                  <p className="text-xs text-zinc-400 mt-0.5">Your free trial ends on {trialEndFormatted}.</p>
+                )}
+                <p className="text-xs text-zinc-400">No credit card required.</p>
+              </>
             )}
             {billingDaysLeft <= 3 && (
               <a href="/subscribe" className="mt-1 text-xs font-semibold text-amber-400 hover:text-amber-300 transition-colors">
                 Subscribe now to keep access
               </a>
             )}
-            {plan === "starter" && (
+            {plan === "starter" && starterBillingScheduled && (
               <button
                 type="button"
                 disabled={upgrading}
                 onClick={handleUpgrade}
                 className="mt-2 w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-bold text-sm rounded-xl py-3 transition-colors min-h-[44px] flex items-center justify-center gap-2"
               >
-                {upgrading ? "Upgrading..." : `Upgrade to Pro, ${formatMonthlyPlanPrice("pro", "cad")}`}
+                {upgrading ? "Upgrading..." : `Upgrade to Pro, ${formatMonthlyPlanPrice("pro", billingCurrency)}`}
               </button>
+            )}
+            {plan === "starter" && !starterBillingScheduled && (
+              <a href="/subscribe" className="mt-2 w-full bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-sm rounded-xl py-3 transition-colors min-h-[44px] flex items-center justify-center">
+                Choose a Plan
+              </a>
             )}
             {upgraded && (
               <p className="text-emerald-400 text-sm text-center font-medium mt-1">You&apos;re on Pro now.</p>

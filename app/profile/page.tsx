@@ -7,6 +7,9 @@ import { DeleteAccountSection } from "@/app/components/delete-account-section";
 import { ProfileForm } from "@/app/components/profile-form";
 import { resolveProfileBadge, type ProfileBadgeCopy } from "@/lib/subscription-display";
 import { resolveSubscriptionStatus, SUBSCRIPTION_ACCESS_COLUMNS } from "@/lib/subscription-access";
+import { stripe } from "@/lib/stripe";
+import { resolveBillingCurrency, type BillingSubscription } from "@/lib/billing-currency";
+import { readBusinessEstimateCurrency } from "@/lib/currency-db";
 
 // Tailwind needs each class name to appear literally for its build-time
 // scanner to pick it up -- string-interpolating "text-${colorClass}-400"
@@ -50,16 +53,36 @@ export default async function ProfilePage({
 
   const nextPath = typeof next === "string" && next.startsWith("/") ? next : null;
 
-  // The corrected status comes from lib/subscription-access.ts -- the same
-  // function every access gate decides from, so this page cannot show a
-  // state the gate disagrees with. Used for both the header badge below and
-  // passed into ProfileForm, so the "Free Trial" upgrade card there (which
-  // checks this same value) can't disagree with the badge either.
   const displaySubscriptionStatus = resolveSubscriptionStatus(
     data?.subscription_status,
     data?.plan,
     data?.stripe_subscription_id
   );
+
+  let billingSubscription: (BillingSubscription & { default_payment_method?: unknown }) | null = null;
+  if (data?.stripe_subscription_id) {
+    try {
+      billingSubscription = await stripe.subscriptions.retrieve(data.stripe_subscription_id);
+    } catch (error) {
+      console.error("[profile] failed to read subscription:", error instanceof Error ? error.message : error);
+    }
+  }
+  const billingCurrency = await resolveBillingCurrency({
+    subscription: billingSubscription,
+    readEstimateCurrency: () => readBusinessEstimateCurrency(supabaseAdmin, data?.id ?? ""),
+  });
+  const starterBillingScheduled = Boolean(
+    data?.plan === "starter" &&
+    displaySubscriptionStatus === "trial" &&
+    billingSubscription?.status === "trialing" &&
+    billingSubscription.default_payment_method
+  );
+
+  // The corrected status comes from lib/subscription-access.ts -- the same
+  // function every access gate decides from, so this page cannot show a
+  // state the gate disagrees with. Used for both the header badge below and
+  // passed into ProfileForm, so the "Free Trial" upgrade card there (which
+  // checks this same value) can't disagree with the badge either.
   const badge = resolveProfileBadge(data?.subscription_status, data?.plan, data?.stripe_subscription_id);
 
   return (
@@ -89,6 +112,8 @@ export default async function ProfilePage({
           subscriptionStatus={displaySubscriptionStatus ?? "trial"}
           trialEndsAt={data?.trial_ends_at ?? null}
           plan={data?.plan ?? "starter"}
+          billingCurrency={billingCurrency}
+          starterBillingScheduled={starterBillingScheduled}
           openSection={section ?? undefined}
           businessId={data?.id ?? null}
         />

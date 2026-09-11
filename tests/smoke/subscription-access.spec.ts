@@ -456,3 +456,14 @@ test("the four Pro Payments call sites are among the files that guard covers", (
     expect(callers, `${path} must be discovered by the column guard`).toContain(path);
   }
 });
+
+test("profile trial copy distinguishes scheduled billing from no-card trials", () => {
+  const page = readFileSync("app/profile/page.tsx", "utf8");
+  const form = readFileSync("app/components/profile-form.tsx", "utf8");
+  expect(page).toContain("default_payment_method");
+  expect(page).toContain("starterBillingScheduled");
+  expect(form).toContain("No credit card required.");
+  expect(form).toContain("Choose a Plan");
+  expect(form).toContain("starting {trialEndFormatted}.");
+  expect(form).not.toContain('formatMonthlyPlanPrice("starter", "cad")} after your trial ends');
+});
