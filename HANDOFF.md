@@ -1,6 +1,93 @@
 # TradePulse handoff
 
-Updated: 2026-09-10 09:36 PT (Canadian vs American English spelling added, derived from the existing estimate currency. Implemented and verified locally; not committed, not deployed.)
+Updated: 2026-09-10 16:53 PT (Both the delete/scroll fix and the CA/US spelling work committed as two separate commits, pushed to origin/main, auto-deployed by Vercel, and confirmed live in production with focused checks.)
+
+## Delete/scroll fix + CA/US spelling: committed, pushed, deployed, confirmed live (2026-09-10 16:53 PT)
+
+**Status: shipped, both pieces of work below.** Split into two commits so
+each could be reviewed and (if ever needed) reverted independently:
+
+- `4abc1af` "Fix estimate deletion and post-generation scrolling" --
+  `app/api/estimates/route.ts`, `app/components/delete-estimate-button.tsx`,
+  `app/new/page.tsx`, `tests/smoke/estimate-delete-related-rows.spec.ts`
+  (new), `tests/smoke/unit-suite-completeness.spec.ts`, plus the delete/
+  scroll section of `HANDOFF.md` at the state it was in before the spelling
+  task started.
+- `7ad050f` "Localize estimate spelling by currency" -- `lib/currency.ts`,
+  `app/api/generate-estimate/route.ts`, `lib/quote-templates.ts`,
+  `app/components/estimate-actions.tsx`, `app/estimates/[id]/page.tsx`,
+  `playwright.unit.config.ts`, `tests/smoke/generate-estimate.spec.ts`,
+  `tests/smoke/quote-template-locale.spec.ts` (new), plus `HANDOFF.md`
+  restored to its full content (both sections).
+
+Both commits verified to contain only their own files before pushing (`git
+show --stat` on each), and neither commit touched the unrelated pre-existing
+working-tree changes (`.claude/settings.local.json`, `.gitignore`,
+`AGENTS.md`, the `.bak` files, three `public/*.png` files,
+`supabase/.temp/`) -- those remain uncommitted local changes, untouched by
+this session, exactly as before.
+
+**Push:** `git push origin main` -- `cd7a3cb..7ad050f main -> main`, fast-
+forward, no new commit created. `git log origin/main..HEAD` confirmed empty
+afterward.
+
+**Deployment:** the normal path for this repo -- push to `main`, Vercel's
+GitHub integration auto-deploys, no manual `vercel deploy`. Deployment
+`dpl_5vQ1WWPrBts318cvmda2yauyETQ1`, built from commit `7ad050f` (the pushed
+tip, a fast-forward that includes `4abc1af` too), reached `READY` in 50s with
+zero build errors, aliased to `tradepulse-estimates.com` and every other
+canonical/legacy alias host, `aliasError: null`.
+
+**Production verification (focused, all 6 passed):**
+
+1. **Existing estimate loads normally.** Generated a CAD estimate, navigated
+   away to `/estimates` and back to `/estimates/[id]` -- pricing summary
+   visible, no error text, exactly like opening any previously-saved
+   estimate.
+2. **Delete fix, live.** Inserted a second, disposable estimate with one row
+   in each of the three `NO ACTION`-FK tables the bug involved
+   (`tpe_estimate_changes`, `tpe_payment_reminders`, `tpe_estimate_photos`),
+   deleted it through the real UI, confirmed it disappeared from the list
+   both immediately and after a full page reload, and confirmed by a direct
+   database query that the row is actually gone -- not merely hidden.
+3. **Scroll fix, live.** Scrolled the generated estimate to the bottom,
+   stopped, watched for 4 seconds with no further input: scroll position
+   moved by 0px (within a 2px tolerance for rounding).
+4. **CAD spelling.** The CAD estimate's rendered text (including line-item
+   textarea/input values, not just plain text nodes) contains "labour" and
+   not "labor".
+5. **USD spelling.** A second account with `estimate_currency` set to `usd`
+   generated an estimate containing "labor" and not "labour".
+6. **CAD/USD price display unchanged.** The CAD estimate renders `CA$`
+   throughout; the USD estimate renders `US$` throughout and never `CA$`.
+
+All checks run against the live production site (`tradepulse-estimates.com`)
+through two real, disposable Supabase/Stripe accounts created via the
+established `signUpFreshAccount()` / `cleanupTestAccount()` procedure
+(`ALLOW_PRODUCTION_SIGNUP_SMOKE=true`, required regardless of target host
+since `.env.local` carries a live Stripe key), both fully cleaned up
+afterward -- confirmed by a direct database query that zero
+`gchansen+audit-%` rows remain.
+
+**One cleanup-only complication, no product impact.** One of the two test
+accounts hit the same pre-existing `tpe_estimate_generation_claims`
+foreign-key gap already noted in the spelling-task entry below (the
+generation claim outlived the request and blocked `cleanupTestAccount()`'s
+plain delete). Confirmed via direct query that the claim row was real and
+simply hadn't expired yet, deleted that one specific stale claim row
+directly (a data cleanup of an internal lock-table row, not a product or
+schema change), then cleanup succeeded normally. No application code was
+touched to work around this; it remains an open, pre-existing test-harness
+gap, not something this session fixed.
+
+**No code or files changed by this session** beyond the temporary,
+already-deleted verification scripts (`tests/smoke/_tmp-prod-verify-two-
+commits.spec.ts`, `tests/smoke/_tmp-cleanup-leaked-account.spec.ts`) and this
+`HANDOFF.md` entry. No broad test suite was run, per instruction, since every
+focused check passed.
+
+**Next action:** none required. The unrelated pre-existing working-tree
+changes remain uncommitted and untouched, exactly as before this session.
 
 ## Canadian vs American English spelling, derived from estimate currency (2026-09-10 09:36 PT)
 
