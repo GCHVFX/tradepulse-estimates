@@ -5,6 +5,7 @@ import { formatCurrency, type Currency } from '@/lib/currency';
 import {
   newId,
   parseCost,
+  parseQuantity,
   formatDollars,
   formatMoney,
   isQuantityItem,
@@ -87,11 +88,13 @@ export function EditableEstimateBody({
   summary,
   estimateId,
   lineItemsReadOnly = false,
+  structuredPricing = false,
   currency,
 }: {
   summary: string;
   estimateId: string;
   lineItemsReadOnly?: boolean;
+  structuredPricing?: boolean;
   /**
    * The estimate's own persisted snapshot. Never the business setting:
    * changing that must not move an estimate that is already saved.
@@ -201,12 +204,25 @@ export function EditableEstimateBody({
         nextTaxRate ?? taxRate,
         currency,
       );
+      const structuredItems = structuredPricing
+        ? nextLine.map((item, displayOrder) => {
+            const quantityBased = isQuantityItem(item);
+            return {
+              description: item.label,
+              quantity: quantityBased ? parseQuantity(item.quantity) : 1,
+              unit: quantityBased ? item.unit?.trim() || null : null,
+              unit_price: quantityBased ? parseCost(item.rate ?? '') : parseCost(item.cost),
+              line_total: lineItemCost(item),
+              display_order: displayOrder,
+            };
+          })
+        : undefined;
       setSaveStatus('saving');
       try {
         const res = await fetch('/api/estimates', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: estimateId, summary: newSummary }),
+          body: JSON.stringify({ id: estimateId, summary: newSummary, structured_items: structuredItems }),
         });
         if (!res.ok) throw new Error('Save failed');
         setSaveStatus('saved');

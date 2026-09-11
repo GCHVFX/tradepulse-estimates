@@ -25,6 +25,7 @@ export default defineConfig({
     "currency-rendering.spec.ts",
     "estimate-identity-display.spec.ts",
     "csv-import-rate-column-matching.spec.ts",
+    "estimate-line-item-editing.spec.ts",
     "account-deletion.spec.ts",
     "bottom-nav.spec.ts",
     "signup-currency-layout.spec.ts",

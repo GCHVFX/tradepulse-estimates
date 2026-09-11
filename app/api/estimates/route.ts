@@ -50,6 +50,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     completed_at?: unknown;
     copied_at?: unknown;
     include_photos?: unknown;
+    structured_items?: unknown;
   };
   try {
     body = await request.json();
@@ -98,6 +99,45 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     updateFields.include_photos = body.include_photos === true;
   }
 
+  type StructuredItemUpdate = {
+    description: string;
+    quantity: number;
+    unit: string | null;
+    unit_price: number;
+    line_total: number;
+    display_order: number;
+  };
+  let structuredItems: StructuredItemUpdate[] | null = null;
+  if ("structured_items" in body) {
+    if (!Array.isArray(body.structured_items)) {
+      return applyTo(NextResponse.json({ error: "structured_items must be an array" }, { status: 400 }));
+    }
+    const parsedItems: Array<StructuredItemUpdate | null> = body.structured_items.map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const value = item as Record<string, unknown>;
+      if (
+        typeof value.description !== "string" ||
+        typeof value.quantity !== "number" || !Number.isFinite(value.quantity) ||
+        (value.unit !== null && typeof value.unit !== "string") ||
+        typeof value.unit_price !== "number" || !Number.isFinite(value.unit_price) ||
+        typeof value.line_total !== "number" || !Number.isFinite(value.line_total) ||
+        typeof value.display_order !== "number" || !Number.isInteger(value.display_order) || value.display_order < 0
+      ) return null;
+      return {
+        description: value.description.trim(),
+        quantity: value.quantity,
+        unit: value.unit,
+        unit_price: value.unit_price,
+        line_total: value.line_total,
+        display_order: value.display_order,
+      };
+    });
+    if (parsedItems.some((item) => item === null)) {
+      return applyTo(NextResponse.json({ error: "Invalid structured item" }, { status: 400 }));
+    }
+    structuredItems = parsedItems.filter((item): item is StructuredItemUpdate => item !== null);
+  }
+
   if (Object.keys(updateFields).length === 0) {
     return applyTo(NextResponse.json({ error: "No fields to update" }, { status: 400 }));
   }
@@ -113,6 +153,23 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
 
   if (!updated || updated.length === 0) {
     return applyTo(NextResponse.json({ error: "Estimate not found or access denied" }, { status: 404 }));
+  }
+
+  if (structuredItems) {
+    for (const item of structuredItems) {
+      const { error: itemError } = await supabaseAdmin
+        .from("tpe_estimate_items")
+        .update({
+          description: item.description,
+          quantity: item.quantity,
+          unit: item.unit,
+          unit_price: item.unit_price,
+          line_total: item.line_total,
+        })
+        .eq("estimate_id", body.id)
+        .eq("display_order", item.display_order);
+      if (itemError) return applyTo(NextResponse.json({ error: itemError.message }, { status: 500 }));
+    }
   }
 
   return applyTo(NextResponse.json({ success: true }));

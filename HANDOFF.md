@@ -1,5 +1,28 @@
 # TradePulse handoff
 
+Updated: 2026-09-10 01:44 PT (Estimate line-item copies are now editable and persist through existing structured estimate storage; committed locally, not pushed.)
+
+## Editable estimate line-item copies (2026-09-10 01:44 PT)
+
+Structured line items now act as estimate-local copies: description, existing
+price, and already-supported quantity/rate fields can be edited in the estimate
+editor and saved to `tpe_estimate_items`. The Rates/common item is not updated,
+and share/PDF continue reading the saved estimate rows. No schema change.
+
+Files: `app/api/estimates/route.ts`,
+`app/components/editable-estimate-body.tsx`,
+`app/components/estimate-pricing-editor.tsx`,
+`tests/smoke/estimate-line-item-editing.spec.ts`,
+`playwright.unit.config.ts`, and `HANDOFF.md`.
+
+Verification: focused line-item tests -> 2 passed; `npx.cmd tsc --noEmit` ->
+passed; `git diff --check` -> passed with line-ending warnings only.
+
+Remaining demo issues are unchanged: configure and run the Twilio STOP/START
+acceptance test, then review the production homepage.
+
+---
+
 Updated: 2026-09-10 01:31 PT (CSV labour-rate recognition and deposit-threshold copy completed locally; committed below, not pushed.)
 
 ## CSV labour-rate recognition and deposit-threshold copy (2026-09-10 01:31 PT)

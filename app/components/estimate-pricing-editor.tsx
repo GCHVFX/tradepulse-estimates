@@ -109,7 +109,7 @@ export function EstimatePricingEditor({
         <EditableEstimateBody
           summary={structuredPricing ? detailedSummary : summary}
           estimateId={estimateId}
-          lineItemsReadOnly={structuredPricing}
+          structuredPricing={structuredPricing}
           currency={currency}
         />
       ) : (
