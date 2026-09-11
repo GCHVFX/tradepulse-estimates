@@ -1,5 +1,18 @@
 # TradePulse handoff
 
+Updated: 2026-09-10 02:08 PT (Removed stray review-request helper copy from the estimate action bar.)
+
+## Estimate action-bar copy cleanup (2026-09-10 02:08 PT)
+
+Removed the review-request availability helper text from the sticky estimate
+action area. Mark Job Done and Resend Estimate remain unchanged.
+
+Files: `app/components/estimate-actions.tsx`, `HANDOFF.md`.
+
+Verification: focused estimate resending test and `git diff --check` passed.
+
+---
+
 Updated: 2026-09-10 01:52 PT (Estimate email/SMS resending enabled through the existing send flow; committed locally, not pushed.)
 
 ## Estimate resending (2026-09-10 01:52 PT)

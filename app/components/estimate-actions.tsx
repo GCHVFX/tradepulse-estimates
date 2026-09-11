@@ -410,9 +410,6 @@ export function EstimateActions({
                 </button>
               </>
             )}
-            {isPro && googleReviewLink && status === "sent" && (
-              <p className="text-center text-xs text-zinc-400 -mt-1">Review request available after completion.</p>
-            )}
             <button
               type="button"
               onClick={handleSendClick}
