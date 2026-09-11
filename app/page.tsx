@@ -616,6 +616,15 @@ export default async function LandingPage() {
           </div>
         </section>
 
+        <div className="bg-[#26211B] px-6 pb-8 text-center">
+          <Link
+            href="/trades"
+            className="inline-flex min-h-11 items-center text-sm font-medium text-white/60 underline underline-offset-4 transition hover:text-white"
+          >
+            Explore TradePulse for trades
+          </Link>
+        </div>
+
         {/* Footer */}
         <MarketingFooter hasLoggedInUser={!!user} hasAccess={hasAccess} ctaHref={ctaHref} />
 

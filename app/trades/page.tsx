@@ -117,6 +117,14 @@ export default function TradesPage() {
           Built for contractors who quote jobs in the truck, not at a desk.
         </p>
 
+        <nav aria-label="TradePulse guides" className="mt-6 flex max-w-sm flex-wrap justify-center gap-x-4 gap-y-2 text-sm">
+          <Link href="/electricians" className="inline-flex min-h-11 items-center font-medium text-amber-600 hover:text-amber-700 transition-colors">For electricians</Link>
+          <Link href="/plumbers" className="inline-flex min-h-11 items-center font-medium text-amber-600 hover:text-amber-700 transition-colors">For plumbers</Link>
+          <Link href="/electrical-cost" className="inline-flex min-h-11 items-center font-medium text-amber-600 hover:text-amber-700 transition-colors">Electrical cost guide</Link>
+          <Link href="/plumbing-cost" className="inline-flex min-h-11 items-center font-medium text-amber-600 hover:text-amber-700 transition-colors">Plumbing cost guide</Link>
+          <Link href="/plumbing-estimate-template" className="inline-flex min-h-11 items-center font-medium text-amber-600 hover:text-amber-700 transition-colors">Plumbing estimate template</Link>
+        </nav>
+
         {/* Secondary desktop CTA */}
         <Link
           href="/signup?next=%2Fnew"

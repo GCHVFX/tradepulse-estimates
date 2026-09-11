@@ -1,5 +1,24 @@
 # TradePulse handoff
 
+Updated: 2026-09-10 20:34 PT (Added minimum internal links for public SEO pages; local only, not committed or deployed.)
+
+## Public SEO internal links (2026-09-10 20:34 PT)
+
+The homepage now links to `/trades`. The `/trades` page now links to
+`/electricians`, `/plumbers`, `/electrical-cost`, `/plumbing-cost`, and
+`/plumbing-estimate-template` using normal Next.js `Link` elements. Sitemap,
+metadata, canonicals, robots rules, routing, and shared components are unchanged.
+
+Files: `app/page.tsx`, `app/trades/page.tsx`, `HANDOFF.md`.
+
+Verification: focused ESLint for both page files passed; local server-rendered
+HTML returned 200 and contained all six required `<a href>` values; `git diff
+--check` passed with line-ending warnings only.
+
+Next action: review locally, then commit or deploy only with explicit approval.
+
+---
+
 Updated: 2026-09-10 02:38 PT (Clarified profile trial billing copy based on Stripe payment-method state.)
 
 ## Trial billing copy (2026-09-10 02:38 PT)
