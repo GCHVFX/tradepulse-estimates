@@ -130,16 +130,6 @@ if (!hasAccess) return applyTo(NextResponse.json({ error: "Subscription required
   }
 
   let formattedPhone = suppliedPhone;
-  if (estimate.customer_phone) {
-    try {
-      formattedPhone = formatPhone(estimate.customer_phone);
-    } catch {
-      return applyTo(NextResponse.json({ error: "Stored customer phone is invalid" }, { status: 400 }));
-    }
-    if (formattedPhone !== suppliedPhone) {
-      return applyTo(NextResponse.json({ error: "Use the customer phone saved on this estimate" }, { status: 400 }));
-    }
-  }
 
   const suppressionStore = createSupabaseSmsSuppressionStore(supabaseAdmin);
   const suppressionKey = normalizePhoneE164(formattedPhone) ?? formattedPhone;

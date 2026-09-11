@@ -27,10 +27,14 @@ test("email and SMS allow a new claim after a successful prior send", () => {
 test("send timestamps update only after provider success and recipient guards remain", () => {
   const email = read("app/api/send-email/route.ts");
   const sms = read("app/api/send-sms/route.ts");
+  const sheet = read("app/components/send-estimate-sheet.tsx");
   expect(email).toContain("Email address is required");
   expect(email).toContain("Use the customer email saved on this estimate");
   expect(sms).toContain("Phone number is required");
-  expect(sms).toContain("Use the customer phone saved on this estimate");
+  expect(sms).not.toContain("Use the customer phone saved on this estimate");
+  expect(sms).toContain("let formattedPhone = suppliedPhone;");
+  expect(sheet).toContain('useState(formatPhoneInput(customerPhone ?? ""))');
+  expect(sms).toContain("const phoneUpdate = !estimate.customer_phone ?");
 
   for (const [source, providerCall] of [[email, "resend.emails.send"], [sms, "messages.create"]] as const) {
     const providerIndex = source.indexOf(providerCall);

@@ -1,5 +1,20 @@
 # TradePulse handoff
 
+Updated: 2026-09-10 02:13 PT (Alternate SMS recipients now use the number entered in the send sheet.)
+
+## Alternate SMS recipients (2026-09-10 02:13 PT)
+
+The saved customer phone remains the send-sheet default, but a valid edited
+number is now sent without requiring a match or updating the saved estimate
+phone. Existing provider, suppression, resend, and failure handling remain.
+
+Files: `app/api/send-sms/route.ts`, `tests/smoke/estimate-resending.spec.ts`,
+`HANDOFF.md`.
+
+Verification: focused resend tests and `git diff --check` passed.
+
+---
+
 Updated: 2026-09-10 02:08 PT (Removed stray review-request helper copy from the estimate action bar.)
 
 ## Estimate action-bar copy cleanup (2026-09-10 02:08 PT)
