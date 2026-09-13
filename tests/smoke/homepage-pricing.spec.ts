@@ -86,7 +86,23 @@ test("the homepage resolves currency through the same resolver as /signup", () =
     expect(source).toContain("x-vercel-ip-country");
     expect(source).toContain("currencyFromCountry");
   }
-  expect(page).toContain('currencyFromCountry((await headers()).get("x-vercel-ip-country"))');
+
+  // The value read from the header must be what's actually passed to
+  // currencyFromCountry -- inline, or via an intermediate variable, so a
+  // future refactor can't quietly split "read the header" and "resolve the
+  // currency" into two unrelated steps. Not tied to one exact expression
+  // shape: the page currently does this in two statements
+  // (const visitorCountry = (await headers()).get(...); currencyFromCountry(visitorCountry))
+  // rather than one, and either form should pass.
+  const headerRead = page.match(
+    /(?:const\s+(\w+)\s*=\s*)?\(await headers\(\)\)\.get\("x-vercel-ip-country"\)/
+  );
+  expect(headerRead, "must read x-vercel-ip-country from headers()").toBeTruthy();
+  const headerVar = headerRead![1];
+  const resolverCall = headerVar
+    ? new RegExp(`currencyFromCountry\\(${headerVar}\\)`)
+    : /currencyFromCountry\(\(await headers\(\)\)\.get\("x-vercel-ip-country"\)\)/;
+  expect(page).toMatch(resolverCall);
 });
 
 test("the homepage holds no country rule of its own", () => {
@@ -135,7 +151,11 @@ test("the homepage stays per-request so one visitor's country is never cached fo
 test("the mobile hero starts just below the fixed header, not a screen down", () => {
   const page = code(PAGE);
 
-  const hero = page.match(/<section className="relative overflow-hidden noise ([^"]*)"/);
+  // Keyed on the hero-photo class, the current design's stable marker for
+  // this section -- not on the exact class list or its order, which changed
+  // in the redesign from the old "noise" gradient hero this test used to key
+  // on. Whatever the hero's other classes are, this still finds it.
+  const hero = page.match(/<section className="([^"]*\bhero-photo\b[^"]*)"/);
   expect(hero, "hero section must be findable").toBeTruthy();
   const classes = hero![1];
 

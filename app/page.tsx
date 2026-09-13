@@ -8,6 +8,7 @@ import { MarketingFooter } from "@/app/components/marketing-footer";
 import { TradeExamples } from "@/app/components/TradeExamples";
 import { FaqAccordion } from "@/app/components/faq-accordion";
 import { STARTER_MONTHLY_PRICE_CAD } from "@/lib/plan-pricing";
+import { STARTER_MONTHLY_PHOTO_LIMIT } from "@/lib/rate-limit";
 import { headers } from "next/headers";
 import { currencyFromCountry, currencyPrefix, formatMonthlyPlanPrice, planMonthlyPrice } from "@/lib/currency";
 import { CANONICAL_URL } from "@/lib/site-url";
@@ -502,6 +503,7 @@ export default async function LandingPage() {
                   {[
                     "Unlimited estimates",
                     "Voice dictation",
+                    `${STARTER_MONTHLY_PHOTO_LIMIT} AI photo estimates / month`,
                     "SMS and email sending",
                     "Your logo on every estimate",
                     "Custom rates and price book",

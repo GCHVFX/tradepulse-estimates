@@ -1,6 +1,357 @@
 # TradePulse handoff
 
-Updated: 2026-09-10 20:34 PT (Added minimum internal links for public SEO pages; local only, not committed or deployed.)
+Updated: 2026-09-12 17:39 PT (Fixed Findings 4 and 5 from the 2026-09-12 production smoke test: two stale homepage tests, Starter photo-estimate pricing copy; local only, not committed or deployed.)
+
+## Findings 4 and 5: stale homepage tests, Starter photo-estimate copy (2026-09-12 17:39 PT)
+
+**Finding 4 -- two stale `tests/smoke/homepage-pricing.spec.ts` assertions,
+both confirmed as test staleness, not runtime defects, by the original smoke
+test:**
+
+1. `"the homepage resolves currency through the same resolver as /signup"`
+   expected the literal one-expression string
+   `currencyFromCountry((await headers()).get("x-vercel-ip-country"))`.
+   `app/page.tsx` does this correctly in two statements instead
+   (`const visitorCountry = (await headers()).get(...)`, then
+   `currencyFromCountry(visitorCountry)`). Replaced with a regex that
+   extracts whatever the header read is assigned to (inline or via a
+   variable) and confirms that exact value is what's passed to
+   `currencyFromCountry` -- passes for either form, still fails if a future
+   change splits "read the header" and "resolve the currency" apart.
+2. `"the mobile hero starts just below the fixed header..."` located the
+   hero section by matching the literal old class prefix
+   `relative overflow-hidden noise`, which the redesigned hero (a photo
+   background, not the old gradient) no longer has. Now matches on
+   `hero-photo`, the current design's stable marker for this section,
+   anywhere in the class list rather than requiring exact order. The
+   assertions themselves (mobile `pt-*` at or under 80px, desktop keeps its
+   own `sm:pt-40`) are unchanged -- only how the section is located changed.
+
+Neither the homepage nor its hero markup was touched to make these pass.
+
+**Finding 5 -- Starter's pricing-table feature list omitted photo
+estimates entirely,** reading as Pro-exclusive. Actual entitlement, per
+`lib/rate-limit.ts`'s `STARTER_MONTHLY_PHOTO_LIMIT = 3` (already the single
+source of truth used by `/api/analyze-photo`, `/api/profile`, and the `/new`
+UI's own "3 of 3 AI photo estimates left this month" copy): Starter gets a
+capped monthly allowance, Pro is unlimited. Added one bullet to the Starter
+card in `app/page.tsx`, interpolating that same constant rather than a new
+hardcoded `3`: `` `${STARTER_MONTHLY_PHOTO_LIMIT} AI photo estimates / month` ``,
+rendering as "3 AI photo estimates / month". Pro's existing "AI Photo
+Estimates" entry is untouched -- it already read correctly once Starter's
+capped version is visible for contrast.
+
+**Files changed:** `tests/smoke/homepage-pricing.spec.ts` (the two stale
+assertions rewritten, described above), `app/page.tsx` (new import of
+`STARTER_MONTHLY_PHOTO_LIMIT` from `lib/rate-limit`, one new Starter feature
+bullet).
+
+**Verification:** `npx tsc --noEmit` clean. `npx playwright test
+--config=playwright.unit.config.ts tests/smoke/homepage-pricing.spec.ts` --
+**8 of 8 passed** (all tests in the file; none skipped or removed).
+`tests/smoke/plan-pricing.spec.ts` and `tests/smoke/currency.spec.ts` (24
+tests) also re-run as directly relevant, all passing. `git diff --check`:
+only pre-existing line-ending warnings.
+
+**Browser-verified** (local dev server on an already-running instance,
+`http://127.0.0.1:3012`, no signup/auth needed): desktop view confirmed the
+Starter card now shows "3 AI photo estimates / month" as its own bullet,
+distinct from Pro's unlimited "AI Photo Estimates", and the hero has no
+large empty gap below the header. A true mobile-width screenshot could not
+be captured -- the browser tool's window resize did not reliably apply in
+this session, a known limitation encountered in the original smoke test too
+-- but this diff never touches the hero's markup or classes (confirmed via
+`git diff app/page.tsx`), so its mobile spacing behaviour is unchanged from
+what the original smoke test already visually confirmed correct.
+
+**Next action:** none outstanding for these two findings. All five findings
+from the 2026-09-12 production smoke test are now addressed.
+
+---
+
+Updated: 2026-09-12 17:30 PT (Fixed Finding 3 from the 2026-09-12 production smoke test: cleanupTestAccount() couldn't remove an account with generation-claim rows; local only, not committed or deployed.)
+
+## cleanupTestAccount() missing tpe_estimate_generation_claims cleanup (Finding 3) (2026-09-12 17:30 PT)
+
+**Bug:** `tpe_estimate_generation_claims.business_id` references
+`tpe_businesses(id) ON DELETE RESTRICT` (deliberately -- it stops a business
+disappearing mid-generation). `cleanupTestAccount()` (`tests/smoke/helpers.ts`)
+never deleted these rows, so a leftover claim made its `tpe_businesses`
+delete fail identically on every one of its 5 retries: deleting a row a
+RESTRICT foreign key still points at is never going to succeed just because
+it's retried. The failure was only `console.warn`ed, so the function still
+resolved successfully, leaving the business, its estimates, and the Supabase
+auth user behind with nothing to tell a caller (or CI) apart from a clean
+run.
+
+**Fix:** `tpe_estimate_generation_claims` rows for the business are now
+deleted (via the existing best-effort `runDelete()`, now exported) inside
+the same per-attempt retry loop, alongside the other direct children of the
+business (`tpe_pricebook_items`, `tpe_payment_reminders`). It has no
+dependency on `tpe_estimates` -- its FK is straight to `tpe_businesses` and
+`auth.users` -- so it only needed to run before the `tpe_businesses` delete
+attempt, not in any particular position relative to the estimate deletes.
+Deletion order inside the loop is now: grandchildren of estimates ->
+`tpe_payment_reminders` (by business) -> `tpe_estimates` ->
+`tpe_pricebook_items` -> `tpe_estimate_generation_claims` -> `tpe_businesses`.
+
+**Failure now surfaces:** the two places that used to `console.warn` and
+return -- the `tpe_businesses` delete after all 5 retries are exhausted, and
+an `auth.admin.deleteUser` failure -- now `throw`. A caller `await`ing
+`cleanupTestAccount()` gets a rejected promise, matching how a Stripe
+cleanup failure in this same function already stops teardown rather than
+logging past it. An estimate/claim table that's already empty is not an
+error (Supabase's `delete().eq(...)` matching zero rows never errors), so
+this cannot turn an already-clean account into a false failure.
+
+**Files changed:** `tests/smoke/helpers.ts` (added the
+`tpe_estimate_generation_claims` delete to the retry loop; exported
+`runDelete`; the two silent-`console.warn` failure paths now `throw`),
+`tests/smoke/smoke-safety.spec.ts` (7 new tests in a new "tpe_estimate_generation_claims
+cleanup" section: 3 direct behavioural tests against the now-exported
+`runDelete`, 4 structural checks of `helpers.ts`'s ordering and throw
+behaviour, matching the file's own pre-existing "Wiring assertions over the
+real helper" pattern for the parts of `cleanupTestAccount()` that have no
+injectable dependency).
+
+**Verification:** `npx tsc --noEmit` clean. `npx playwright test
+--config=playwright.unit.config.ts tests/smoke/smoke-safety.spec.ts` -- 35
+passed, 0 failed (16 pre-existing plus 7 new tests; pre-existing Stripe-ordering
+tests confirm Stripe cleanup is untouched). `git diff --check`: only
+pre-existing line-ending warnings.
+
+**Not live-tested:** this fix was not exercised against a real Supabase
+project (would require creating another throwaway account, out of scope for
+this task). `cleanupTestAccount()` has no injectable Supabase dependency, so
+its ordering and throw-on-retry-exhaustion behaviour are verified
+structurally rather than by actually running a delete against a live
+database with a real blocking claim row present -- the same limitation this
+file's pre-existing Stripe-ordering tests already have for the rest of this
+function.
+
+**Next action:** the next time this helper is actually used (e.g. a future
+smoke-test session), confirm live that an account with generation-claim rows
+is fully removed and that a genuine failure now raises rather than logs.
+Findings 4 and 5 from the 2026-09-12 smoke test remain open and untouched.
+
+---
+
+Updated: 2026-09-12 13:46 PT (Fixed Finding 2 from the 2026-09-12 production smoke test: structured/markdown desync on line-item edits; local only, not committed or deployed.)
+
+## Structured/markdown desync on line-item edits (Finding 2) (2026-09-12 13:46 PT)
+
+**Bug:** a structured estimate's (`pricing_source = 'structured'`) markdown
+and its `tpe_estimate_items` rows could disagree after a supported editor
+edit. `app/api/estimates/route.ts`'s `PATCH` synced items with a per-row
+`UPDATE` matched by `display_order`, sent from
+`app/components/editable-estimate-body.tsx`. That never inserted a row for
+an added line item and never deleted a row for a removed one: deleting an
+item left its old row behind at the end of the table, orphaned. On reload,
+`buildCustomerPricingView()` compared the (correct, edited) markdown
+subtotal against the (stale) structured subtotal, found them unequal, and
+failed closed to "Customer pricing could not be verified" -- correct,
+safe behaviour for a real mismatch, but the mismatch itself should never
+have been created by a normal edit.
+
+**Fix, source of truth:** for a structured estimate, `tpe_estimate_items` is
+now regenerated wholesale from the exact markdown being saved, on every
+summary save, through the same parse/convert pipeline estimate generation
+already uses (`parseSummary` -> `parsedToItems` -> `draftToItemRow`, all
+pre-existing). New `buildStructuredItemsSyncPlan(summary, estimateId)` in
+`lib/estimate-item-migration.ts` is the one place that does this -- pure,
+no I/O, so it's directly unit-testable. `app/api/estimates/route.ts`'s
+`PATCH` calls it, sanity-checks that the two subtotals it computed agree
+(they always will; this is defence against a future bug in the mapping,
+not a second calculation path), then **deletes every existing row for the
+estimate and inserts the freshly computed set** -- replace, not reconcile,
+which is what makes an add or a delete impossible to under- or
+over-represent. The client no longer computes or sends a `structured_items`
+payload at all: the server derives it from the same `summary` text it
+already receives, so there is exactly one input for both representations.
+
+**Ordering / partial-failure behaviour:** Supabase's REST API cannot span
+the `tpe_estimate_items` delete+insert and the `tpe_estimates` update in one
+transaction, and a new Postgres RPC felt like more machinery than this
+warranted (see Scope below). The items sync runs **first**, before anything
+in `tpe_estimates` is touched, and returns an error immediately on any
+failure -- so a failure there leaves the estimate exactly as it was (old
+summary, old items, still mutually consistent), not a half-applied edit.
+The residual risk is narrower than before: if the items delete+insert
+succeeds but the subsequent plain `tpe_estimates` update itself then fails
+(a much less likely failure on a single-row single-call update), the
+estimate is left with new items and an old summary, which surfaces as the
+existing, already-safe `STRUCTURED_SUBTOTAL_MISMATCH` fail-closed banner on
+reload -- not silent corruption. No migration was needed or added.
+
+**Existing mismatched estimates:** not proactively repaired -- no scan, no
+bulk rewrite, per the request. An estimate that is *already* mismatched
+keeps showing the existing fail-closed banner exactly as before, on every
+read-only view. It does, however, self-heal the next time it is *edited and
+saved*: the sync plan is regenerated from whatever the current markdown
+says regardless of what was in `tpe_estimate_items` before, so the replace
+step naturally produces a matching row set again. This is an incidental
+consequence of always regenerating from markdown, not a dedicated repair
+feature.
+
+**Deposit interaction (Finding 1):** verified, not redesigned. A structured
+pricing edit changes `computeTotals()`'s total the same way it always did;
+Finding 1's `resolveDepositPercent`/`computeDepositAndBalance` already
+re-resolve against whatever total `parseSummary` computes, so a line-item
+edit that crosses the deposit threshold is still handled correctly. See the
+new `"deposit interaction"` test.
+
+**Files changed:** `lib/estimate-item-migration.ts` (new
+`buildStructuredItemsSyncPlan()`, `StructuredItemUpsertRow` type; imports
+`calculateItemsSubtotal`), `app/api/estimates/route.ts` (removed the old
+per-row `UPDATE`-by-`display_order` sync and the `structured_items` request
+field entirely; added the fetch-`pricing_source`-then-sync-then-update
+sequence described above), `app/components/editable-estimate-body.tsx`
+(stopped computing/sending `structured_items`; the `structuredPricing` prop
+is now unused inside the component but left in place to avoid touching its
+caller), `tests/smoke/estimate-item-migration.spec.ts` (8 new tests: quantity
+edit, delete, add, price edit, deposit interaction, a fixture-wide sanity
+check that the subtotal guard always passes on valid input, and a structural
+check that the route's refusal/ordering guarantees are actually in the code),
+`tests/smoke/estimate-line-item-editing.spec.ts` (one pre-existing test
+updated -- it asserted the exact source strings of the old, now-removed
+per-row sync; rewritten to assert the new `buildStructuredItemsSyncPlan`
+wiring instead, same intent).
+
+**Verification:** `npx tsc --noEmit` clean. `npx playwright test
+--config=playwright.unit.config.ts` -- 488 passed, 4 failed, all four
+pre-existing and unrelated (identical set to Finding 1's baseline: two stale
+`homepage-pricing.spec.ts` assertions, one order-dependent
+`password-reset-canonical-host.spec.ts` test, the `unit-suite-completeness.spec.ts`
+gap for three unrelated files). `git diff --check`: only pre-existing
+line-ending warnings.
+
+**Not browser-verified:** same constraint as Finding 1 -- every path to the
+authenticated editor requires either a new Stripe customer or a deployment,
+both out of scope. Verified instead at the function level, including a
+reload-verification test that feeds a freshly edited summary and its
+regenerated structured rows straight into the real
+`buildCustomerPricingView()`/`canEditCustomerPricingMode()` -- the exact
+functions the real app calls on reload -- and confirms no
+`STRUCTURED_SUBTOTAL_MISMATCH` and that the Detailed/Grouped toggle stays
+available.
+
+**Next action:** review locally, then a real end-to-end check (open a
+structured estimate, edit a quantity and delete an item, save, reload,
+confirm no verification banner) on a deployed preview or with an explicitly
+authorized throwaway signup, before merging. Findings 3-5 from the
+2026-09-12 smoke test (the two stale homepage-pricing assertions, the
+Starter photo-estimate pricing-page wording) remain open and untouched;
+`cleanupTestAccount()`'s FK gap (documented under Finding 1) also remains
+untouched.
+
+---
+
+Updated: 2026-09-12 13:21 PT (Deterministic deposit fix extended to cover post-generation edits and an unsafe fallback; local only, not committed or deployed.)
+
+## Deterministic deposit calculation, including post-generation edits (2026-09-12 13:21 PT)
+
+**Original bug:** freshly generated estimates could show contradictory
+deposit information -- the Pricing Summary table said "No deposit required"
+while Payment Terms separately stated a specific deposit dollar amount, on
+every customer-facing surface (editor, share page, PDF). Root cause: the
+deposit decision, percentage, and dollar amount were all sourced from the
+model's own generated markdown (parsed back out of whatever wording it
+happened to write), not from the business's actual Rates settings
+(`deposit_percent`, `deposit_threshold`).
+
+**Follow-up invariant (this update):** the first pass only made *generation*
+deterministic. Two gaps remained: (1) if a contractor edited an estimate's
+line items after generation and the total moved across the deposit
+threshold, the displayed deposit stayed stuck at whatever was true at
+generation time; (2) if the deterministic-deposit step itself failed, the
+route fell back to saving the model's raw, potentially self-contradictory
+text as if it were correct. Both are now closed. Finding 1 is complete: there
+is no supported path where customer-visible deposit state or amount can
+revert to independently model-authored values.
+
+**How post-generation total changes are handled:** the estimate's own
+deposit rule (percent + threshold) is snapshotted into the summary text
+itself, as an invisible markdown link-reference-definition marker --
+`[deposit-rule]: # (25:500)` or `[deposit-rule]: # (none)` -- written by
+`pricingBlock()` and parsed by `parseSummary()` (new `depositRule` field on
+`ParsedSummary`). Every markdown renderer consumes a link reference
+definition silently, by spec, so it never appears in the editor, the share
+page, or as raw text; `lib/generate-pdf.ts`'s own hand-rolled line renderer
+(it does not go through a markdown parser) got one explicit added skip for
+the same line shape. Whenever `parseSummary()` finds this marker, it ignores
+the visible "Deposit required (X%)" / "No deposit required" wording entirely
+and re-resolves `depositPercent` fresh from the *current* total
+(`resolveDepositPercent(computeTotals(lineItems, taxRate).total, depositRule)`).
+Because every renderer (editor, `pricingBlock` for share/PDF) reads this same
+field, a line-item edit that changes the total is reflected everywhere the
+next time the estimate is rendered or saved -- including live in the editor,
+since `editable-estimate-body.tsx` now recomputes `depositPercent` as a plain
+`const` every render instead of once at mount. Payment Terms is kept in sync
+the same way: `reconcilePaymentTermsDeposit()` (extracted from the original
+`applyDeterministicDeposit()`) strips any deposit-mentioning sentence and
+restates the current decision/amount, called both at generation and on every
+editor save that has a `depositRule` to resolve against. An estimate with no
+marker (`depositRule === undefined`, i.e. generated before this feature
+existed) keeps its exact old static behaviour -- editing it does not gain or
+lose a deposit rule it never had recorded.
+
+**Rule persistence / does a later Rates change move an old estimate:** no.
+The rule is read from the business once, at generation time, and from then
+on lives only on the estimate's own snapshot (the marker) -- never re-fetched
+from `tpe_businesses` after that, the same snapshot philosophy this codebase
+already uses for currency and tax rate. Changing the business's Rates page
+later has no effect on any already-generated estimate's deposit rule.
+
+**Failure behaviour:** `applyDeterministicDeposit()`'s call in
+`app/api/generate-estimate/route.ts` is no longer wrapped in a catch that
+falls back to the raw model text. A thrown error is deliberately left
+uncaught (rethrown with added context) so it propagates to the route's
+existing top-level stream error handler -- the same path every other
+generation failure already takes: nothing is inserted into
+`tpe_estimates`, the client receives the standard `__ERROR__` message, and
+the failure is logged. No new error framework was added.
+
+**Files changed (this update):** `lib/estimate-summary.ts` (new
+`DepositRule`-marker format/parse functions, `depositRule` field on
+`ParsedSummary`, `parseSummary()` re-resolves `depositPercent` when a marker
+is present, `pricingBlock()`/`serializeSummary()` take an optional
+`depositRule` to embed, new exported `reconcilePaymentTermsDeposit()`),
+`app/components/editable-estimate-body.tsx` (`depositPercent` is now
+re-derived every render and every save from the live total instead of a
+stale mount-time value; Payment Terms is reconciled on save the same way),
+`app/api/generate-estimate/route.ts` (deposit-normalization failure now
+rethrows instead of falling back), `lib/generate-pdf.ts` (skips the
+deposit-rule marker line), `tests/smoke/estimate-deposit.spec.ts` (extended
+from 7 to 13 tests: edit above/below/back-above threshold, rule persistence
+across an edit, and two normalization-failure tests).
+
+**Verification:** `npx tsc --noEmit` clean. `npx playwright test
+--config=playwright.unit.config.ts` -- 481 passed, 4 failed, all four
+pre-existing and unrelated to this change (two stale `homepage-pricing.spec.ts`
+source-string assertions against the redesigned homepage; one
+order-dependent `password-reset-canonical-host.spec.ts` test that passes in
+isolation; the `unit-suite-completeness.spec.ts` guard, which already listed
+three unrelated spec files as unaccounted for before this work started).
+`git diff --check`: only pre-existing line-ending warnings, no real issues.
+
+**Not verified:** no live browser/production verification, for the same
+reason as the original fix -- every path to the authenticated
+estimate-generation/editor flow requires either a new Stripe customer (this
+dev stack's `.env.local` is wired to live Stripe) or a deployment, both out
+of scope. Verified instead at the function level, including a genuine
+edit-simulation test that parses a generated estimate, mutates its line
+items, and re-serializes exactly the way `editable-estimate-body.tsx` does.
+
+**Next action:** review locally, then a real end-to-end check (generate one
+estimate with a deposit rule configured, edit its line items across the
+threshold, on a deployed preview or with an explicitly authorized throwaway
+Stripe signup) before merging, followed by commit/deploy only with explicit
+approval. Findings 2-5 from the 2026-09-12 smoke test (structured-pricing
+desync on line-item edit, the `cleanupTestAccount()` FK gap, the two stale
+homepage-pricing assertions, the Starter photo-estimate pricing-page
+wording) remain open and untouched.
+
+---
 
 ## Public SEO internal links (2026-09-10 20:34 PT)
 
