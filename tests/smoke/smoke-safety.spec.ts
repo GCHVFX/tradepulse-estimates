@@ -225,6 +225,64 @@ test("signUpFreshAccount gates on the override before doing anything", () => {
   expect(fn).toContain("process.env.ALLOW_PRODUCTION_SIGNUP_SMOKE");
 });
 
+// ── tpe_estimate_generation_claims cleanup ───────────────────────────────────
+//
+// tpe_estimate_generation_claims references tpe_businesses(id) ON DELETE
+// RESTRICT (supabase/migrations/20260818150005_estimate_generation_claims.sql),
+// deliberately: it stops a business disappearing mid-generation. Teardown
+// never deleted these rows, so a leftover claim made the tpe_businesses
+// delete fail identically on every one of its 5 retries -- retrying a delete
+// blocked by a still-present referencing row was never going to succeed --
+// and the failure was only logged, so cleanupTestAccount() still resolved
+// as if it had succeeded. cleanupTestAccount() itself calls Supabase and
+// Stripe directly with no injectable dependency, so its ordering and
+// throw-on-failure behaviour are verified the same structural way every
+// other assertion in this section already verifies helpers.ts's wiring;
+// runDelete() is the one piece with an actual injection point, exercised
+// directly below.
+
+import { runDelete } from "./helpers";
+
+function helpersSource(): string {
+  return readFileSync("tests/smoke/helpers.ts", "utf8").replace(/\r\n/g, "\n");
+}
+
+test("runDelete continues correctly when there is nothing to delete (no error, no rows)", async () => {
+  await expect(runDelete("x", () => Promise.resolve({ error: null }))).resolves.toBeUndefined();
+});
+
+test("runDelete logs but never throws on a real delete error (its documented, unchanged contract)", async () => {
+  await expect(runDelete("x", () => Promise.resolve({ error: { message: "boom" } }))).resolves.toBeUndefined();
+});
+
+test("runDelete logs but never throws if the delete call itself rejects", async () => {
+  await expect(runDelete("x", () => Promise.reject(new Error("down")))).resolves.toBeUndefined();
+});
+
+test("generation-claim rows are deleted inside the retry loop, before the tpe_businesses delete attempt", () => {
+  const source = helpersSource();
+  const claimsIndex = source.indexOf('runDelete("tpe_estimate_generation_claims"');
+  const businessDeleteIndex = source.indexOf('.from("tpe_businesses")\n        .delete()');
+
+  expect(claimsIndex, "generation-claim cleanup must exist").toBeGreaterThan(-1);
+  expect(businessDeleteIndex, "the retry loop's tpe_businesses delete must exist").toBeGreaterThan(-1);
+  expect(claimsIndex).toBeLessThan(businessDeleteIndex);
+});
+
+test("a tpe_businesses delete that fails on every retry throws, instead of logging a warning and returning", () => {
+  const source = helpersSource();
+  // The old bug, byte for byte: this exact line resolved cleanupTestAccount()
+  // successfully after every retry had already failed.
+  expect(source).not.toContain("console.warn(`[cleanup] tpe_businesses delete failed after retries");
+  expect(source).toMatch(/throw new Error\(\s*`\[cleanup\] tpe_businesses delete failed after/);
+});
+
+test("an auth-user delete failure also throws, instead of only being logged", () => {
+  const source = helpersSource();
+  expect(source).not.toContain("console.warn(`[cleanup] delete auth user failed");
+  expect(source).toMatch(/throw new Error\(`\[cleanup\] delete auth user failed/);
+});
+
 // ── The signup API wrapper is the only permitted direct caller ───────────────
 
 import { readdirSync } from "node:fs";

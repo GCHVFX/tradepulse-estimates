@@ -113,7 +113,12 @@ export async function signUpFreshAccount(page: Page): Promise<TestAccount> {
 // Best-effort delete that logs (but never throws) on failure, so a cleanup
 // problem shows up in test output instead of silently leaking a row, while
 // still not being able to fail the test itself.
-async function runDelete(
+//
+// Exported for tests/smoke/cleanup-test-account.spec.ts: cleanupTestAccount()
+// itself calls Supabase and Stripe directly with no injection point, so this
+// is the one piece of its error handling that can be exercised without a
+// live connection.
+export async function runDelete(
   label: string,
   run: () => PromiseLike<{ error: { message: string } | null }>
 ): Promise<void> {
@@ -219,6 +224,19 @@ export async function cleanupTestAccount(userId: string): Promise<void> {
       await runDelete("tpe_pricebook_items", () =>
         supabaseAdmin.from("tpe_pricebook_items").delete().eq("business_id", businessId)
       );
+      // References tpe_businesses(id) ON DELETE RESTRICT (see
+      // supabase/migrations/20260818150005_estimate_generation_claims.sql),
+      // deliberately: it exists to stop a business disappearing mid-generation.
+      // For teardown that same restrict is what silently defeated the
+      // tpe_businesses delete below every one of its 5 retries -- deleting a
+      // still-referenced business always fails the same way regardless of how
+      // many times it's retried. Not tied to any estimate, so it has no
+      // ordering dependency on the tpe_estimates delete above; it only needs
+      // to happen before the tpe_businesses delete attempt, like every other
+      // direct child of the business deleted in this loop.
+      await runDelete("tpe_estimate_generation_claims", () =>
+        supabaseAdmin.from("tpe_estimate_generation_claims").delete().eq("business_id", businessId)
+      );
 
       const { error: bizErr } = await supabaseAdmin
         .from("tpe_businesses")
@@ -232,7 +250,17 @@ export async function cleanupTestAccount(userId: string): Promise<void> {
         // Give it a moment, then re-fetch and remove the new child rows.
         await new Promise((r) => setTimeout(r, 400));
       } else {
-        console.warn(`[cleanup] tpe_businesses delete failed after retries: ${bizErr.message}`);
+        // Was a console.warn: cleanup finished having never actually removed
+        // the business, estimates, or auth user, with nothing to tell the
+        // caller apart from a real success. Thrown instead, matching how a
+        // Stripe cleanup failure in this same function already stops
+        // teardown rather than logging past it (see deleteStripeCustomerForTest
+        // above) -- the caller (and CI) needs to see this run as failed, not
+        // green.
+        throw new Error(
+          `[cleanup] tpe_businesses delete failed after ${attempt + 1} attempts: ${bizErr.message}. ` +
+            `Business ${businessId} (and its estimates) were left behind; the Supabase auth user was not deleted.`
+        );
       }
     }
   } else {
@@ -245,7 +273,10 @@ export async function cleanupTestAccount(userId: string): Promise<void> {
 
   const { error: userError } = await supabaseAdmin.auth.admin.deleteUser(userId);
   if (userError) {
-    console.warn(`[cleanup] delete auth user failed: ${userError.message}`);
+    // Same reasoning as above: a caller awaiting cleanupTestAccount() needs
+    // this run to reject, not resolve having left a real Supabase auth user
+    // behind with only a log line to show for it.
+    throw new Error(`[cleanup] delete auth user failed: ${userError.message}`);
   }
 }
 
