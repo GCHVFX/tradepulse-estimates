@@ -1,6 +1,176 @@
 # TradePulse handoff
 
-Updated: 2026-09-12 17:39 PT (Fixed Findings 4 and 5 from the 2026-09-12 production smoke test: two stale homepage tests, Starter photo-estimate pricing copy; local only, not committed or deployed.)
+Updated: 2026-09-12 22:25 PT (Finalized outreach click metadata: migration applied to production, types regenerated, temporary cast removed, committed locally as `Track outreach click metadata`; not pushed or deployed.)
+
+## Outreach click tracking: what can be learned, and future-click metadata (2026-09-12 21:40 PT, finalized 22:25 PT)
+
+**Status:** committed locally (commit `Track outreach click metadata`),
+migration **applied to production**, `lib/database.types.ts` regenerated,
+temporary insert cast removed. **Not pushed, not deployed.**
+
+**Finalize pass (22:25 PT):** applied
+`20260912190000_add_outreach_click_metadata.sql` to the production Supabase
+project (`fctequqcwxyhmnjgxixg`) via the Supabase MCP `apply_migration` tool.
+Confirmed via `information_schema.columns` that `tpe_outreach_clicks` now has
+`country`, `region`, `city`, `user_agent`, `referrer`, all nullable `text`,
+alongside the original `id`/`campaign_code`/`clicked_at`. No rows were
+modified or deleted; no RLS or constraint change. Regenerated
+`lib/database.types.ts` (Supabase MCP `generate_typescript_types`, already
+scoped to `tpe_` tables with no filtering needed) and removed the temporary
+`as unknown as { campaign_code: string }` cast from `recordOutreachClick` in
+`lib/campaign-attribution.ts` now that the real generated types cover the
+insert shape. `npx tsc --noEmit` clean; the same 24 relevant tests
+(`tests/smoke/outreach-click-tracking.spec.ts` +
+`tests/smoke/campaign-attribution.spec.ts`) still pass; `git diff --check`
+clean. All four files
+(`lib/campaign-attribution.ts`, `lib/database.types.ts`,
+`tests/smoke/outreach-click-tracking.spec.ts`, this `HANDOFF.md` entry) are
+in the one amended local commit.
+
+**Correction to the original entry below:** it claimed `pacific_standard`
+(as seen in the Supabase dashboard) was just the UI's display formatting of
+`clicked_at`, not a stored column. That was wrong. Applying the migration
+surfaced a real column, `pacfic_standard` (misspelled, no "i" after "pac"),
+already present on `tpe_outreach_clicks` in production and typed into
+`lib/database.types.ts` by this regeneration. It is
+`generated always as (date_trunc('second', clicked_at at time zone
+'America/Vancouver'))` -- a computed, read-only local-time duplicate of
+`clicked_at`, added directly against the database at some point outside any
+tracked migration (absent from `list_migrations`). It carries no geography,
+device, or bot-origin information beyond what `clicked_at` already has, so
+the substantive conclusion below is unaffected. Flagged as out-of-band
+schema drift; not fixed here, out of scope for this task.
+
+**Original entry, as written before this finalize pass:**
+
+**Task:** inspect `tpe_outreach_clicks` and determine what the existing rows
+can show about geography, device, human-vs-bot origin, and whether the
+2026-09-12 smoke test could have caused any of the recent `CA2609A` clicks;
+add the smallest useful tracking for future clicks if current data is
+insufficient.
+
+**What existing rows can show:** nothing beyond `campaign_code` and
+`clicked_at`. The original migration
+(`20260908000000_create_tpe_outreach_clicks.sql`) is deliberately minimal --
+no visitor/session identifier, no IP, no user agent, no referrer -- per its
+own header comment. `lib/database.types.ts` (generated from the live schema)
+confirms this is still the live shape. The `pacific_standard` field the user
+saw in the Supabase UI is a display-formatted rendering of `clicked_at` in
+that view, not a stored column. **Geography, device, and human-vs-bot origin
+cannot be determined for any existing row.** This cannot be fixed
+retroactively -- there is nothing to backfill.
+
+**Smoke-test attribution: unsupported / no evidence found.**
+`.ai-control-centre/activity.jsonl` is this project's own durable,
+timestamped activity record. It shows exactly one legitimate, documented
+`/r/CA2609A` visit, from the 2026-09-08 feature-deployment verification
+session (`raw_click_count` went 0 → 1 immediately after that specific
+production check, see the entry below). Grepping the same file for any
+outreach/campaign/`/r/` mention from 2026-09-10 onward -- which spans the
+entire 2026-09-12 smoke test and every fix/review/commit session after it --
+returns nothing. None of those sessions' task instructions mention outreach
+or campaign testing as in scope. This is not proof no other click occurred
+(a scanner or bot leaves no trace in this log), but there is no evidence the
+smoke test caused one, and this project's own 2026-09-08 entry already
+anticipated the real alternative explanation: "email-security scanners and
+automated link-preview bots will inflate this count above genuine human
+visits."
+
+**Implementation (future clicks only):** `lib/campaign-attribution.ts` gained
+`OutreachClickMetadata` (`country`, `region`, `city`, `userAgent`,
+`referrer`, all `string | null`) and `readOutreachClickMetadata(request)`,
+which reads Vercel's edge geolocation headers
+(`x-vercel-ip-country`/`-country-region`/`-city`, the last percent-decoded)
+plus `user-agent` and `referer` -- the same header-reading convention as
+`lib/geo.ts`. Every field is independently optional and the reader never
+throws; a request with none of these headers (local dev, non-Vercel hosts)
+still produces a fully valid click with every field `null`. `campaignCode()`
+is unchanged, so unrecognised codes still skip both the cookie and the click
+write.
+`OutreachClickRecorder` is now `(code, metadata) => Promise<void>`;
+`recordOutreachClick` inserts all five fields alongside `campaign_code`, and
+`createCampaignRedirectHandler`'s `GET` reads metadata from the request and
+passes it through. No behavior changed: same redirect, same cookie, same
+"never blocks on a failed write" guarantee (still double-wrapped, in
+`recordOutreachClick` itself and again in the handler, exactly as before).
+
+**Privacy, honored exactly as scoped:** no raw IP, no fingerprinting, no
+third-party geolocation service, no analytics vendor. No bot-detection or
+click-discarding was built -- every click, scanner or human, is still
+recorded; `user_agent` just makes a scanner's origin visible after the fact,
+it does not filter anything.
+
+**Bot/scanner visibility going forward:** a scanner's `user_agent` (e.g.
+`Mozilla/5.0 (compatible; ...)` bot strings, or Google/Microsoft link-
+preview signatures) will now be visible per row, and its country/region will
+usually be a cloud-provider region rather than the recipient's actual
+location -- both useful signals for a human eyeballing the data later, but
+no code here decides "this one is a bot."
+
+**Type-safety note (temporary):** `lib/database.types.ts` cannot yet declare
+the five new columns because the migration that adds them was deliberately
+*not* applied to production (see Migration below). `recordOutreachClick`'s
+insert therefore goes through a narrow, commented
+`as unknown as { campaign_code: string }` cast rather than `any`. Remove
+this cast the next time this file is touched, after the migration is applied
+and types are regenerated via the Supabase MCP `generate_typescript_types`
+tool.
+
+**Migration:**
+`supabase/migrations/20260912190000_add_outreach_click_metadata.sql` --
+purely additive, five new nullable `text` columns
+(`country`/`region`/`city`/`user_agent`/`referrer`) on the existing
+`tpe_outreach_clicks` table, no `not null`, no FK, no RLS policy change,
+updates the table comment. **Not applied to production.** No historical rows
+are backfilled by design -- this data was never captured for them.
+
+**Files changed (none committed):**
+- `lib/campaign-attribution.ts` -- metadata capture and insert, detailed above.
+- `tests/smoke/outreach-click-tracking.spec.ts` -- extended the existing
+  suite (not a new file): fixed the two-argument `recordOutreachClick` and
+  `createCampaignRedirectHandler` callback signatures, and added coverage for
+  country/region/city captured, percent-decoded city, missing-geo-headers
+  degrade to null without breaking the redirect, user agent captured,
+  referrer captured, the handler passes real request metadata through end to
+  end, and the new migration's column shape (five nullable columns, still no
+  `ip_address`/`email`/`name`). 19 tests in this file, all passing (was 10).
+- `supabase/migrations/20260912190000_add_outreach_click_metadata.sql` -- new,
+  not applied.
+
+**Verification performed (scope-limited per this task, nothing broader run):**
+- `npx tsc --noEmit` -- clean.
+- `npx playwright test --config=playwright.unit.config.ts
+  tests/smoke/outreach-click-tracking.spec.ts
+  tests/smoke/campaign-attribution.spec.ts` -- 23 passed (19 + 4 unrelated
+  signup-attribution tests, confirmed untouched by this change).
+- `git diff --check` -- clean (only pre-existing LF/CRLF autocrlf warnings on
+  files this change didn't touch).
+- No live browser click test was run. The local dev server's
+  `NEXT_PUBLIC_SUPABASE_URL`
+  (`https://fctequqcwxyhmnjgxixg.supabase.co`) is the same production
+  project used everywhere else in this repo -- a real visit to
+  `/r/CA2609A`, even from `localhost`, would write a genuine row to
+  production `tpe_outreach_clicks`, which this task explicitly forbids.
+  Metadata capture and null-safety are instead proven at the unit level via
+  the injectable `OutreachClickRecorder`, which never touches Supabase.
+
+**Risks and unresolved items:**
+- Historical clicks (including the one real 2026-09-08 row) remain
+  permanently unattributable for geography/device/bot-likelihood -- there is
+  nothing to backfill.
+- The `as unknown as { campaign_code: string }` cast in
+  `recordOutreachClick` is a deliberate, temporary type-safety gap tied to
+  the migration not being applied yet; remove it once the migration ships
+  and types are regenerated.
+- If raw click counts still look misleading once real outreach volume
+  arrives, building actual bot classification is a separate, deliberate task
+  -- explicitly out of scope here, per instruction.
+
+**Exact next step (superseded, see the finalize pass above):** this
+paragraph originally said to commit, apply the migration, regenerate types,
+remove the cast, then push and deploy. Commit, migration, type regeneration,
+and cast removal are done, as recorded above. **Remaining:** review the
+final amended commit, then push and deploy.
 
 ## Findings 4 and 5: stale homepage tests, Starter photo-estimate copy (2026-09-12 17:39 PT)
 

@@ -534,18 +534,36 @@ export type Database = {
       tpe_outreach_clicks: {
         Row: {
           campaign_code: string
+          city: string | null
           clicked_at: string
+          country: string | null
           id: string
+          pacfic_standard: string | null
+          referrer: string | null
+          region: string | null
+          user_agent: string | null
         }
         Insert: {
           campaign_code: string
+          city?: string | null
           clicked_at?: string
+          country?: string | null
           id?: string
+          pacfic_standard?: string | null
+          referrer?: string | null
+          region?: string | null
+          user_agent?: string | null
         }
         Update: {
           campaign_code?: string
+          city?: string | null
           clicked_at?: string
+          country?: string | null
           id?: string
+          pacfic_standard?: string | null
+          referrer?: string | null
+          region?: string | null
+          user_agent?: string | null
         }
         Relationships: []
       }
@@ -844,8 +862,12 @@ export type Database = {
         Returns: Json
       }
     }
-    Enums: {}
-    CompositeTypes: {}
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
 }
 

@@ -4,13 +4,24 @@ import { NextRequest } from "next/server";
 import {
   ATTRIBUTION_COOKIE_NAME,
   createCampaignRedirectHandler,
+  readOutreachClickMetadata,
   recordOutreachClick,
+  type OutreachClickMetadata,
 } from "../../lib/campaign-attribution";
 
 const MIGRATION_PATH = "supabase/migrations/20260908000000_create_tpe_outreach_clicks.sql";
+const METADATA_MIGRATION_PATH = "supabase/migrations/20260912190000_add_outreach_click_metadata.sql";
 
-function requestFor(code: string): NextRequest {
-  return new NextRequest(`https://tradepulse-estimates.com/r/${code}`);
+const EMPTY_METADATA: OutreachClickMetadata = {
+  country: null,
+  region: null,
+  city: null,
+  userAgent: null,
+  referrer: null,
+};
+
+function requestFor(code: string, headers: Record<string, string> = {}): NextRequest {
+  return new NextRequest(`https://tradepulse-estimates.com/r/${code}`, { headers });
 }
 
 test("visiting /r/CA2609A records exactly one click with campaign code CA2609A", async () => {
@@ -77,7 +88,7 @@ test("the real recordOutreachClick never throws, even when the write itself fail
   // exercises a genuine write failure (connection refused), not a mock
   // standing in for one -- the same property the two tests above prove at
   // the handler level, proved here for the production recorder itself.
-  await expect(recordOutreachClick("CA2609A")).resolves.toBeUndefined();
+  await expect(recordOutreachClick("CA2609A", EMPTY_METADATA)).resolves.toBeUndefined();
 });
 
 test("invalid campaign codes record no click, consistent with the existing no-cookie behaviour", async () => {
@@ -91,6 +102,86 @@ test("invalid campaign codes record no click, consistent with the existing no-co
   // skip the click write for the same reason -- it isn't a real campaign.
   expect(recorded).toEqual([]);
   expect(response.cookies.get(ATTRIBUTION_COOKIE_NAME)).toBeUndefined();
+});
+
+// ── Click metadata (country/region/city/user agent/referrer) ────────────────
+
+test("country, region, and city are captured from Vercel's geolocation headers when present", () => {
+  const metadata = readOutreachClickMetadata(
+    requestFor("CA2609A", {
+      "x-vercel-ip-country": "CA",
+      "x-vercel-ip-country-region": "BC",
+      "x-vercel-ip-city": "Vancouver",
+    })
+  );
+
+  expect(metadata.country).toBe("CA");
+  expect(metadata.region).toBe("BC");
+  expect(metadata.city).toBe("Vancouver");
+});
+
+test("a percent-encoded city header is decoded", () => {
+  const metadata = readOutreachClickMetadata(
+    requestFor("CA2609A", { "x-vercel-ip-city": "Sault%20Ste.%20Marie" })
+  );
+
+  expect(metadata.city).toBe("Sault Ste. Marie");
+});
+
+test("missing geo headers resolve to null metadata, never an error, and never block the redirect", async () => {
+  const metadata = readOutreachClickMetadata(requestFor("CA2609A"));
+  expect(metadata).toEqual(EMPTY_METADATA);
+
+  let received: OutreachClickMetadata | undefined;
+  const response = await createCampaignRedirectHandler(async (_code, meta) => {
+    received = meta;
+  })(requestFor("CA2609A"), { params: Promise.resolve({ code: "CA2609A" }) });
+
+  expect(received).toEqual(EMPTY_METADATA);
+  expect(response.headers.get("location")).toBe("https://tradepulse-estimates.com/");
+  expect(response.cookies.get(ATTRIBUTION_COOKIE_NAME)?.value).toBe("CA2609A");
+});
+
+test("user agent is captured", () => {
+  const metadata = readOutreachClickMetadata(
+    requestFor("CA2609A", { "user-agent": "Mozilla/5.0 (compatible; ExampleBot/1.0)" })
+  );
+
+  expect(metadata.userAgent).toBe("Mozilla/5.0 (compatible; ExampleBot/1.0)");
+});
+
+test("referrer is captured when present", () => {
+  const metadata = readOutreachClickMetadata(
+    requestFor("CA2609A", { referer: "https://mail.google.com/" })
+  );
+
+  expect(metadata.referrer).toBe("https://mail.google.com/");
+});
+
+test("the redirect handler passes the request's actual metadata through to the recorder", async () => {
+  let received: OutreachClickMetadata | undefined;
+  const handler = createCampaignRedirectHandler(async (_code, meta) => {
+    received = meta;
+  });
+
+  await handler(
+    requestFor("CA2609A", {
+      "x-vercel-ip-country": "US",
+      "x-vercel-ip-country-region": "CA",
+      "x-vercel-ip-city": "San%20Francisco",
+      "user-agent": "Mozilla/5.0",
+      referer: "https://example.com/inbox",
+    }),
+    { params: Promise.resolve({ code: "CA2609A" }) }
+  );
+
+  expect(received).toEqual({
+    country: "US",
+    region: "CA",
+    city: "San Francisco",
+    userAgent: "Mozilla/5.0",
+    referrer: "https://example.com/inbox",
+  });
 });
 
 test("no route or module other than campaign-attribution.ts writes to tpe_outreach_clicks", () => {
@@ -158,6 +249,27 @@ test("no IP address, email, name, or other unnecessary personal data column was 
       columns,
       `the column list must not declare a "${forbidden}" field`
     ).not.toMatch(new RegExp(`^\\s*${forbidden}\\b`, "mi"));
+  }
+});
+
+test("the metadata migration is additive: five nullable columns, no IP address, email, or name field", () => {
+  const migration = readFileSync(METADATA_MIGRATION_PATH, "utf8");
+
+  expect(migration).toMatch(/alter table public\.tpe_outreach_clicks/);
+  for (const column of ["country", "region", "city", "user_agent", "referrer"]) {
+    expect(migration).toMatch(new RegExp(`add column if not exists ${column}\\s+text`));
+  }
+  // Every added column is a bare `text` with no `not null` -- historical
+  // rows keep working, and this migration never claims to backfill them.
+  expect(migration).not.toMatch(/not null/);
+  expect(migration).not.toMatch(/create policy/i);
+  expect(migration).not.toMatch(/references/i);
+
+  for (const forbidden of ["ip_address", "ip_addr", "email", "\\bname\\b"]) {
+    expect(
+      migration,
+      `the metadata migration must not add a "${forbidden}" column`
+    ).not.toMatch(new RegExp(`add column if not exists ${forbidden}`, "i"));
   }
 });
 
