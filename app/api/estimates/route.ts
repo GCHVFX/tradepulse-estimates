@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
+import { buildStructuredItemsSyncPlan } from "@/lib/estimate-item-migration";
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const { supabase, applyTo } = createApiClient(request);
@@ -50,7 +51,6 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     completed_at?: unknown;
     copied_at?: unknown;
     include_photos?: unknown;
-    structured_items?: unknown;
   };
   try {
     body = await request.json();
@@ -61,6 +61,10 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   if (typeof body.id !== "string") {
     return applyTo(NextResponse.json({ error: "id is required" }, { status: 400 }));
   }
+  // A separate const, not body.id directly: body is declared with `let`, so
+  // TypeScript does not carry the narrowing above into a closure (the map()
+  // below) that reads body.id.
+  const estimateId = body.id;
 
   // Only include fields present in the body — never overwrite with defaults
   const updateFields: Record<string, unknown> = {};
@@ -99,53 +103,78 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     updateFields.include_photos = body.include_photos === true;
   }
 
-  type StructuredItemUpdate = {
-    description: string;
-    quantity: number;
-    unit: string | null;
-    unit_price: number;
-    line_total: number;
-    display_order: number;
-  };
-  let structuredItems: StructuredItemUpdate[] | null = null;
-  if ("structured_items" in body) {
-    if (!Array.isArray(body.structured_items)) {
-      return applyTo(NextResponse.json({ error: "structured_items must be an array" }, { status: 400 }));
-    }
-    const parsedItems: Array<StructuredItemUpdate | null> = body.structured_items.map((item) => {
-      if (!item || typeof item !== "object") return null;
-      const value = item as Record<string, unknown>;
-      if (
-        typeof value.description !== "string" ||
-        typeof value.quantity !== "number" || !Number.isFinite(value.quantity) ||
-        (value.unit !== null && typeof value.unit !== "string") ||
-        typeof value.unit_price !== "number" || !Number.isFinite(value.unit_price) ||
-        typeof value.line_total !== "number" || !Number.isFinite(value.line_total) ||
-        typeof value.display_order !== "number" || !Number.isInteger(value.display_order) || value.display_order < 0
-      ) return null;
-      return {
-        description: value.description.trim(),
-        quantity: value.quantity,
-        unit: value.unit,
-        unit_price: value.unit_price,
-        line_total: value.line_total,
-        display_order: value.display_order,
-      };
-    });
-    if (parsedItems.some((item) => item === null)) {
-      return applyTo(NextResponse.json({ error: "Invalid structured item" }, { status: 400 }));
-    }
-    structuredItems = parsedItems.filter((item): item is StructuredItemUpdate => item !== null);
-  }
-
   if (Object.keys(updateFields).length === 0) {
     return applyTo(NextResponse.json({ error: "No fields to update" }, { status: 400 }));
+  }
+
+  // A summary update on a structured estimate must keep tpe_estimate_items in
+  // sync with the exact same edit, as part of the same save. It used to be
+  // synced by a client-computed, partial per-row UPDATE matched by
+  // display_order — which never inserted a row for an added line item and
+  // never deleted a row for a removed one, leaving stale rows behind after a
+  // delete and silently dropping additions. Structured items are now
+  // regenerated wholesale from the markdown actually being saved, through the
+  // same parse/convert pipeline generation already uses (parseSummary ->
+  // parsedToItems -> draftToItemRow), so the two representations cannot
+  // drift: there is only one input for both.
+  const isSummaryUpdate = typeof updateFields.summary === "string";
+
+  if (isSummaryUpdate) {
+    const { data: existing, error: lookupError } = await supabaseAdmin
+      .from("tpe_estimates")
+      .select("id, pricing_source")
+      .eq("id", estimateId)
+      .eq("business_id", business.id)
+      .maybeSingle();
+
+    if (lookupError) return applyTo(NextResponse.json({ error: lookupError.message }, { status: 500 }));
+    if (!existing) {
+      return applyTo(NextResponse.json({ error: "Estimate not found or access denied" }, { status: 404 }));
+    }
+
+    if (existing.pricing_source === "structured") {
+      const plan = buildStructuredItemsSyncPlan(updateFields.summary as string, estimateId);
+
+      if (!plan.subtotalsMatch) {
+        console.error("[api/estimates] structured/markdown subtotal mismatch while saving, refusing", {
+          estimateId,
+          markdownSubtotal: plan.markdownSubtotal,
+          structuredSubtotal: plan.structuredSubtotal,
+        });
+        return applyTo(
+          NextResponse.json({ error: "Could not save: pricing did not compute consistently" }, { status: 500 })
+        );
+      }
+
+      // Replace, don't reconcile: deleting every existing row before
+      // inserting the freshly computed set is what guarantees no row from a
+      // deleted line item, and no missing row for an added one, can survive
+      // this save. This runs before the estimate row itself is touched, so a
+      // failure here leaves the estimate exactly as it was — old summary,
+      // old items, still mutually consistent — rather than a half-applied
+      // edit. (Supabase's REST API cannot span this delete/insert and the
+      // update below in one transaction; sequencing the riskier multi-row
+      // step first, before anything is written to tpe_estimates, is the
+      // smallest available way to keep a failure here from ever landing a
+      // half-applied edit. See HANDOFF.md for the residual, much narrower
+      // risk this does not eliminate.)
+      const { error: deleteError } = await supabaseAdmin
+        .from("tpe_estimate_items")
+        .delete()
+        .eq("estimate_id", estimateId);
+      if (deleteError) return applyTo(NextResponse.json({ error: deleteError.message }, { status: 500 }));
+
+      if (plan.rows.length > 0) {
+        const { error: insertError } = await supabaseAdmin.from("tpe_estimate_items").insert(plan.rows);
+        if (insertError) return applyTo(NextResponse.json({ error: insertError.message }, { status: 500 }));
+      }
+    }
   }
 
   const { data: updated, error } = await supabaseAdmin
     .from("tpe_estimates")
     .update(updateFields)
-    .eq("id", body.id)
+    .eq("id", estimateId)
     .eq("business_id", business.id)
     .select("id");
 
@@ -153,23 +182,6 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
 
   if (!updated || updated.length === 0) {
     return applyTo(NextResponse.json({ error: "Estimate not found or access denied" }, { status: 404 }));
-  }
-
-  if (structuredItems) {
-    for (const item of structuredItems) {
-      const { error: itemError } = await supabaseAdmin
-        .from("tpe_estimate_items")
-        .update({
-          description: item.description,
-          quantity: item.quantity,
-          unit: item.unit,
-          unit_price: item.unit_price,
-          line_total: item.line_total,
-        })
-        .eq("estimate_id", body.id)
-        .eq("display_order", item.display_order);
-      if (itemError) return applyTo(NextResponse.json({ error: itemError.message }, { status: 500 }));
-    }
   }
 
   return applyTo(NextResponse.json({ success: true }));

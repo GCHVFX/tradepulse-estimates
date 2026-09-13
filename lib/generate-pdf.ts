@@ -249,6 +249,12 @@ export async function generateEstimatePDF(
 
     if (/^#\s/.test(trimmed)) continue;
 
+    // A markdown link reference definition carrying the estimate's own
+    // deposit rule (see formatDepositRuleMarker in lib/estimate-summary.ts).
+    // Every real markdown renderer consumes this silently; this renderer
+    // reads lines by hand, so it needs its own explicit skip.
+    if (/^\[deposit-rule\]:/i.test(trimmed)) continue;
+
     if (/^##\s/.test(trimmed)) {
       y += 4;
       checkBreak(12);

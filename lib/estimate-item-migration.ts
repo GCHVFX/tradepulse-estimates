@@ -15,6 +15,7 @@ import { assignGroupLabel } from "./estimate-groups";
 import { estimateCurrencyOf } from "./currency-db";
 import {
   parsedToItems,
+  calculateItemsSubtotal,
   validateConversionTotals,
   type EstimateItemDraft,
   type ConversionValidation,
@@ -186,6 +187,54 @@ export function draftToItemRow(
     customer_visible: true,
     display_order: draft.sortOrder,
     taxable: true,
+  };
+}
+
+// ── Post-generation edit sync ────────────────────────────────────────────────
+//
+// Once an estimate is structured, a supported line-item edit (quantity,
+// price, add, delete) must keep tpe_estimate_items matching the markdown it
+// was edited alongside -- see app/api/estimates/route.ts, the only caller.
+// Previously the two could drift: the editor sent a client-computed item
+// list matched to existing rows by display_order, which never inserted a
+// row for an added item and never deleted one for a removed item, leaving
+// stale rows behind after a delete. This regenerates the full row set from
+// the exact markdown being saved, through the same parse/convert pipeline
+// generation already uses, so there is only one input for both
+// representations and they cannot independently drift.
+
+export type StructuredItemUpsertRow = EstimateItemRowPayload & { estimate_id: string };
+
+export interface StructuredItemsSyncPlan {
+  /** The complete new row set. Replace, not merge: every existing row for
+   *  this estimate is meant to be deleted before these are inserted, so a
+   *  removed line item leaves no orphan and an added one is not silently
+   *  dropped. */
+  rows: StructuredItemUpsertRow[];
+  markdownSubtotal: number;
+  structuredSubtotal: number;
+  /** False only if this mapping has a bug: both numbers are derived from the
+   *  exact same parsed line items a moment apart. The caller should refuse
+   *  the save rather than persist a mismatch it can already see coming. */
+  subtotalsMatch: boolean;
+}
+
+export function buildStructuredItemsSyncPlan(summary: string, estimateId: string): StructuredItemsSyncPlan {
+  const parsed = parseSummary(summary);
+  const drafts = parsedToItems(parsed);
+  const rows: StructuredItemUpsertRow[] = drafts.map((draft) => ({
+    estimate_id: estimateId,
+    ...draftToItemRow(draft, { assignGroups: true }),
+  }));
+
+  const markdownSubtotal = computeTotals(parsed.lineItems, parsed.taxRate).subtotal;
+  const structuredSubtotal = calculateItemsSubtotal(drafts);
+
+  return {
+    rows,
+    markdownSubtotal,
+    structuredSubtotal,
+    subtotalsMatch: Math.abs(markdownSubtotal - structuredSubtotal) <= 0.01,
   };
 }
 

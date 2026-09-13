@@ -49,7 +49,25 @@ export interface ParsedSummary {
   preamble: string;
   scopeItems: ScopeItem[];
   lineItems: LineItem[];
+  /**
+   * The percent actually applied right now. For an estimate that carries a
+   * deposit-rule marker (see DepositRule below), this is always freshly
+   * resolved from the current total, not read from the visible "Deposit
+   * required (X%)" wording -- that wording is cosmetic output only. For an
+   * estimate predating the deposit-rule marker (depositRule undefined
+   * below), this is the legacy value recovered from that same wording, kept
+   * exactly as before so an old estimate's rendering does not change.
+   */
   depositPercent: number;
+  /**
+   * The estimate's own deposit rule, snapshotted at generation time. `null`
+   * means "this estimate has no deposit rule" (still a known, deliberate
+   * state). `undefined` means no deposit-rule marker was found at all --
+   * an estimate generated before this existed, or a hand-built markdown
+   * string in a test -- so depositPercent above is the legacy value instead
+   * of something resolved from this field.
+   */
+  depositRule: DepositRule | null | undefined;
   taxLabel: string;
   taxRate: number;
   beforePricingSections: BeforeSection[];
@@ -179,6 +197,8 @@ export function parseSummary(rawSummary: string): ParsedSummary {
   let scopeItems: ScopeItem[] = [];
   let lineItems: LineItem[] = [];
   let depositPercent = 0;
+  let depositRule: DepositRule | null | undefined = undefined;
+  let sawDepositRuleMarker = false;
   let taxLabel = 'GST';
   let taxRate = 5;
   const beforePricingSections: BeforeSection[] = [];
@@ -248,6 +268,21 @@ export function parseSummary(rawSummary: string): ParsedSummary {
           taxLabel = tm[1].replace(/[a-zA-Z]+/g, w => w.toUpperCase()).trim();
           taxRate = parseFloat(tm[2]);
         }
+        const ruleMatch = parseDepositRuleMarker(line);
+        if (ruleMatch !== undefined) {
+          sawDepositRuleMarker = true;
+          depositRule = ruleMatch;
+        }
+      }
+      // An estimate carrying a deposit-rule marker never trusts the visible
+      // "Deposit required (X%)" / "No deposit required" wording above for
+      // the decision or the percentage -- that wording is regenerated from
+      // this same resolution every time the estimate is displayed or saved,
+      // so it can never be stale, whether or not the total has changed since
+      // the marker was written (e.g. a line-item edit after generation).
+      if (sawDepositRuleMarker) {
+        const { total } = computeTotals(lineItems, taxRate);
+        depositPercent = resolveDepositPercent(total, depositRule);
       }
     } else {
       if (seenPricing) {
@@ -274,7 +309,7 @@ export function parseSummary(rawSummary: string): ParsedSummary {
     }
   }
 
-  return { preamble, scopeItems, lineItems, depositPercent, taxLabel, taxRate, beforePricingSections, afterPricingSections };
+  return { preamble, scopeItems, lineItems, depositPercent, depositRule, taxLabel, taxRate, beforePricingSections, afterPricingSections };
 }
 
 // ── Section builders ──────────────────────────────────────────────────────────
@@ -330,10 +365,181 @@ function beforeBlock(s: BeforeSection): string {
   return `## ${s.heading}\n${sectionContent}`;
 }
 
-function pricingBlock(lineItems: LineItem[], depositPercent: number, taxLabel: string, taxRate: number, currency: Currency): string {
+// ── Deterministic deposit ──────────────────────────────────────────────────
+//
+// Whether a deposit applies, and how much it is, must never come from the
+// model's own writing. The model may describe the job however it likes;
+// these two functions are the one place that decides the deposit, from the
+// business's actual Rates settings and this estimate's own authoritative
+// total (computeTotals().total, the same total every other calculation in
+// this file already treats as authoritative -- no second total is invented
+// here).
+
+export interface DepositRule {
+  /** Whole-number percent, e.g. 25 for 25%. */
+  percent: number;
+  /** A deposit applies only when the total is strictly greater than this
+   *  (the business setting reads "required over $X", not "at or over"). */
+  thresholdDollars: number;
+}
+
+const DEPOSIT_RULE_MARKER_RE = /^\[deposit-rule\]:\s*#\s*\(([^)]*)\)\s*$/i;
+
+/**
+ * The estimate's own deposit rule, carried inside the summary text as a
+ * markdown link reference definition -- a construct every CommonMark-
+ * compliant renderer (including the react-markdown pipeline this app
+ * already uses) parses and consumes silently, never as visible output, with
+ * no plugin or renderer change required. The hand-rolled PDF line renderer
+ * (lib/generate-pdf.ts) does not go through a markdown parser, so it has its
+ * own explicit skip for this exact line shape.
+ *
+ * This is not a second calculation path: it exists so the rule survives
+ * every edit (parseSummary -> serializeSummary already round-trips the rest
+ * of the document on every save), so the deposit can be re-resolved from
+ * the estimate's *current* total after a line-item edit changes it, without
+ * needing a new persisted column.
+ */
+function formatDepositRuleMarker(rule: DepositRule | null): string {
+  return `[deposit-rule]: # (${rule ? `${rule.percent}:${rule.thresholdDollars}` : 'none'})`;
+}
+
+/** undefined = not a deposit-rule marker line at all. */
+function parseDepositRuleMarker(line: string): DepositRule | null | undefined {
+  const m = line.match(DEPOSIT_RULE_MARKER_RE);
+  if (!m) return undefined;
+  const raw = m[1].trim();
+  if (raw.toLowerCase() === 'none') return null;
+  const [percentRaw, thresholdRaw] = raw.split(':');
+  const percent = parseFloat(percentRaw);
+  const thresholdDollars = parseFloat(thresholdRaw);
+  return Number.isFinite(percent) && Number.isFinite(thresholdDollars)
+    ? { percent, thresholdDollars }
+    : null;
+}
+
+/**
+ * 0 means no deposit. A rule with no percent or no threshold configured
+ * never applies -- the same "both must be set" check the generation prompt
+ * already uses when it decides what to tell the model.
+ */
+export function resolveDepositPercent(total: number, rule: DepositRule | null | undefined): number {
+  if (!rule || !rule.percent || !rule.thresholdDollars) return 0;
+  return total > rule.thresholdDollars ? rule.percent : 0;
+}
+
+/**
+ * Deposit and balance for a given total and (already-decided) percent,
+ * rounded to the cent rather than the whole dollar: 25% of $2,990 is
+ * $747.50, not $748. `total * depositPercent` is already in cents (the
+ * percent-to-fraction /100 and dollars-to-cents *100 cancel out), so
+ * rounding that product before dividing by 100 avoids floating-point drift.
+ */
+export function computeDepositAndBalance(
+  total: number,
+  depositPercent: number
+): { deposit: number; balance: number } {
+  if (!depositPercent) return { deposit: 0, balance: total };
+  const deposit = Math.round(total * depositPercent) / 100;
+  return { deposit, balance: total - deposit };
+}
+
+// Any sentence mentioning "deposit" is model-written and untrustworthy for
+// the deposit decision or amount -- removed outright rather than repaired,
+// since the model's phrasing is otherwise unconstrained.
+function normalizePaymentTermsDeposit(
+  content: string,
+  depositPercent: number,
+  deposit: number,
+  currency: Currency
+): string {
+  const sentences = content
+    .split(/(?<=[.!?])\s+/)
+    .map(s => s.trim())
+    .filter(Boolean)
+    .filter(s => !/deposit/i.test(s));
+
+  const canonical =
+    depositPercent > 0
+      ? `A deposit of ${formatMoney(deposit, currency)} (${depositPercent}% of the total) is required before work begins.`
+      : 'No deposit is required.';
+
+  return [canonical, ...sentences].join(' ').trim();
+}
+
+/**
+ * Rewrites afterPricingSections' Payment Terms entry, if present, so its
+ * deposit sentence agrees with an already-resolved percent/amount. Exported
+ * so both generation (applyDeterministicDeposit, on the model's raw Payment
+ * Terms text) and the editor (after every save that could change the
+ * resolved deposit) reconcile Payment Terms the same one way -- they cannot
+ * drift apart from each other by each doing their own version of this.
+ */
+export function reconcilePaymentTermsDeposit(
+  afterPricingSections: AfterSection[],
+  depositPercent: number,
+  deposit: number,
+  currency: Currency
+): AfterSection[] {
+  return afterPricingSections.map(section =>
+    /^payment terms$/i.test(section.heading.trim())
+      ? { ...section, content: normalizePaymentTermsDeposit(section.content, depositPercent, deposit, currency) }
+      : section
+  );
+}
+
+/**
+ * Rewrites a freshly generated estimate's Pricing Summary deposit row and
+ * Payment Terms deposit sentence so both agree with the business's actual
+ * deposit rule, regardless of what the model wrote for either one. Called
+ * once, right after generation, before the estimate is first saved.
+ *
+ * Everything else in the document -- scope, line items, assumptions, the
+ * rest of Payment Terms, Notes -- round-trips through parseSummary /
+ * serializeSummary unchanged: the same round trip every line-item edit
+ * already goes through, so no new formatting behaviour is introduced here.
+ */
+export function applyDeterministicDeposit(
+  rawSummary: string,
+  currency: Currency,
+  rule: DepositRule | null | undefined
+): string {
+  const parsed = parseSummary(rawSummary);
+  const { total } = computeTotals(parsed.lineItems, parsed.taxRate);
+  const depositPercent = resolveDepositPercent(total, rule);
+  const { deposit } = computeDepositAndBalance(total, depositPercent);
+
+  const afterPricingSections = reconcilePaymentTermsDeposit(
+    parsed.afterPricingSections,
+    depositPercent,
+    deposit,
+    currency
+  );
+
+  return serializeSummary(
+    parsed.preamble,
+    parsed.scopeItems,
+    parsed.lineItems,
+    depositPercent,
+    parsed.beforePricingSections,
+    afterPricingSections,
+    parsed.taxLabel,
+    parsed.taxRate,
+    currency,
+    rule
+  );
+}
+
+function pricingBlock(
+  lineItems: LineItem[],
+  depositPercent: number,
+  taxLabel: string,
+  taxRate: number,
+  currency: Currency,
+  depositRule?: DepositRule | null
+): string {
   const { subtotal, tax, total } = computeTotals(lineItems, taxRate);
-  const deposit = Math.round((total * depositPercent) / 100);
-  const balance = total - deposit;
+  const { deposit, balance } = computeDepositAndBalance(total, depositPercent);
 
   const table = [
     '| | |',
@@ -343,10 +549,17 @@ function pricingBlock(lineItems: LineItem[], depositPercent: number, taxLabel: s
     `| **Total** | **${formatDollars(total, currency)}** |`,
     depositPercent === 0
       ? '| No deposit required | |'
-      : `| Deposit required (${depositPercent}%) | ${formatDollars(deposit, currency)} |`,
-    `| Balance on completion | ${depositPercent === 0 ? formatDollars(total, currency) : formatDollars(balance, currency)} |`,
+      // Deposit is a percentage of the total, so it is not generally a whole
+      // dollar amount (25% of $2,990 is $747.50) -- shown to the cent, unlike
+      // Subtotal/Tax/Total above, which stay whole-dollar as before.
+      : `| Deposit required (${depositPercent}%) | ${formatMoney(deposit, currency)} |`,
+    `| Balance on completion | ${depositPercent === 0 ? formatDollars(total, currency) : formatMoney(balance, currency)} |`,
   ].join('\n');
-  return `## Pricing Summary\n${table}`;
+  const block = `## Pricing Summary\n${table}`;
+  // depositRule is only appended when the caller actually knows it (an
+  // estimate that predates this feature has none to preserve, and must not
+  // gain one just by being re-rendered).
+  return depositRule !== undefined ? `${block}\n${formatDepositRuleMarker(depositRule)}` : block;
 }
 
 // ── Serializer (storage order: assumptions before pricing) ───────────────────
@@ -361,13 +574,14 @@ export function serializeSummary(
   taxLabel = 'GST',
   taxRate = 5,
   currency: Currency,
+  depositRule?: DepositRule | null,
 ): string {
   const parts: string[] = [];
   if (preamble) parts.push(syncPreambleTotal(preamble, lineItems, taxRate, currency));
   parts.push(scopeBlock(scopeItems));
   parts.push(lineItemsBlock(lineItems, currency));
   for (const s of beforePricingSections) parts.push(beforeBlock(s));
-  parts.push(pricingBlock(lineItems, depositPercent, taxLabel, taxRate, currency));
+  parts.push(pricingBlock(lineItems, depositPercent, taxLabel, taxRate, currency, depositRule));
   for (const s of afterPricingSections) parts.push(`## ${s.heading}\n${s.content}`);
   return parts.join('\n\n');
 }
@@ -431,7 +645,10 @@ function formatParsedEstimateForDisplay(
   parts.push(scopeBlock(p.scopeItems));
   parts.push(lineItemsDisplayBlock ?? displayLineItemsBlock(lineItems, currency));
   for (const s of p.beforePricingSections) parts.push(beforeBlock(s));
-  parts.push(pricingBlock(lineItems, p.depositPercent, p.taxLabel, p.taxRate, currency));
+  // p.depositRule, not a fresh lookup: this re-render must not let a later
+  // change to the business's Rates settings retroactively alter an estimate
+  // that was already generated (same snapshot rule as currency and tax).
+  parts.push(pricingBlock(lineItems, p.depositPercent, p.taxLabel, p.taxRate, currency, p.depositRule));
   for (const s of p.afterPricingSections) parts.push(`## ${s.heading}\n${s.content}`);
   return parts.join('\n\n');
 }

@@ -223,7 +223,10 @@ test("grouped pricing combines work packages in first-appearance order without i
   expect(view.summary).not.toContain("Plumbing labour");
   expect(view.summary).not.toContain("Copper fittings");
   expect(view.summary).toContain("| **Total** | **CA$315** |");
-  expect(view.summary).toContain("| Deposit required (20%) | CA$63 |");
+  // Deposit is a percentage of the total and shown to the cent (unlike
+  // Subtotal/Tax/Total above), so an exact-dollar result like 20% of $315
+  // still renders with two decimals: CA$63.00, not CA$63.
+  expect(view.summary).toContain("| Deposit required (20%) | CA$63.00 |");
   expect(view.summary).toContain("Existing services are usable.");
   expect(view.summary).toContain("Payment is due on completion.");
   expect(view.summary).toContain("Permit timing depends on the authority having jurisdiction.");

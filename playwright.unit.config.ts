@@ -9,6 +9,7 @@ export default defineConfig({
   testDir: "./tests/smoke",
   testMatch: [
     "estimate-pricing-mode.spec.ts",
+    "estimate-deposit.spec.ts",
     "estimate-grouped-pricing.spec.ts",
     "estimate-item-migration.spec.ts",
     "estimate-items-conversion.spec.ts",

@@ -13,6 +13,10 @@ import {
   parseSummary,
   serializeSummary,
   withComputedCost,
+  computeDepositAndBalance,
+  resolveDepositPercent,
+  computeTotals,
+  reconcilePaymentTermsDeposit,
 } from '@/lib/estimate-summary';
 import type {
   ScopeItem,
@@ -105,7 +109,13 @@ export function EditableEstimateBody({
   currency: Currency;
 }) {
   const parsed = useMemo(() => parseSummary(summary), [summary]);
-  const { depositPercent } = parsed;
+  // The estimate's own deposit rule (percent + threshold), preserved as-is
+  // across edits -- editing line items must never change the terms
+  // themselves, only how they resolve against the current total. undefined
+  // means this estimate predates the deposit-rule marker, in which case
+  // depositPercent below falls back to the legacy static value so an old
+  // estimate's rendering does not change.
+  const { depositRule } = parsed;
 
   const [preambleText, setPreambleText] = useState<string>(() => parsed.preamble);
   const [photoNotesText, setPhotoNotesText] = useState<string>(() => {
@@ -172,8 +182,14 @@ export function EditableEstimateBody({
   const subtotal = lineItems.reduce((sum, i) => sum + lineItemCost(i), 0);
   const tax = Math.round(subtotal * (taxRate / 100));
   const total = subtotal + tax;
-  const deposit = Math.round((total * depositPercent) / 100);
-  const balance = total - deposit;
+  // Re-resolved on every render against the *current* total, so a line-item
+  // edit that pushes the total across the deposit threshold (either way)
+  // shows the correct deposit immediately, without a save/reload. An
+  // estimate with no deposit-rule marker (depositRule undefined) has no
+  // threshold to re-evaluate against, so it keeps its original static value.
+  const depositPercent =
+    depositRule !== undefined ? resolveDepositPercent(total, depositRule) : parsed.depositPercent;
+  const { deposit, balance } = computeDepositAndBalance(total, depositPercent);
 
   useEffect(() => {
     window.dispatchEvent(new CustomEvent('estimate-total-change', { detail: total }));
@@ -193,36 +209,57 @@ export function EditableEstimateBody({
       timerRef.current = null;
       setToastVisible(false);
       setUndo(null);
+      // Resolved from nextLine/nextTaxRate -- the values actually being
+      // saved -- not the outer depositPercent, which reflects whatever
+      // lineItems/taxRate were current when this render happened. Using the
+      // outer value here would persist a one-edit-stale deposit for exactly
+      // the edit that changes the total, since setLineItems/setTaxRate have
+      // not re-rendered yet at the point this timer is scheduled.
+      const nextTotal = computeTotals(nextLine, nextTaxRate ?? taxRate).total;
+      const nextDepositPercent =
+        depositRule !== undefined ? resolveDepositPercent(nextTotal, depositRule) : depositPercent;
+      // Payment Terms must never fall behind the Pricing Summary it sits
+      // next to: an edit that changes the resolved deposit (crossing the
+      // threshold either way, or just changing the amount) re-states it in
+      // Payment Terms the same way generation does. Estimates with no
+      // deposit-rule marker (depositRule undefined) are left exactly as the
+      // contractor wrote or kept them, same as before this existed.
+      const reconciledAfter =
+        depositRule !== undefined
+          ? reconcilePaymentTermsDeposit(
+              nextAfter,
+              nextDepositPercent,
+              computeDepositAndBalance(nextTotal, nextDepositPercent).deposit,
+              currency
+            )
+          : nextAfter;
       const newSummary = serializeSummary(
         nextPreamble,
         nextScope,
         nextLine,
-        depositPercent,
+        nextDepositPercent,
         nextBefore,
-        nextAfter,
+        reconciledAfter,
         nextTaxLabel ?? taxLabel,
         nextTaxRate ?? taxRate,
         currency,
+        depositRule,
       );
-      const structuredItems = structuredPricing
-        ? nextLine.map((item, displayOrder) => {
-            const quantityBased = isQuantityItem(item);
-            return {
-              description: item.label,
-              quantity: quantityBased ? parseQuantity(item.quantity) : 1,
-              unit: quantityBased ? item.unit?.trim() || null : null,
-              unit_price: quantityBased ? parseCost(item.rate ?? '') : parseCost(item.cost),
-              line_total: lineItemCost(item),
-              display_order: displayOrder,
-            };
-          })
-        : undefined;
+      // No structured_items payload: the server derives tpe_estimate_items
+      // straight from this same newSummary text (parseSummary ->
+      // parsedToItems -> draftToItemRow) for a structured estimate, so the
+      // two representations are generated from one input and cannot drift.
+      // A separate client-computed item list used to be sent here, matched
+      // to existing rows by display_order on the server -- it never
+      // inserted a row for an added item or deleted one for a removed item,
+      // which is what let markdown and tpe_estimate_items disagree after a
+      // delete or an add.
       setSaveStatus('saving');
       try {
         const res = await fetch('/api/estimates', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: estimateId, summary: newSummary, structured_items: structuredItems }),
+          body: JSON.stringify({ id: estimateId, summary: newSummary }),
         });
         if (!res.ok) throw new Error('Save failed');
         setSaveStatus('saved');
@@ -825,13 +862,13 @@ export function EditableEstimateBody({
                 {depositPercent === 0 ? 'No deposit required' : `Deposit required (${depositPercent}%)`}
               </td>
               <td className="px-3 py-2.5 border-t border-zinc-200 text-right text-zinc-700">
-                {depositPercent === 0 ? '' : formatDollars(deposit, currency)}
+                {depositPercent === 0 ? '' : formatMoney(deposit, currency)}
               </td>
             </tr>
             <tr>
               <td className="px-3 py-2.5 border-t border-zinc-200 text-zinc-700">Balance on completion</td>
               <td className="px-3 py-2.5 border-t border-zinc-200 text-right text-zinc-700">
-                {depositPercent === 0 ? formatDollars(total, currency) : formatDollars(balance, currency)}
+                {depositPercent === 0 ? formatDollars(total, currency) : formatMoney(balance, currency)}
               </td>
             </tr>
           </tbody>

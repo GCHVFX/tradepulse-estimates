@@ -19,15 +19,16 @@ test("an edited estimate copy keeps its changed description and price", () => {
 });
 
 test("structured estimate edits use estimate-item storage and do not update the price book", () => {
-  const editor = readFileSync(path.join(root, "app/components/editable-estimate-body.tsx"), "utf8");
   const estimateRoute = readFileSync(path.join(root, "app/api/estimates/route.ts"), "utf8");
   const pricingServer = readFileSync(path.join(root, "lib/estimate-pricing-server.ts"), "utf8");
 
-  expect(editor).toContain("structured_items: structuredItems");
-  expect(editor).toContain("description: item.label");
+  // The editor no longer computes or sends a structured item list itself
+  // (see the Finding-2 fix): the server derives tpe_estimate_items straight
+  // from the same summary text it saves, so the two representations have
+  // one input and cannot drift the way a client-computed, per-row-matched
+  // update once could.
+  expect(estimateRoute).toContain("buildStructuredItemsSyncPlan");
   expect(estimateRoute).toContain('.from("tpe_estimate_items")');
-  expect(estimateRoute).toContain("description: item.description");
-  expect(estimateRoute).toContain("unit_price: item.unit_price");
   expect(estimateRoute).not.toContain("tpe_pricebook_items");
   expect(pricingServer).toContain("loadStructuredPricingItems");
 });

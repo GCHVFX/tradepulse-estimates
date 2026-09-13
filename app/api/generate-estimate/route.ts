@@ -8,6 +8,7 @@ import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
 import { convertEstimateToStructuredItems } from "@/lib/estimate-item-migration";
 import { notifyInternalError } from "@/lib/notify-error";
 import { estimateCurrencyPatch, readBusinessEstimateCurrency } from "@/lib/currency-db";
+import { applyDeterministicDeposit, type DepositRule } from "@/lib/estimate-summary";
 import { spellingInstructionForCurrency, type Currency } from "@/lib/currency";
 import { hasSubscriptionAccess, SUBSCRIPTION_ACCESS_COLUMNS } from "@/lib/subscription-access";
 import {
@@ -268,11 +269,42 @@ export async function POST(request: NextRequest) {
               });
             const title = titleLine?.replace(/^#\s*/, "").trim() ?? "Untitled Estimate";
 
+            // Whether a deposit applies, and how much, must come from the
+            // business's own Rates settings, never from the model's Pricing
+            // Summary / Payment Terms text -- the model has repeatedly
+            // written a "No deposit required" row alongside Payment Terms
+            // prose stating a specific deposit dollar amount, contradicting
+            // itself. This rewrites both to agree, deterministically, before
+            // the estimate is ever saved.
+            //
+            // A normalization failure must NOT fall back to saving the
+            // model's raw, potentially self-contradictory deposit text as if
+            // it were authoritative -- that would defeat the entire point.
+            // It is deliberately left uncaught here: it propagates to this
+            // stream's own top-level catch below, which is the existing,
+            // already-correct behaviour for any other generation failure --
+            // the client gets the standard error message, nothing is
+            // inserted into the database, and the error is logged.
+            const depositRule: DepositRule | null =
+              business.deposit_percent && business.deposit_threshold
+                ? { percent: business.deposit_percent, thresholdDollars: business.deposit_threshold }
+                : null;
+            let normalizedSummary: string;
+            try {
+              normalizedSummary = applyDeterministicDeposit(fullText, estimateCurrency, depositRule);
+            } catch (depositErr) {
+              throw new Error(
+                `Deterministic deposit normalization failed, refusing to save unverified deposit terms: ${
+                  depositErr instanceof Error ? depositErr.message : String(depositErr)
+                }`
+              );
+            }
+
             const { data, error } = await supabaseAdmin
               .from("tpe_estimates")
               .insert({
                 title,
-                summary: fullText,
+                summary: normalizedSummary,
                 status: "draft",
                 source: "ai_generated",
                 business_id: business.id,
