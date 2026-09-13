@@ -1,12 +1,51 @@
 # TradePulse handoff
 
-Updated: 2026-09-12 22:25 PT (Finalized outreach click metadata: migration applied to production, types regenerated, temporary cast removed, committed locally as `Track outreach click metadata`; not pushed or deployed.)
+Updated: 2026-09-12 22:46 PT (Pushed and deployed outreach click metadata (commit `a594292`, Vercel `dpl_Ba6sxWnwGBFmohhSBV5VSX5k98aT`, READY); one controlled production click confirmed geo/UA capture end to end; authenticated estimate regression still outstanding, no safe account available.)
 
-## Outreach click tracking: what can be learned, and future-click metadata (2026-09-12 21:40 PT, finalized 22:25 PT)
+## Outreach click tracking: what can be learned, and future-click metadata (2026-09-12 21:40 PT, finalized 22:25 PT, pushed/deployed/verified 22:46 PT)
 
-**Status:** committed locally (commit `Track outreach click metadata`),
-migration **applied to production**, `lib/database.types.ts` regenerated,
-temporary insert cast removed. **Not pushed, not deployed.**
+**Status:** pushed to `origin/main` and deployed to production. Commit
+`a594292` ("Track outreach click metadata") is `HEAD` on both local `main`
+and `origin/main`. Vercel deployment `dpl_Ba6sxWnwGBFmohhSBV5VSX5k98aT`
+reached `READY`, deployed commit confirmed as `a594292`, aliased to
+`tradepulse-estimates.com`. No manual redeploy was triggered -- this was
+the normal push-triggered deployment.
+
+**Production verification (22:46 PT):**
+- Homepage: loads correctly, Starter card shows "3 AI photo estimates /
+  month" verbatim, Pro card's "AI Photo Estimates" feature and CA$59/CA$29
+  pricing intact, no visible layout regression.
+- Controlled outreach click: visited `https://tradepulse-estimates.com/r/CA2609A`
+  once in Chrome. Redirect landed on the canonical homepage, unchanged.
+  Exactly one new row appeared in `tpe_outreach_clicks`
+  (`id=5a5d3ae6-7dc1-4220-902a-84e51fa495e4`,
+  `clicked_at=2026-09-13 05:45:42.195216+00`,
+  `pacfic_standard=2026-09-12 22:45:42`, correctly the Vancouver-local
+  equivalent). Observed metadata: `country=CA`, `region=BC`, `city=Delta`,
+  `user_agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+  (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36`, `referrer=null`
+  (expected -- direct navigation to the link has no referring page). This
+  row is the reference example for a known human click from Greg's browser.
+  Three other `CA2609A` rows already existed from earlier the same day
+  (15:46, 14:47, 14:46 UTC), all with null metadata since they predate the
+  migration -- consistent with the "historical rows have no metadata"
+  finding above, not evidence of anything new.
+- Authenticated estimate regression (deposit/structured pricing/line-item
+  edit): **NOT TESTED.** No safe existing authenticated account was
+  available without either creating a new signup or reusing smoke-test
+  credentials outside their disposable-and-cleaned-up pattern, and this
+  task explicitly forbade creating a new signup for this verification.
+  Remains outstanding.
+
+**`pacfic_standard` schema drift:** confirmed still present, still
+untouched, still out of scope -- see the "Correction" note below for what
+it is.
+
+**Status (superseded text below -- true as of 22:25 PT, now pushed and
+deployed, see above):** committed locally (commit `Track outreach click
+metadata`), migration **applied to production**,
+`lib/database.types.ts` regenerated,
+temporary insert cast removed. Not pushed, not deployed at that point.
 
 **Finalize pass (22:25 PT):** applied
 `20260912190000_add_outreach_click_metadata.sql` to the production Supabase
@@ -166,11 +205,15 @@ are backfilled by design -- this data was never captured for them.
   arrives, building actual bot classification is a separate, deliberate task
   -- explicitly out of scope here, per instruction.
 
-**Exact next step (superseded, see the finalize pass above):** this
-paragraph originally said to commit, apply the migration, regenerate types,
-remove the cast, then push and deploy. Commit, migration, type regeneration,
-and cast removal are done, as recorded above. **Remaining:** review the
-final amended commit, then push and deploy.
+**Exact next step (superseded, see the push/deploy/verification pass at the
+top):** this paragraph originally said to commit, apply the migration,
+regenerate types, remove the cast, then push and deploy. All of that is
+done: pushed as commit `a594292`, deployed
+(`dpl_Ba6sxWnwGBFmohhSBV5VSX5k98aT`, READY), and verified in production
+(homepage + one controlled outreach click). **Remaining:** authenticated
+estimate regression (deposit/structured pricing/line-item edit) is still
+outstanding -- no safe existing account was available without creating a
+new signup, which was explicitly out of scope.
 
 ## Findings 4 and 5: stale homepage tests, Starter photo-estimate copy (2026-09-12 17:39 PT)
 
