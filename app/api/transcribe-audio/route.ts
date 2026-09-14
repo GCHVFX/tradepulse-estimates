@@ -25,10 +25,23 @@ function isRetryable(err: unknown): boolean {
   return err instanceof ApiError && (err.status === 429 || err.status >= 500);
 }
 
+// A stalled request (network hang, provider-side stall) previously had no
+// timeout at all: generateContent could just never resolve or reject, so the
+// retry loop never ran, the route never responded, and the client's fetch
+// (which has no timeout of its own) spun its loading state forever. Bounded
+// well under this route's `maxDuration = 60` so the function always sends a
+// real response instead of being killed mid-hang with none.
+const GENERATE_TIMEOUT_MS = 45_000;
+
 async function generateWithRetry(params: GenerateContentParameters) {
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      return await ai.models.generateContent(params);
+      return await Promise.race([
+        ai.models.generateContent(params),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Transcription request timed out")), GENERATE_TIMEOUT_MS)
+        ),
+      ]);
     } catch (err) {
       if (attempt === MAX_RETRIES || !isRetryable(err)) throw err;
       const delayMs = 500 * 2 ** attempt + Math.random() * 250;
