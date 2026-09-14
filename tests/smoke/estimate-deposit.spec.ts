@@ -96,13 +96,14 @@ test("consistency: Pricing Summary and Payment Terms agree on the deposit decisi
   const normalized = applyDeterministicDeposit(rawGeneratedSummary(), "cad", RULE_500_25);
 
   // Pricing Summary now states the deterministic deposit, to the cent.
-  expect(normalized).toContain("| Deposit required (25%) | CA$747.50 |");
+  // Bare $, not CA$: Deposit is an intermediate value, not the final Total.
+  expect(normalized).toContain("| Deposit required (25%) | $747.50 |");
   expect(normalized).not.toContain("No deposit required");
 
   // Payment Terms now states the same decision and amount, and the model's
   // own contradictory sentence ($852.60) is gone.
   expect(normalized).toContain(
-    "A deposit of CA$747.50 (25% of the total) is required before work begins."
+    "A deposit of $747.50 (25% of the total) is required before work begins."
   );
   expect(normalized).not.toContain("852.60");
 
@@ -178,8 +179,8 @@ test("edit above threshold: total changes from $2,990 to $2,000, deposit becomes
   const edited = simulateLineItemEdit(generated, "cad", 1905);
 
   expect(edited).toContain("| **Total** | **CA$2,000** |");
-  expect(edited).toContain("| Deposit required (25%) | CA$500.00 |");
-  expect(edited).toContain("A deposit of CA$500.00 (25% of the total) is required before work begins.");
+  expect(edited).toContain("| Deposit required (25%) | $500.00 |");
+  expect(edited).toContain("A deposit of $500.00 (25% of the total) is required before work begins.");
   expect(edited).not.toContain("747.50");
   expect(edited).not.toContain("852.60");
 
@@ -210,8 +211,8 @@ test("cross threshold again: total goes back above $500 after a dip below it, th
   const belowThreshold = simulateLineItemEdit(generated, "cad", 429); // total $450: no deposit
   const aboveAgain = simulateLineItemEdit(belowThreshold, "cad", 1905); // total $2,000: deposit again
 
-  expect(aboveAgain).toContain("| Deposit required (25%) | CA$500.00 |");
-  expect(aboveAgain).toContain("A deposit of CA$500.00 (25% of the total) is required before work begins.");
+  expect(aboveAgain).toContain("| Deposit required (25%) | $500.00 |");
+  expect(aboveAgain).toContain("A deposit of $500.00 (25% of the total) is required before work begins.");
   expect(aboveAgain).not.toContain("No deposit required");
 
   const parsed = parseSummary(aboveAgain);

@@ -84,8 +84,8 @@ export function parseCost(cost: string): number {
   return parseFloat(cost.replace(/(?:CA|US)?\$/g, '').replace(/[,*]/g, '')) || 0;
 }
 
-export function formatDollars(amount: number, currency: Currency): string {
-  return formatCurrency(amount, currency, { decimals: 0 });
+export function formatDollars(amount: number, currency: Currency, options: { bare?: boolean } = {}): string {
+  return formatCurrency(amount, currency, { decimals: 0, bare: options.bare });
 }
 
 export function parseQuantity(raw: string | undefined): number {
@@ -117,8 +117,8 @@ export function isQuantityItem(item: LineItem): boolean {
   return item.quantityBased === true;
 }
 
-export function formatMoney(amount: number, currency: Currency): string {
-  return formatCurrency(amount, currency, { decimals: 2 });
+export function formatMoney(amount: number, currency: Currency, options: { bare?: boolean } = {}): string {
+  return formatCurrency(amount, currency, { decimals: 2, bare: options.bare });
 }
 
 // Cost for a quantity-based item is always quantity x unit rate, never the
@@ -149,7 +149,7 @@ export function lineItemDisplayLabel(item: LineItem, currency: Currency): string
   if (!isQuantityItem(item)) return item.label;
   const quantity = (item.quantity ?? '').trim();
   const unit = (item.unit ?? '').trim();
-  const rate = formatMoney(parseCost(item.rate ?? ''), currency);
+  const rate = formatMoney(parseCost(item.rate ?? ''), currency, { bare: true });
   const detail = unit ? `${quantity} ${unit} @ ${rate}/${perUnit(unit)}` : `${quantity} @ ${rate}`;
   return `${item.label} (${detail})`;
 }
@@ -169,7 +169,7 @@ function syncPreambleTotal(preamble: string, lineItems: LineItem[], taxRate: num
   const { total } = computeTotals(lineItems, taxRate);
   return preamble.replace(
     /(^|\n)(?:Estimated total|Total):[^\n]*(\s*)$/i,
-    (_match, before: string, after: string) => `${before}Estimated total: ${formatDollars(total, currency)}${after}`,
+    (_match, before: string, after: string) => `${before}Estimated total: ${formatDollars(total, currency, { bare: true })}${after}`,
   );
 }
 
@@ -327,7 +327,7 @@ function displayLineItemsBlock(lineItems: LineItem[], currency: Currency): strin
   const table = [
     '| Item | Cost |',
     '|------|------|',
-    ...lineItems.map(i => `| ${lineItemDisplayLabel(i, currency)} | ${formatMoney(lineItemCost(i), currency)} |`),
+    ...lineItems.map(i => `| ${lineItemDisplayLabel(i, currency)} | ${formatMoney(lineItemCost(i), currency, { bare: true })} |`),
   ].join('\n');
   return `## Line Items\n${table}`;
 }
@@ -347,7 +347,7 @@ export function lineItemsBlock(lineItems: LineItem[], currency: Currency): strin
         '|------|-----|------|------|------|',
         ...lineItems.map(i =>
           isQuantityItem(i)
-            ? `| ${i.label} | ${i.quantity} | ${i.unit ?? ''} | ${i.rate} | ${formatMoney(lineItemCost(i), currency)} |`
+            ? `| ${i.label} | ${i.quantity} | ${i.unit ?? ''} | ${i.rate} | ${formatMoney(lineItemCost(i), currency, { bare: true })} |`
             : `| ${i.label} |  |  |  | ${i.cost} |`,
         ),
       ].join('\n')
@@ -461,7 +461,7 @@ function normalizePaymentTermsDeposit(
 
   const canonical =
     depositPercent > 0
-      ? `A deposit of ${formatMoney(deposit, currency)} (${depositPercent}% of the total) is required before work begins.`
+      ? `A deposit of ${formatMoney(deposit, currency, { bare: true })} (${depositPercent}% of the total) is required before work begins.`
       : 'No deposit is required.';
 
   return [canonical, ...sentences].join(' ').trim();
@@ -541,19 +541,23 @@ function pricingBlock(
   const { subtotal, tax, total } = computeTotals(lineItems, taxRate);
   const { deposit, balance } = computeDepositAndBalance(total, depositPercent);
 
+  // Only the Total row identifies the currency explicitly (CA$/US$). Every
+  // other row here is an intermediate value on the same estimate, so it
+  // renders bare ($) rather than repeating the code down the whole table --
+  // the Total row is the one place a customer needs it disambiguated.
   const table = [
     '| | |',
     '|---|---|',
-    `| Subtotal | ${formatDollars(subtotal, currency)} |`,
-    `| Tax (${taxLabel} ${parseFloat(taxRate.toFixed(2))}%) | ${formatDollars(tax, currency)} |`,
+    `| Subtotal | ${formatDollars(subtotal, currency, { bare: true })} |`,
+    `| Tax (${taxLabel} ${parseFloat(taxRate.toFixed(2))}%) | ${formatDollars(tax, currency, { bare: true })} |`,
     `| **Total** | **${formatDollars(total, currency)}** |`,
     depositPercent === 0
       ? '| No deposit required | |'
       // Deposit is a percentage of the total, so it is not generally a whole
       // dollar amount (25% of $2,990 is $747.50) -- shown to the cent, unlike
       // Subtotal/Tax/Total above, which stay whole-dollar as before.
-      : `| Deposit required (${depositPercent}%) | ${formatMoney(deposit, currency)} |`,
-    `| Balance on completion | ${depositPercent === 0 ? formatDollars(total, currency) : formatMoney(balance, currency)} |`,
+      : `| Deposit required (${depositPercent}%) | ${formatMoney(deposit, currency, { bare: true })} |`,
+    `| Balance on completion | ${depositPercent === 0 ? formatDollars(total, currency, { bare: true }) : formatMoney(balance, currency, { bare: true })} |`,
   ].join('\n');
   const block = `## Pricing Summary\n${table}`;
   // depositRule is only appended when the caller actually knows it (an

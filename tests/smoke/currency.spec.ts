@@ -131,8 +131,13 @@ test("amount parsing tolerates CA$ and US$ as well as bare $", () => {
 test("a USD estimate round-trips through serialize and parse without losing amounts", () => {
   const items = [{ id: "a", label: "Labour", cost: "US$285.00" }];
   const usd = serializeSummary("", [], items, 0, [], [], "GST", 5, "usd");
+  // The stored line item cell is kept verbatim (US$285.00, as typed); the
+  // Subtotal/Tax/Balance rows the serializer generates are intentionally
+  // bare, with only the Total row carrying the explicit code -- so this
+  // just confirms neither currency's code went missing, not that every
+  // amount repeats it.
   expect(usd).toContain("US$");
-  expect(usd).not.toMatch(/(?<![A-Z])\$\d/);
+  expect(usd).not.toContain("CA$");
 
   const reparsed = parseSummary(usd);
   const total = reparsed.lineItems.reduce((sum, i) => sum + parseCost(i.cost), 0);

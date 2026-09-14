@@ -46,21 +46,26 @@ const EMAIL_REMINDER = { ...REMINDER, customerName: "Dana" };
 
 // ── Editor / serializer ──────────────────────────────────────────────────────
 
-test("a USD estimate renders US$ everywhere and never CA$ or a bare $", () => {
+// Only the Pricing Summary's Total row identifies the currency explicitly
+// (CA$/US$) -- every other amount (line items, unit rates, Subtotal, Tax,
+// Deposit, Balance, the preamble's Estimated total) renders a bare $, so the
+// code is not repeated throughout the estimate. See lib/currency.ts's module
+// comment and formatCurrency's `bare` option.
+test("a USD estimate renders US$ exactly once (the Total row) and never CA$", () => {
   const usd = estimateSummary("usd");
 
-  expect(usd).toContain("US$");
+  expect(usd.match(/US\$/g)).toHaveLength(1);
   expect(usd).not.toContain("CA$");
-  // No bare "$" that is not preceded by CA or US.
-  expect(usd).not.toMatch(/(?<![A-Z])\$\d/);
+  // Every other amount is a bare $.
+  expect(usd).toMatch(/(?<![A-Z])\$\d/);
 });
 
-test("a CAD estimate is unchanged and renders CA$", () => {
+test("a CAD estimate renders CA$ exactly once (the Total row) and never US$", () => {
   const cad = estimateSummary("cad");
 
-  expect(cad).toContain("CA$");
+  expect(cad.match(/CA\$/g)).toHaveLength(1);
   expect(cad).not.toContain("US$");
-  expect(cad).not.toMatch(/(?<![A-Z])\$\d/);
+  expect(cad).toMatch(/(?<![A-Z])\$\d/);
 });
 
 test("the same figures produce the same numbers in both currencies", () => {
@@ -91,13 +96,17 @@ test("a USD estimate survives a serialize / parse / re-serialize round trip", ()
   expect(reserialized).not.toContain("CA$");
 });
 
-test("totals, tax, deposit, and balance all carry the estimate currency", () => {
+test("only Total carries the explicit currency; Subtotal, Tax, Deposit, and Balance are bare", () => {
   const usd = estimateSummary("usd");
-  for (const row of ["Subtotal", "Tax (GST 5%)", "**Total**", "Deposit required (20%)", "Balance on completion"]) {
+  for (const row of ["Subtotal", "Tax (GST 5%)", "Deposit required (20%)", "Balance on completion"]) {
     const line = usd.split("\n").find((l) => l.includes(row));
     expect(line, `${row} row must exist`).toBeTruthy();
-    expect(line!, `${row} must be in US$`).toContain("US$");
+    expect(line!, `${row} must not repeat the currency code`).not.toMatch(/CA\$|US\$/);
+    expect(line!, `${row} must still show a bare $ amount`).toMatch(/\$\d/);
   }
+  const totalLine = usd.split("\n").find((l) => l.includes("**Total**"));
+  expect(totalLine, "Total row must exist").toBeTruthy();
+  expect(totalLine!, "Total must be in US$").toContain("US$");
 });
 
 test("the individual formatters honour an explicit currency", () => {
@@ -105,6 +114,13 @@ test("the individual formatters honour an explicit currency", () => {
   expect(formatDollars(1000, "cad")).toBe("CA$1,000");
   expect(formatMoney(95, "usd")).toBe("US$95.00");
   expect(formatMoney(95, "cad")).toBe("CA$95.00");
+});
+
+test("`bare: true` renders a plain $ regardless of currency", () => {
+  expect(formatDollars(1000, "usd", { bare: true })).toBe("$1,000");
+  expect(formatDollars(1000, "cad", { bare: true })).toBe("$1,000");
+  expect(formatMoney(95, "usd", { bare: true })).toBe("$95.00");
+  expect(formatMoney(95, "cad", { bare: true })).toBe("$95.00");
 });
 
 // ── Payment reminders: SMS, email body, email HTML, preview ─────────────────
@@ -221,6 +237,13 @@ test("the share page and PDF label the currency outside the pricing table", () =
 // one shape repeated in four places: a formatter that declared
 // `currency: Currency = DEFAULT_CURRENCY` and a caller that had the snapshot
 // but did not pass it. The tests below fail on the pre-fix code.
+//
+// A later, deliberate change made every amount except the final Total row
+// render bare ($) rather than repeating CA$/US$ throughout -- see the `bare`
+// option on formatCurrency. expectOnly() below still enforces the one
+// invariant that actually matters (the *wrong* currency's code never
+// appears, and the *right* one appears at least once, at the Total), and no
+// longer forbids bare amounts, since those are now intentional.
 
 /** Every amount in `s`, with its currency prefix. */
 function amounts(s: string): string[] {
@@ -232,9 +255,7 @@ function expectOnly(currency: Currency, rendered: string, label: string) {
   const right = currency === "usd" ? "US$" : "CA$";
   expect(amounts(rendered).length, `${label}: must render amounts at all`).toBeGreaterThan(0);
   expect(rendered, `${label}: must not contain ${wrong}`).not.toContain(wrong);
-  expect(rendered, `${label}: must contain ${right}`).toContain(right);
-  // A bare "$1,200" is just as wrong as the other currency's prefix.
-  expect(rendered, `${label}: no unprefixed amounts`).not.toMatch(/(?<![A-Z])\$\d/);
+  expect(rendered, `${label}: must contain ${right} at least once (the Total row)`).toContain(right);
 }
 
 const PRICED_RECORD = {
@@ -283,7 +304,12 @@ test("a USD estimate renders US$ in detailed customer pricing", () => {
   }
 });
 
-test("a USD estimate renders US$ in grouped customer pricing", () => {
+test("grouped work-package totals render bare, regardless of currency", () => {
+  // This block only ever replaces the Line Items section; the estimate's
+  // one coded Total lives in the Pricing Summary block alongside it (see
+  // "the currency label and the amounts beside it always agree" below), so
+  // in isolation it must contain no currency code at all -- not even the
+  // right one.
   for (const currency of ["cad", "usd"] as const) {
     const block = renderGroupedLineItemsBlock(
       [
@@ -292,7 +318,8 @@ test("a USD estimate renders US$ in grouped customer pricing", () => {
       ],
       currency
     );
-    expectOnly(currency, block, `grouped line items (${currency})`);
+    expect(block, `grouped line items (${currency})`).not.toMatch(/CA\$|US\$/);
+    expect(block, `grouped line items (${currency}) still shows amounts`).toMatch(/\$\d/);
   }
 });
 

@@ -11,8 +11,12 @@
  *    in. It is a per-business setting, snapshotted onto each estimate at
  *    creation so historical estimates never move.
  *
- * Amounts are always rendered `CA$` or `US$`. A bare `$` is ambiguous to a
- * customer receiving a quote and is never emitted.
+ * Amounts are rendered `CA$` or `US$` by default. A bare `$` is ambiguous to
+ * a customer receiving a quote, so it is only ever emitted deliberately, via
+ * `formatCurrency`'s `bare` option -- currently just the estimate pricing
+ * display's intermediate values (line items, unit rates, Subtotal/Tax/
+ * Deposit/Balance), which repeat the code throughout an estimate while the
+ * one final grand total keeps the explicit `CA$`/`US$` prefix.
  */
 
 export const CURRENCIES = ["cad", "usd"] as const;
@@ -76,18 +80,24 @@ export function labourWord(currency: Currency): "labour" | "labor" {
  * `decimals` mirrors the two existing estimate formatters: whole dollars for
  * totals, two decimals for line items. Grouping is en-CA, which is identical
  * to en-US for these values; the prefix is what disambiguates, not the locale.
+ *
+ * `bare: true` renders a plain `$` instead of `CA$`/`US$`, for a value that
+ * sits alongside other amounts whose currency is already established
+ * elsewhere on the same document (see the module comment above). It changes
+ * nothing else -- decimals and grouping are identical either way.
  */
 export function formatCurrency(
   amount: number,
   currency: Currency,
-  options: { decimals?: 0 | 2 } = {}
+  options: { decimals?: 0 | 2; bare?: boolean } = {}
 ): string {
   const decimals = options.decimals ?? 0;
   const value =
     decimals === 0
       ? Math.round(amount).toLocaleString("en-CA")
       : amount.toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return `${currencyPrefix(currency)}${value}`;
+  const prefix = options.bare ? "$" : currencyPrefix(currency);
+  return `${prefix}${value}`;
 }
 
 // ── Subscription plan pricing ────────────────────────────────────────────────

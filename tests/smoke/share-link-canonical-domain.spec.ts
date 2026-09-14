@@ -108,7 +108,12 @@ test("an estimate share URL on the canonical domain renders the estimate", async
     await expect(page.getByRole("heading", { name: TITLE }).first()).toBeVisible();
     await expect(page.getByText(`Prepared for: ${CUSTOMER}`)).toBeVisible();
     await expect(page.getByText(LINE_ITEM)).toBeVisible();
-    await expect(page.getByText("CA$420.00").first()).toBeVisible();
+    // The share page re-renders Pricing Summary from the line items, not the
+    // literal seeded text, and only the Total row carries the explicit CA$
+    // (see lib/currency.ts's `bare` option) -- the line item cost itself
+    // renders as a bare $420.00, which is what actually proves this specific
+    // estimate's content made it onto the page.
+    await expect(page.getByText("$420.00").first()).toBeVisible();
     await expect(page.getByText("All amounts in CAD")).toBeVisible();
     await expect(page.getByText("Estimate not found.")).toHaveCount(0);
   } finally {

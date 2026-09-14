@@ -141,7 +141,7 @@ export function renderGroupedLineItemsBlock(
   const table = [
     "| Work package | Price |",
     "|------|------|",
-    ...groups.map((g) => `| ${g.group} | ${formatDollars(g.total, currency)} |`),
+    ...groups.map((g) => `| ${g.group} | ${formatDollars(g.total, currency, { bare: true })} |`),
   ].join("\n");
   return `## Line Items\n${table}`;
 }

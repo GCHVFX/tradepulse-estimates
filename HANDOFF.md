@@ -1,6 +1,74 @@
 # TradePulse handoff
 
-Updated: 2026-09-12 22:46 PT (Pushed and deployed outreach click metadata (commit `a594292`, Vercel `dpl_Ba6sxWnwGBFmohhSBV5VSX5k98aT`, READY); one controlled production click confirmed geo/UA capture end to end; authenticated estimate regression still outstanding, no safe account available.)
+Updated: 2026-09-14 07:54 PT (Estimate pricing display now shows a bare $ for every intermediate amount; only the final Total row keeps the explicit CA$/US$. Implemented and verified locally; not committed, not deployed.)
+
+## Estimate pricing: bare $ for intermediate amounts, CA$/US$ only at the Total (2026-09-14 07:54 PT)
+
+**Status:** implemented and verified locally on branch `main`. **Not
+committed, not deployed.**
+
+**What changed:** `formatCurrency` (`lib/currency.ts`) gained a `bare?:
+boolean` option -- `true` renders a plain `$` instead of `CA$`/`US$`, same
+decimals and grouping either way. `formatDollars`/`formatMoney`
+(`lib/estimate-summary.ts`) pass it through. Every intermediate pricing value
+in an estimate now renders bare: line item costs, unit rates ("6 hrs @
+$125.00"), the preamble's "Estimated total" line, Subtotal, Tax, Deposit
+required, Balance on completion, and (in the editor) the same rows'
+live-editing formatters. Only the Pricing Summary's **Total** row keeps the
+explicit `CA$`/`US$`, in both the markdown serializer/display path
+(`pricingBlock`, shared by storage, share page, and PDF) and the editor's own
+separate inline Pricing Summary table (`editable-estimate-body.tsx`, which
+duplicates that table in JSX rather than rendering the markdown). Grouped
+mode's per-work-package rows (`lib/estimate-groups.ts`) are bare too, same as
+a detailed line item.
+
+**One dead code path deliberately left coded, one made bare anyway:**
+`lineItemsBlock`'s wide storage-format cost cell for quantity items (dead --
+never used for display, always recomputed fresh via `lineItemCost()`) was
+switched to `bare: true` anyway, purely so the raw stored markdown doesn't
+carry an internally-inconsistent mix of bare and coded amounts.
+`withComputedCost`'s cost field, which is genuinely never read by anything
+(confirmed by its own code comment and by grepping every caller), was left
+coded -- changing it has literally zero effect either way, so it was not
+worth touching. `renderGroupedPlainText` (marked `INTERNAL ONLY` in its own
+doc comment, used only by its own test) was also left coded, since it is not
+a customer-facing surface.
+
+**Files changed:** `lib/currency.ts`, `lib/estimate-summary.ts`,
+`lib/estimate-groups.ts`, `app/components/editable-estimate-body.tsx`, plus
+five test files updated to match the deliberate new behaviour (not weakened --
+each still asserts the wrong currency's code never appears and the right one
+appears at the Total): `tests/smoke/currency-rendering.spec.ts`,
+`tests/smoke/currency.spec.ts`, `tests/smoke/estimate-deposit.spec.ts`,
+`tests/smoke/estimate-pricing-mode.spec.ts`,
+`tests/smoke/share-link-canonical-domain.spec.ts`.
+
+**Verification:** `npx tsc --noEmit` clean. `npx eslint` on every changed
+file clean (two pre-existing, unrelated warnings in
+`editable-estimate-body.tsx`, confirmed via `git diff` untouched by this
+change). Full `npx playwright test --config=playwright.unit.config.ts` --
+504 passed, only the same 2 pre-existing unrelated failures as before this
+session (`password-reset-canonical-host.spec.ts`,
+`unit-suite-completeness.spec.ts`), confirmed via `git diff --stat` that
+neither file was touched.
+
+**One pre-existing, unrelated bug found and flagged, not fixed:**
+`tests/smoke/share-link-canonical-domain.spec.ts` was updated to expect the
+new bare-$ line-item display, but running it against production revealed it
+already fails before reaching that assertion at all: seeding its throwaway
+`tpe_businesses` row now fails with `null value in column "slug" ... violates
+not-null constraint`. `slug` is not mentioned anywhere in this repo's own
+CLAUDE.md schema documentation, so a `NOT NULL slug` column was added to
+`tpe_businesses` outside any change tracked here. This is unrelated to
+currency formatting (the test fails at the business insert, before any
+pricing code runs) and out of this task's scope -- flagging for whoever
+touches that table next; this test cannot pass until it is fixed.
+
+**Next action:** review the diff, then commit and push/deploy only when
+explicitly authorized.
+
+---
+
 
 ## Outreach click tracking: what can be learned, and future-click metadata (2026-09-12 21:40 PT, finalized 22:25 PT, pushed/deployed/verified 22:46 PT)
 

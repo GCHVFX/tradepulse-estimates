@@ -198,7 +198,7 @@ test("a quantity row with one unit and a blank unit label keeps its detailed des
 
   expect(view.ok).toBe(true);
   expect(view.summary).toBe(formatEstimateForDisplay(summary, "cad"));
-  expect(view.summary).toContain("Service allowance (1 @ CA$40.00)");
+  expect(view.summary).toContain("Service allowance (1 @ $40.00)");
   expect(view.summary.match(/Service allowance/g)).toHaveLength(1);
 });
 
@@ -218,15 +218,17 @@ test("grouped pricing combines work packages in first-appearance order without i
   ]);
   expect(view.groupedSubtotal).toBe(300);
   expect(view.summary).toContain("| Work package | Price |");
-  expect(view.summary).toContain("| Plumbing | CA$250 |");
-  expect(view.summary).toContain("| Permits and fees | CA$-25 |");
+  // Work-package rows and Subtotal/Tax/Deposit are intermediate values, so
+  // they render bare; only the Total row carries the explicit CA$/US$ code.
+  expect(view.summary).toContain("| Plumbing | $250 |");
+  expect(view.summary).toContain("| Permits and fees | $-25 |");
   expect(view.summary).not.toContain("Plumbing labour");
   expect(view.summary).not.toContain("Copper fittings");
   expect(view.summary).toContain("| **Total** | **CA$315** |");
   // Deposit is a percentage of the total and shown to the cent (unlike
   // Subtotal/Tax/Total above), so an exact-dollar result like 20% of $315
-  // still renders with two decimals: CA$63.00, not CA$63.
-  expect(view.summary).toContain("| Deposit required (20%) | CA$63.00 |");
+  // still renders with two decimals: $63.00, not $63.
+  expect(view.summary).toContain("| Deposit required (20%) | $63.00 |");
   expect(view.summary).toContain("Existing services are usable.");
   expect(view.summary).toContain("Payment is due on completion.");
   expect(view.summary).toContain("Permit timing depends on the authority having jurisdiction.");
