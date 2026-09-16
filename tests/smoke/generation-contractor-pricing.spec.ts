@@ -296,3 +296,85 @@ test("a newly generated contractor_pricing estimate has no pricing rows and is i
   // never one of the reasons a freshly generated estimate is incomplete.
   expect(pricing.missing).not.toContain("tax-snapshot-missing");
 });
+
+// Photo-assisted scope understanding ------------------------------------
+//
+// Photos are allowed to tell the model what the job involves: visible
+// materials, condition, access, obstacles, and what should be verified in
+// person. They are not allowed to author a price. /api/analyze-photo turns
+// the images into plain-English scope text ("Do not generate prices. Do not
+// write an estimate." is in its own instruction), and that text is the only
+// thing that reaches generation. These cases pin that path, because removing
+// price-driving values from generation is exactly the kind of change that
+// could quietly take the photo description with it.
+
+test("a photo analysis still reaches the model as scope context", () => {
+  const message = buildGenerationUserMessage({
+    jobDescription: "Bathroom fan is dead",
+    photoAnalysis:
+      "Ceiling fan housing is rusted through. Access is above a fixed glass shower screen. Duct run looks undersized and should be verified in person.",
+    businessName: "Circuit & Co",
+  });
+
+  expect(message).toContain("What the job site photos show:");
+  expect(message).toContain("Ceiling fan housing is rusted through.");
+  expect(message).toContain("Access is above a fixed glass shower screen.");
+  expect(message).toContain("should be verified in person");
+
+  // Scope context, still no price-driving value anywhere in the input.
+  expect(message).not.toContain("$");
+  expect(message).not.toMatch(/labour rate|markup|price book|deposit/i);
+});
+
+test("photos alone still describe the job when the contractor types nothing", () => {
+  // /new falls back to the analysis as the job description itself, so the
+  // photo content reaches the model either way. Sending it twice is avoided,
+  // not the photo input.
+  const newPage = code("app/new/page.tsx");
+  expect(newPage).toContain("const description = jobDescription.trim() || photoAnalysis;");
+  expect(newPage).toContain(
+    "photoAnalysis: photoAnalysis && photoAnalysis !== description ? photoAnalysis : undefined,"
+  );
+  expect(newPage).toContain("photoAnalysis = await analysePhotos();");
+
+  const asDescription = buildGenerationUserMessage({
+    jobDescription: "Ceiling fan housing is rusted through. Access is tight above the shower.",
+  });
+  expect(asDescription).toContain("Ceiling fan housing is rusted through.");
+});
+
+test("the route still accepts and forwards the photo analysis, under its own cap", () => {
+  const generate = code("app/api/generate-estimate/route.ts");
+
+  expect(generate).toContain("photoAnalysis?: unknown;");
+  expect(generate).toContain('if (typeof photoAnalysis === "string" && photoAnalysis.length > 4000)');
+  expect(generate).toContain(
+    'photoAnalysis: typeof photoAnalysis === "string" ? photoAnalysis : undefined,'
+  );
+});
+
+test("photo analysis is scope text, never a price", () => {
+  // The vision call is the only thing that reads the images, and it is told
+  // not to price them. Slice 4 did not touch this route; this pins it.
+  const analyse = code("app/api/analyze-photo/route.ts");
+
+  expect(analyse).toContain("Do not generate prices.");
+  expect(analyse).toContain("Do not write an estimate.");
+  expect(analyse).toContain("Just describe the work.");
+  expect(analyse).not.toMatch(/labour rate|markup_percent|deposit_percent|price book/i);
+});
+
+test("regenerate leaves the estimate's stored photos alone", () => {
+  const generate = code("app/api/generate-estimate/route.ts");
+
+  // The generation route never reads, writes or deletes photo records, so a
+  // regenerate cannot drop them.
+  expect(generate).not.toContain("tpe_estimate_photos");
+  expect(generate).not.toContain("tpe-estimate-photos");
+  expect(generate).not.toContain("include_photos");
+
+  // And the client does not re-upload the ones it still has in state, which
+  // would otherwise attach a second copy of every photo on every regenerate.
+  const newPage = code("app/new/page.tsx");
+  expect(newPage).toContain("if (isPro && !regenerateId && createdEstimateId && photos.length > 0) {");
+});

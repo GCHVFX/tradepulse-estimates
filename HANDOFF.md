@@ -80,6 +80,19 @@ with the reason stated in the file. The parse-level half of what they locked was
 parked is the UI half: the edit panel staying mounted through a blank quantity field. Re-homing it on a
 service-role-seeded legacy estimate belongs with the legacy display slice.
 
+**Slice 4.1 verification (2026-09-15 PT): photo-assisted scope survived Slice 4.** Checked because
+removing price-driving values from generation is exactly the kind of change that could have taken the
+photo description with it. It did not. `/api/analyze-photo` was not touched by `ad35c32` at all, and
+its own instruction still says "Do not generate prices. Do not write an estimate. Just describe the
+work." `/new` still calls `analysePhotos()` before generating and sends the result; when the
+contractor types nothing, that text becomes the job description itself, so the photo content reaches
+the model either way. `buildGenerationUserMessage()` still emits it as
+"What the job site photos show: ...", and the route still accepts and caps `photoAnalysis` at 4000
+characters. The only photo-related line the slice changed anywhere was the regenerate guard that stops
+the client re-uploading photos it already attached. No product change was made. Five focused cases
+were added to `tests/smoke/generation-contractor-pricing.spec.ts` covering the photo path and the fact
+that the generation route never reads, writes or deletes a photo record.
+
 **Reported, not fixed: the website-quote intake still injects pricing into prose.**
 `handleCreateEstimate` in `app/components/estimate-actions.tsx` fetches the price book and calls
 `buildDraftSummary(...)` in `lib/quote-templates.ts`, which writes price-book prices and a Pricing
