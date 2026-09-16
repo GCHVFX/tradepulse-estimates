@@ -1,6 +1,113 @@
 # TradePulse handoff
 
-Updated: 2026-09-14 07:54 PT (Estimate pricing display now shows a bare $ for every intermediate amount; only the final Total row keeps the explicit CA$/US$. Implemented and verified locally; not committed, not deployed.)
+Updated: 2026-09-15 19:32 PT (Tax hotfix, spec Appendix A: the business's Rates settings are now the tax authority for every undelivered estimate, and delivered estimates render byte-identically to before. Implemented and verified locally; not committed, not pushed, not deployed.)
+
+## Tax hotfix (Appendix A): Rates is the tax authority for undelivered estimates (2026-09-15 19:32 PT)
+
+**Status:** implemented and verified locally on branch `main` at HEAD `4dae358`. **Not committed, not
+pushed, not deployed.** Phase 1 was not started and nothing from it was implemented.
+
+**The problem it fixes.** The generation prompt told the model to write a `Tax (LABEL N%)` row, and
+`parseSummary` read the rate back out of that text, falling back to a hard-coded 5% when the row was
+missing. `tpe_businesses.tax_rate` only ever reached the prompt, so the AI, not Rates, decided the tax
+that priced the estimate.
+
+**What changed.**
+
+- `lib/estimate-delivery.ts` (new): one shared `isDelivered()`. Delivered means `sent_at` or `copied_at`
+  is set, or status is `sent` or `done`. Copy link sets `copied_at` and status `sent` without ever
+  setting `sent_at`, which is why status is part of the rule.
+- `lib/estimate-tax.ts` (new): `EstimateTax`, `TaxAuthority`, `businessTax()`, `taxAuthorityFor()`,
+  `resolveEstimateTax()`, plus the `X-Estimate-Tax-Label` / `X-Estimate-Tax-Rate` response headers and
+  their parser. Undelivered resolves to Rates; delivered resolves to the estimate's own stored tax row,
+  falling back to Rates only when the stored summary has no tax row at all. Never to a constant.
+- `lib/estimate-summary.ts`: `parseSummary` is now a pure text parser reporting `storedTax` (null when
+  absent); it no longer resolves the deposit percent, which moved to `effectiveDepositPercent()` because
+  that resolution needs a total and the total needs a tax. `computeTotals(lineItems, taxRate)` and
+  `serializeSummary`'s tax parameters lost their `= 5` / `= 'GST'` defaults. Added `computeSubtotal()` for
+  callers that need a subtotal and no tax. `applyDeterministicDeposit`, `formatEstimateForDisplay`,
+  `formatEstimateForDisplayWithPricing` and `calculateEstimateTotal` now take the tax or the authority.
+- `lib/estimate-pricing-mode.ts`: `EstimatePricingRecord` carries `businessTax`, and the view derives the
+  authority through `taxAuthorityFor()`, so share, PDF and the contractor preview cannot disagree.
+- `lib/estimate-pricing-server.ts`, `app/estimates/[id]/page.tsx`, `app/share/[id]/page.tsx`,
+  `app/api/estimates/[id]/pricing-mode/route.ts`: all load `tax_label` / `tax_rate` and pass them in. The
+  share page loads the estimate first, then treats the business row as optional for a delivered estimate
+  (its own stored tax row is the authority, so a failed read only costs branding) and as required for an
+  undelivered one, which raises rather than pricing against a guessed tax.
+- `app/api/generate-estimate/route.ts`: the tax instruction and the `Tax (TAX_LABEL TAX_RATE%)` template
+  row are gone from the prompt, the `?? 'GST'` / `?? 5` fallbacks are gone, and the route reports the
+  Rates tax it saved with in response headers.
+- `app/new/page.tsx`: reads those headers and passes the tax to the editor and the streaming preview. It
+  has no business row of its own, which is why the headers exist. No fallback: a missing header is an
+  error, not a default.
+- `app/components/editable-estimate-body.tsx`: tax label and rate are no longer component state. They
+  come from the authority and render as plain text (`Tax (GST 5%)`) beside a `Set in Rates` link to the
+  existing `/rates` screen. No tax input of any kind remains. Phase 1 owns editable per-estimate tax.
+- `app/share/[id]/page.tsx`: the estimate loads first, and delivery decides what the business row is for.
+  A delivered estimate is priced from its own stored tax row, so a missing or failed business read costs
+  branding rather than the customer's estimate. An undelivered estimate is priced from Rates and raises
+  instead of pricing against a guessed tax.
+
+**Verification actually run (all local, nothing against production except read-only queries).**
+
+- Baselines captured at HEAD before any edit, from the local dev server against production data, for the
+  four delivered estimates and three undelivered drafts: rendered `<main>` markup plus the exact summary
+  string handed to the PDF button. Stored in gitignored `build/tax-hotfix-baselines/` (customer PII, do
+  not commit). Two pre-change renders were compared to prove the capture is deterministic.
+- After the change, all 14 artifacts are byte-identical to those baselines. The 2026-09-11 estimate still
+  renders CA$1,994 with its 7 collapsed "(6 hrs @ $95.00/hr)" quantity rows. Live production share pages
+  for the same four estimates were also saved as post-deploy references.
+- `npx tsc --noEmit` clean.
+- Focused unit run (`playwright.unit.config.ts`, the 10 affected specs): 181 passed, 1 failed, and that
+  failure is the pre-existing `unit-suite-completeness` guard naming three unrelated specs
+  (`nav-wordmark-no-crowding`, `trade-tabs-mobile-overflow`, `trade-tabs-scroll-affordance`), all
+  committed before this work. The full smoke suite was deliberately not run.
+- `npx eslint` on every changed file: 3 pre-existing warnings plus 1 pre-existing error (an `<a>` to
+  `/estimates`, present at HEAD). Nothing new.
+- `git diff --check` clean.
+
+**New tests, both in the unit config:** `tests/smoke/tax-rate-from-rates-not-ai.spec.ts` covers the
+non-5% Rates case, the delivered carve-out across all three delivery signals, the no-stored-row fallback,
+a 0% rate, the prompt no longer asking for tax, and the absence of any 5%/GST default.
+`tests/smoke/share-delivered-renders-without-business.spec.ts` covers the share-page rule: a delivered
+estimate renders with no business row at all, every delivery signal survives it, and an undelivered one
+raises rather than pricing against a guessed tax.
+
+**Known limitation in that test:** the editor's tax display is asserted at source level, not by
+rendering. Playwright's JSX transform wraps elements in its own objects, which `react-dom/server` refuses
+to render, so the component cannot be rendered inside a spec here. The displayed values come from
+`resolveEstimateTax()`, which is covered behaviourally.
+
+**Unresolved, raise before Phase 1.**
+
+1. **A draft written before this hotfix keeps its AI tax once delivered.** Delivered estimates read their
+   stored text, so a pre-hotfix draft sent later freezes to whatever tax the model wrote. Every business
+   in production is GST 5% today and every stored row says GST 5%, so there is no current effect. Phase 1
+   removes this by snapshotting tax per estimate.
+2. **A delivered estimate with no stored tax row and no readable business row cannot render.** It raises
+   rather than inventing a rate. Every estimate delivered in production carries a stored tax row, so this
+   is unreachable for real data, and Phase 1's per-estimate snapshots remove the case entirely.
+
+## Phase 1 specification (not started)
+
+**`specs/contractor-owned-pricing.md` is the authoritative Phase 1 pricing specification.** The root
+`SPEC.md` is an unrelated marketing-site redesign spec with nothing to do with pricing: do not read it for
+this work and do not overwrite it. The summary below is orientation only, and the spec file wins wherever
+the two differ.
+
+Structured data becomes the source of truth; AI writes prose only. Pricing inputs live in
+`tpe_estimate_items`: labour as hours times rate (`unit = 'hr'`) or a fixed amount, one materials cost row
+with markup applied deterministically, and zero or more optional charge rows. No row means unknown and
+blocks delivery; a row with 0 means the contractor entered zero. Tax and deposit move to per-estimate
+snapshot columns. One pure calculation module owns labour, materials, charges, subtotal, tax, total,
+deposit and balance, and every surface imports it. Markdown keeps prose only, with the pricing block
+rendered at display time and never parsed back. Delivered estimates lock. Legacy estimates render through
+a frozen read-only path. Phase 2 is saved contractor standards and Phase 3 is past-job reuse; those two
+are the retention work and are explicitly out of Phase 1.
+
+**Exact next step:** review this diff. If it is approved, commit it, then deploy and confirm the four
+production share pages still match `build/tax-hotfix-baselines/production-reference/`, the 2026-09-11
+estimate first. Phase 1 starts only after the hotfix is verified in production.
 
 ## Estimate pricing: bare $ for intermediate amounts, CA$/US$ only at the Total (2026-09-14 07:54 PT)
 
