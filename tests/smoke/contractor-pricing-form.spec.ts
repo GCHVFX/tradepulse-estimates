@@ -171,6 +171,103 @@ test("10 and 14: markup 0% stays explicit, and the business default prefills a n
   expect(toPricingRequestPayload(fresh).materials).toBeNull();
 });
 
+/*
+ * Markup belongs to the estimate, not to Profile/Rates (spec section 6).
+ *
+ * A manual phone review reported that markup could only be changed in
+ * Profile/Rates. These cases pin the opposite, at every layer the claim would
+ * have to pass through: the field is on the estimate and editable, the stored
+ * row is what fills it, an edit reaches the PUT, and neither direction leaks
+ * into the business default.
+ */
+
+test("26: the markup field is on the estimate itself, and is editable", () => {
+  const editor = readFileSync("app/components/contractor-pricing-editor.tsx", "utf8");
+
+  const start = editor.indexOf("Markup %");
+  expect(start, "the Materials section exposes a markup input").toBeGreaterThan(-1);
+  const markupBlock = editor.slice(start, start + 400);
+
+  // Bound to this estimate's form value, and writable.
+  expect(markupBlock).toContain("value={form.markupPercent}");
+  expect(markupBlock).toMatch(/markupPercent:\s*event\.target\.value/);
+  expect(markupBlock).not.toContain("readOnly");
+  expect(markupBlock).not.toContain("disabled");
+
+  // The contractor is never sent elsewhere to change it.
+  expect(editor).not.toContain("/rates");
+  expect(editor).not.toContain("price-book");
+});
+
+test("27: editing markup changes the next PUT payload and leaves the rest alone", () => {
+  const stored = initContractorPricingForm([HOURLY_ROW, MATERIALS_ROW], GST_5, DEFAULTS);
+  expect(stored.markupPercent).toBe("20");
+
+  const edited = { ...stored, markupPercent: "35" };
+  const payload = payloadOf(edited);
+
+  expect(payload.materials).toEqual({ cost: 1150, markupPercent: 35 });
+  // A markup edit is not a labour, charge or tax edit.
+  expect(payload.labour).toEqual({ method: "hourly", hours: 8, rate: 95 });
+  expect(payload.charges).toEqual([]);
+  expect(payload.tax).toBeNull();
+});
+
+test("28: markup edited to 0 is sent as 0 and comes back as 0", () => {
+  const zeroed = { ...initContractorPricingForm([MATERIALS_ROW], GST_5, DEFAULTS), markupPercent: "0" };
+  expect(payloadOf(zeroed).materials).toEqual({ cost: 1150, markupPercent: 0 });
+
+  // Reloaded from the saved row, 0 stays visible as "0" and is never replaced
+  // by the business default.
+  const reloaded = initContractorPricingForm(
+    [row({ item_type: "material", description: "Materials", unit_price: 1150, markup_percent: 0 })],
+    GST_5,
+    DEFAULTS
+  );
+  expect(reloaded.markupPercent).toBe("0");
+  expect(payloadOf(reloaded).materials).toEqual({ cost: 1150, markupPercent: 0 });
+});
+
+test("29: changing the business default never moves an estimate that is already priced", () => {
+  // Rates was changed to 50% after this estimate was saved at 20%.
+  const moved: BusinessPricingDefaults = { labourRate: 95, markupPercent: 50 };
+
+  const saved = initContractorPricingForm([MATERIALS_ROW], GST_5, moved);
+  expect(saved.markupPercent).toBe("20");
+  expect(payloadOf(saved).materials).toEqual({ cost: 1150, markupPercent: 20 });
+
+  // The default is only ever a starting point for an estimate with no row yet.
+  const fresh = initContractorPricingForm([], GST_5, moved);
+  expect(fresh.markupPercent).toBe("50");
+});
+
+test("30: an estimate markup edit never writes the business markup default", () => {
+  const edited = { ...initContractorPricingForm([MATERIALS_ROW], GST_5, DEFAULTS), markupPercent: "35" };
+  const payload = payloadOf(edited);
+
+  // The request has no way to carry a business default in the first place.
+  expect(Object.keys(payload)).toEqual(["labour", "materials", "charges", "tax"]);
+
+  // And the save transaction never sets it. Every update to tpe_businesses is
+  // inspected, rather than searching the file for a string that also appears
+  // on the estimate rows.
+  const sql = readFileSync(
+    "supabase/migrations/20260916000000_add_contractor_pricing_snapshots_and_save_fn.sql",
+    "utf8"
+  );
+  const businessUpdates = sql
+    .split("update public.tpe_businesses")
+    .slice(1)
+    .map((part) => part.split(";")[0]);
+
+  expect(businessUpdates.length, "the save does write some business defaults").toBeGreaterThan(0);
+  for (const statement of businessUpdates) {
+    expect(statement, "no estimate save may write tpe_businesses.markup_percent").not.toContain(
+      "markup_percent"
+    );
+  }
+});
+
 // ── Charges ──────────────────────────────────────────────────────────────────
 
 test("15, 16 and 17: charges add, survive a save, and disappear when removed", () => {
