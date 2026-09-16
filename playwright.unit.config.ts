@@ -51,6 +51,7 @@ export default defineConfig({
     "outreach-click-tracking.spec.ts",
     "share-delivered-renders-without-business.spec.ts",
     "tax-rate-from-rates-not-ai.spec.ts",
+    "estimate-deletion.spec.ts",
     "unit-suite-completeness.spec.ts",
   ],
   fullyParallel: false,
