@@ -16,8 +16,13 @@ import { calculateContractorPricing } from "../../lib/contractor-pricing";
  *
  * Pure coverage. The database half of the slice (the transaction, promotion,
  * delivered re-check and row replacement) is covered by
- * contractor-pricing-route.spec.ts, which needs live services.
+ * contractor-pricing-route.spec.ts, which needs real PostgreSQL.
  */
+
+/** A well-formed request: all three inputs present, empty by default. */
+function complete(partial: Record<string, unknown> = {}): Record<string, unknown> {
+  return { labour: null, materials: null, charges: [], ...partial };
+}
 
 function ok(body: unknown): ContractorPricingRequest {
   const parsed = parseContractorPricingRequest(body);
@@ -31,10 +36,35 @@ function errorFor(body: unknown): string {
   return parsed.error;
 }
 
+// ── A PUT is a whole state, so the three inputs are required keys ────────────
+
+test("an omitted labour, materials or charges key is rejected, never a silent clear", () => {
+  expect(errorFor({ materials: null, charges: [] })).toContain("labour is required");
+  expect(errorFor({ labour: null, charges: [] })).toContain("materials is required");
+  expect(errorFor({ labour: null, materials: null })).toContain("charges is required");
+});
+
+test("explicit emptiness is accepted: null labour, null materials, no charges", () => {
+  const request = ok({ labour: null, materials: null, charges: [] });
+  expect(request.labour).toBeNull();
+  expect(request.materials).toBeNull();
+  expect(request.charges).toEqual([]);
+  expect(toCanonicalRows(request)).toEqual([]);
+
+  // null is not a shorthand for an empty charge list.
+  expect(errorFor({ labour: null, materials: null, charges: null })).toContain("charges must be a list");
+});
+
+test("omitted tax is accepted and means the estimate's snapshot is unchanged", () => {
+  expect(ok(complete()).tax).toBeNull();
+  expect(ok(complete({ tax: null })).tax).toBeNull();
+  expect(ok(complete({ tax: { label: " hst ", rate: 13 } })).tax).toEqual({ label: "hst", rate: 13 });
+});
+
 // ── Saving an incomplete draft ───────────────────────────────────────────────
 
 test("labour only saves, and reports materials missing rather than refusing", () => {
-  const rows = toCanonicalRows(ok({ labour: { method: "fixed", amount: 500 } }));
+  const rows = toCanonicalRows(ok(complete({ labour: { method: "fixed", amount: 500 } })));
   expect(rows).toHaveLength(1);
 
   const pricing = calculateContractorPricing(rows, {
@@ -46,7 +76,7 @@ test("labour only saves, and reports materials missing rather than refusing", ()
 });
 
 test("materials only saves, and reports labour missing rather than refusing", () => {
-  const rows = toCanonicalRows(ok({ materials: { cost: 200, markupPercent: 10 } }));
+  const rows = toCanonicalRows(ok(complete({ materials: { cost: 200, markupPercent: 10 } })));
   expect(rows).toHaveLength(1);
   expect(rows[0].item_type).toBe("material");
 
@@ -59,7 +89,7 @@ test("materials only saves, and reports labour missing rather than refusing", ()
 });
 
 test("an empty request saves as no rows and reports both inputs missing", () => {
-  const rows = toCanonicalRows(ok({}));
+  const rows = toCanonicalRows(ok(complete()));
   expect(rows).toEqual([]);
 
   const pricing = calculateContractorPricing(rows, {
@@ -73,7 +103,7 @@ test("an empty request saves as no rows and reports both inputs missing", () => 
 
 test("fixed labour of $0 persists and is complete beside materials and a tax snapshot", () => {
   const rows = toCanonicalRows(
-    ok({ labour: { method: "fixed", amount: 0 }, materials: { cost: 0, markupPercent: 0 } })
+    ok(complete({ labour: { method: "fixed", amount: 0 }, materials: { cost: 0, markupPercent: 0 } }))
   );
   expect(rows[0].unit_price).toBe(0);
 
@@ -88,7 +118,7 @@ test("fixed labour of $0 persists and is complete beside materials and a tax sna
 test("hourly labour with a rate of 0 saves and reports labour-rate-missing", () => {
   // Never rejected: an interrupted contractor must not lose the hours they
   // already typed. Delivery gating in a later slice is what holds it back.
-  const request = ok({ labour: { method: "hourly", hours: 6, rate: 0 } });
+  const request = ok(complete({ labour: { method: "hourly", hours: 6, rate: 0 } }));
   const rows = toCanonicalRows(request);
   expect(rows[0].quantity).toBe(6);
   expect(rows[0].unit).toBe("hr");
@@ -106,7 +136,12 @@ test("hourly labour with a rate of 0 saves and reports labour-rate-missing", () 
 
 test("labour and materials rows carry fixed non-blank descriptions", () => {
   const rows = toCanonicalRows(
-    ok({ labour: { method: "hourly", hours: 8, rate: 95 }, materials: { cost: 100, markupPercent: 20 } })
+    ok(
+      complete({
+        labour: { method: "hourly", hours: 8, rate: 95 },
+        materials: { cost: 100, markupPercent: 20 },
+      })
+    )
   );
 
   expect(rows[0].description).toBe(LABOUR_DESCRIPTION);
@@ -117,7 +152,7 @@ test("labour and materials rows carry fixed non-blank descriptions", () => {
 });
 
 test("the canonical encoding matches the spec's table", () => {
-  const hourly = toCanonicalRows(ok({ labour: { method: "hourly", hours: 8, rate: 95 } }))[0];
+  const hourly = toCanonicalRows(ok(complete({ labour: { method: "hourly", hours: 8, rate: 95 } })))[0];
   expect(hourly).toMatchObject({
     item_type: "labour",
     quantity: 8,
@@ -127,10 +162,10 @@ test("the canonical encoding matches the spec's table", () => {
     line_total: 760,
   });
 
-  const fixed = toCanonicalRows(ok({ labour: { method: "fixed", amount: 760 } }))[0];
+  const fixed = toCanonicalRows(ok(complete({ labour: { method: "fixed", amount: 760 } })))[0];
   expect(fixed).toMatchObject({ item_type: "labour", quantity: 1, unit: null, unit_price: 760 });
 
-  const material = toCanonicalRows(ok({ materials: { cost: 1150, markupPercent: 20 } }))[0];
+  const material = toCanonicalRows(ok(complete({ materials: { cost: 1150, markupPercent: 20 } })))[0];
   // unit_price is the contractor's pre-markup cost, and line_total is pre-markup
   // too. Neither is the customer-facing figure; the calculator owns that.
   expect(material).toMatchObject({
@@ -142,7 +177,7 @@ test("the canonical encoding matches the spec's table", () => {
     line_total: 1150,
   });
 
-  const charge = toCanonicalRows(ok({ charges: [{ description: " Permit ", amount: 150 }] }))[0];
+  const charge = toCanonicalRows(ok(complete({ charges: [{ description: " Permit ", amount: 150 }] })))[0];
   expect(charge).toMatchObject({
     item_type: "other",
     description: "Permit",
@@ -154,14 +189,16 @@ test("the canonical encoding matches the spec's table", () => {
 
 test("multiple charges keep their order and all persist", () => {
   const rows = toCanonicalRows(
-    ok({
-      labour: { method: "fixed", amount: 100 },
-      charges: [
-        { description: "Permit", amount: 150 },
-        { description: "Disposal", amount: 75.5 },
-        { description: "Equipment", amount: 0 },
-      ],
-    })
+    ok(
+      complete({
+        labour: { method: "fixed", amount: 100 },
+        charges: [
+          { description: "Permit", amount: 150 },
+          { description: "Disposal", amount: 75.5 },
+          { description: "Equipment", amount: 0 },
+        ],
+      })
+    )
   );
 
   const charges = rows.filter((row) => row.item_type === "other");
@@ -172,44 +209,38 @@ test("multiple charges keep their order and all persist", () => {
 // ── Rejections ───────────────────────────────────────────────────────────────
 
 test("a blank charge description is rejected, never defaulted", () => {
-  expect(errorFor({ charges: [{ description: "   ", amount: 10 }] })).toContain("description");
-  expect(errorFor({ charges: [{ amount: 10 }] })).toContain("description");
+  expect(errorFor(complete({ charges: [{ description: "   ", amount: 10 }] }))).toContain("description");
+  expect(errorFor(complete({ charges: [{ amount: 10 }] }))).toContain("description");
 });
 
 test("malformed, negative and non-finite numbers are rejected", () => {
-  expect(errorFor({ labour: { method: "hourly", hours: -1, rate: 95 } })).toContain("hours");
-  expect(errorFor({ labour: { method: "fixed", amount: Number.NaN } })).toContain("amount");
-  expect(errorFor({ labour: { method: "fixed", amount: Number.POSITIVE_INFINITY } })).toContain("amount");
-  expect(errorFor({ labour: { method: "fixed", amount: "500" } })).toContain("amount");
-  expect(errorFor({ materials: { cost: -5, markupPercent: 0 } })).toContain("cost");
-  expect(errorFor({ materials: { cost: 5, markupPercent: -1 } })).toContain("markup");
-  expect(errorFor({ materials: { cost: 5, markupPercent: 1001 } })).toContain("markup");
-  expect(errorFor({ charges: [{ description: "Permit", amount: -1 }] })).toContain("amount");
-  expect(errorFor({ tax: { label: "GST", rate: -1 } })).toContain("rate");
-  expect(errorFor({ tax: { label: "  ", rate: 5 } })).toContain("label");
+  expect(errorFor(complete({ labour: { method: "hourly", hours: -1, rate: 95 } }))).toContain("hours");
+  expect(errorFor(complete({ labour: { method: "fixed", amount: Number.NaN } }))).toContain("amount");
+  expect(errorFor(complete({ labour: { method: "fixed", amount: Number.POSITIVE_INFINITY } }))).toContain("amount");
+  expect(errorFor(complete({ labour: { method: "fixed", amount: "500" } }))).toContain("amount");
+  expect(errorFor(complete({ materials: { cost: -5, markupPercent: 0 } }))).toContain("cost");
+  expect(errorFor(complete({ materials: { cost: 5, markupPercent: -1 } }))).toContain("markup");
+  expect(errorFor(complete({ materials: { cost: 5, markupPercent: 1001 } }))).toContain("markup");
+  expect(errorFor(complete({ charges: [{ description: "Permit", amount: -1 }] }))).toContain("amount");
+  expect(errorFor(complete({ tax: { label: "GST", rate: -1 } }))).toContain("rate");
+  expect(errorFor(complete({ tax: { label: "  ", rate: 5 } }))).toContain("label");
 });
 
 test("more than one labour or materials entry is rejected", () => {
-  expect(errorFor({ labour: [{ method: "fixed", amount: 1 }, { method: "fixed", amount: 2 }] })).toContain("single");
-  expect(errorFor({ materials: [{ cost: 1, markupPercent: 0 }] })).toContain("single");
-  expect(errorFor({ labour: { method: "both", hours: 1, rate: 1 } })).toContain("method");
-});
-
-// ── Tax ──────────────────────────────────────────────────────────────────────
-
-test("omitted tax is null, so the save preserves the existing snapshot", () => {
-  expect(ok({ labour: { method: "fixed", amount: 10 } }).tax).toBeNull();
-  expect(ok({ tax: null }).tax).toBeNull();
-  expect(ok({ tax: { label: " hst ", rate: 13 } }).tax).toEqual({ label: "hst", rate: 13 });
+  expect(
+    errorFor(complete({ labour: [{ method: "fixed", amount: 1 }, { method: "fixed", amount: 2 }] }))
+  ).toContain("single");
+  expect(errorFor(complete({ materials: [{ cost: 1, markupPercent: 0 }] }))).toContain("single");
+  expect(errorFor(complete({ labour: { method: "both", hours: 1, rate: 1 } }))).toContain("method");
 });
 
 // ── Business-default candidate ───────────────────────────────────────────────
 
 test("only an hourly rate above zero is offered as the business default", () => {
-  expect(firstHourlyRateCandidate(ok({ labour: { method: "hourly", hours: 4, rate: 125 } }))).toBe(125);
-  expect(firstHourlyRateCandidate(ok({ labour: { method: "hourly", hours: 4, rate: 0 } }))).toBeNull();
-  expect(firstHourlyRateCandidate(ok({ labour: { method: "fixed", amount: 500 } }))).toBeNull();
-  expect(firstHourlyRateCandidate(ok({}))).toBeNull();
+  expect(firstHourlyRateCandidate(ok(complete({ labour: { method: "hourly", hours: 4, rate: 125 } })))).toBe(125);
+  expect(firstHourlyRateCandidate(ok(complete({ labour: { method: "hourly", hours: 4, rate: 0 } })))).toBeNull();
+  expect(firstHourlyRateCandidate(ok(complete({ labour: { method: "fixed", amount: 500 } })))).toBeNull();
+  expect(firstHourlyRateCandidate(ok(complete()))).toBeNull();
 });
 
 // ── Route wiring ─────────────────────────────────────────────────────────────

@@ -51,6 +51,7 @@ export default defineConfig({
     "outreach-click-tracking.spec.ts",
     "contractor-pricing-calculation.spec.ts",
     "contractor-pricing-request.spec.ts",
+    "contractor-pricing-route.spec.ts",
     "share-delivered-renders-without-business.spec.ts",
     "tax-rate-from-rates-not-ai.spec.ts",
     "unit-suite-completeness.spec.ts",

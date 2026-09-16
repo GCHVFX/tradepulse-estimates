@@ -1,98 +1,120 @@
 import { test, expect } from "@playwright/test";
-import { createClient } from "@supabase/supabase-js";
-import { signUpFreshAccount, cleanupTestAccount } from "./helpers";
+import { existsSync, readFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 /**
- * Phase 1 slice 2, the database half: PUT /api/estimates/[id]/pricing and the
- * tpe_save_contractor_pricing transaction
- * (specs/contractor-owned-pricing.md sections 12 and 15).
+ * Phase 1 slice 2, the database half: the tpe_save_contractor_pricing
+ * transaction (specs/contractor-owned-pricing.md sections 12 and 15).
  *
- * NEEDS LIVE SERVICES AND AN APPLIED MIGRATION. These cases cover behaviour
- * that only exists inside a real transaction: the delivered re-check under the
- * row lock, inbound-quote promotion, atomic row replacement, and the permitted
- * business-default writes. They cannot run against production, because
- * 20260916000000_add_contractor_pricing_snapshots_and_save_fn.sql is
- * deliberately not applied there, and this project has no local Supabase stack
- * (no supabase/config.toml, no Docker), so they are written now and run when a
- * disposable database exists or the migration is applied to a preview project.
+ * These cases cover behaviour that only exists inside a real transaction: the
+ * delivered re-check under the row lock, inbound-quote promotion, atomic row
+ * replacement, the permitted business-default writes, rollback, and blocking
+ * between concurrent writers. They run against a disposable PostgreSQL server
+ * started for this file and thrown away afterwards. Never production, and
+ * never a mock: locking and MVCC cannot be proven by anything but the real
+ * server.
  *
- * Deliberately no SMS, no email, no AI. Delivery is simulated by setting
- * copied_at or status directly, which is the same state copy link produces and
- * sends nothing to anyone.
+ * The server binary comes from the embedded-postgres package already present
+ * on this machine. If it cannot be found, every test here skips with the
+ * reason, rather than passing on weaker evidence.
  */
 
-function adminClient() {
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+/** Where the embedded PostgreSQL binaries and pg client live. */
+function moduleRoot(): string | null {
+  const candidates = [
+    process.env.EMBEDDED_POSTGRES_MODULES,
+    path.resolve(process.cwd(), "node_modules"),
+    "C:/Work/tools/lead-auditor-II/node_modules",
+    path.resolve(process.cwd(), "../lead-auditor-II/node_modules"),
+  ].filter((entry): entry is string => Boolean(entry));
+
+  for (const root of candidates) {
+    if (existsSync(path.join(root, "embedded-postgres", "dist", "index.js")) && existsSync(path.join(root, "pg"))) {
+      return root;
+    }
+  }
+  return null;
 }
 
-type Admin = ReturnType<typeof adminClient>;
+const MODULES = moduleRoot();
+const SKIP_REASON =
+  "No disposable PostgreSQL available: embedded-postgres was not found. Set EMBEDDED_POSTGRES_MODULES to a node_modules directory containing embedded-postgres and pg.";
 
-async function businessFor(admin: Admin, userId: string): Promise<string> {
-  const { data } = await admin
-    .from("tpe_businesses")
-    .select("id")
-    .eq("owner_user_id", userId)
-    .maybeSingle();
-  if (!data) throw new Error("No business row for test account");
-  return data.id;
+/* eslint-disable @typescript-eslint/no-explicit-any */
+type PgClient = {
+  connect(): Promise<void>;
+  query(text: string, values?: unknown[]): Promise<{ rows: any[] }>;
+  end(): Promise<void>;
+};
+
+const PORT = 55_000 + Math.floor(Math.random() * 900);
+const DB_NAME = "tradepulse_pricing_test";
+
+let postgres: { stop(): Promise<void> } | null = null;
+let ClientCtor: new (config: Record<string, unknown>) => PgClient;
+let admin: PgClient;
+
+function newClient(): PgClient {
+  return new ClientCtor({
+    host: "127.0.0.1",
+    port: PORT,
+    user: "postgres",
+    password: "pricing-test",
+    database: DB_NAME,
+    // Declared, not assumed. A fresh server on a Windows locale negotiates
+    // WIN1252, which cannot represent every character a migration may carry,
+    // and the failure surfaces as an encoding error rather than a SQL one.
+    client_encoding: "UTF8",
+  });
 }
 
-async function seedEstimate(
-  admin: Admin,
-  businessId: string,
-  overrides: Record<string, unknown> = {}
-): Promise<string> {
-  const { data, error } = await admin
-    .from("tpe_estimates")
-    .insert({
-      business_id: businessId,
-      title: "Slice 2 pricing test",
-      summary: "",
-      status: "draft",
-      source: "ai_generated",
-      pricing_source: "contractor_pricing",
-      customer_name: "",
-      customer_phone: "",
-      customer_email: "",
-      job_address: "",
-      description: "test",
-      location: "unknown",
-      service_type: "unknown",
-      urgency: "unknown",
-      ...overrides,
-    })
-    .select("id")
-    .maybeSingle();
-  if (error || !data) throw new Error(`Estimate insert failed: ${error?.message}`);
-  return data.id;
-}
+test.describe.configure({ mode: "serial" });
 
-async function rowsFor(admin: Admin, estimateId: string) {
-  const { data } = await admin
-    .from("tpe_estimate_items")
-    .select("item_type, description, quantity, unit, unit_price, markup_percent")
-    .eq("estimate_id", estimateId)
-    .order("display_order", { ascending: true });
-  return data ?? [];
-}
+test.beforeAll(async () => {
+  test.skip(MODULES === null, SKIP_REASON);
+  test.setTimeout(180_000);
 
-/** Calls the transaction directly, which is what these cases are about. */
-async function save(
-  admin: Admin,
-  estimateId: string,
-  businessId: string,
-  rows: unknown[],
-  tax: unknown = null,
-  firstHourlyRate: number | null = null
-) {
-  return admin.rpc("tpe_save_contractor_pricing", {
-    p_estimate_id: estimateId,
-    p_business_id: businessId,
-    p_rows: rows,
-    p_tax: tax,
-    p_first_hourly_rate: firstHourlyRate,
-  } as never);
-}
+  const embedded = await import(pathToFileURL(path.join(MODULES!, "embedded-postgres", "dist", "index.js")).href);
+  const EmbeddedPostgres = (embedded.default ?? embedded) as new (options: Record<string, unknown>) => {
+    initialise(): Promise<void>;
+    start(): Promise<void>;
+    stop(): Promise<void>;
+    createDatabase(name: string): Promise<void>;
+  };
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  ClientCtor = require(path.join(MODULES!, "pg")).Client;
+
+  const instance = new EmbeddedPostgres({
+    databaseDir: path.join(os.tmpdir(), `tp-pricing-pg-${Date.now()}`),
+    user: "postgres",
+    password: "pricing-test",
+    port: PORT,
+    persistent: false,
+  });
+  await instance.initialise();
+  await instance.start();
+  await instance.createDatabase(DB_NAME);
+  postgres = instance;
+
+  admin = newClient();
+  await admin.connect();
+  await admin.query(readFileSync("tests/fixtures/contractor-pricing-schema.sql", "utf8"));
+  await admin.query(
+    readFileSync(
+      "supabase/migrations/20260916000000_add_contractor_pricing_snapshots_and_save_fn.sql",
+      "utf8"
+    )
+  );
+});
+
+test.afterAll(async () => {
+  await admin?.end().catch(() => {});
+  await postgres?.stop().catch(() => {});
+});
+
+// ── Fixtures ─────────────────────────────────────────────────────────────────
 
 const LABOUR_ROW = {
   description: "Labour",
@@ -115,271 +137,283 @@ const MATERIALS_ROW = {
   display_order: 1,
 };
 
-test("a second save replaces the prior rows instead of appending them", async ({ page }) => {
-  test.setTimeout(60000);
-  const account = await signUpFreshAccount(page);
-  try {
-    const admin = adminClient();
-    const businessId = await businessFor(admin, account.userId);
-    const estimateId = await seedEstimate(admin, businessId);
+async function newBusiness(overrides: Record<string, unknown> = {}): Promise<string> {
+  const columns = Object.keys(overrides);
+  const values = Object.values(overrides);
+  const sql = columns.length
+    ? `insert into tpe_businesses (${columns.join(", ")}) values (${columns.map((_, i) => `$${i + 1}`).join(", ")}) returning id`
+    : "insert into tpe_businesses default values returning id";
+  const { rows } = await admin.query(sql, values);
+  return rows[0].id;
+}
 
-    await save(admin, estimateId, businessId, [LABOUR_ROW, MATERIALS_ROW]);
-    expect(await rowsFor(admin, estimateId)).toHaveLength(2);
+async function newEstimate(businessId: string, overrides: Record<string, unknown> = {}): Promise<string> {
+  const entries = { business_id: businessId, pricing_source: "contractor_pricing", status: "draft", source: "ai_generated", ...overrides };
+  const columns = Object.keys(entries);
+  const values = Object.values(entries);
+  const { rows } = await admin.query(
+    `insert into tpe_estimates (${columns.join(", ")}) values (${columns.map((_, i) => `$${i + 1}`).join(", ")}) returning id`,
+    values
+  );
+  return rows[0].id;
+}
 
-    await save(admin, estimateId, businessId, [LABOUR_ROW]);
-    const after = await rowsFor(admin, estimateId);
-    expect(after).toHaveLength(1);
-    expect(after[0].item_type).toBe("labour");
-  } finally {
-    await cleanupTestAccount(account.userId);
+async function save(
+  client: PgClient,
+  estimateId: string,
+  businessId: string,
+  rows: unknown[],
+  tax: unknown = null,
+  firstHourlyRate: number | null = null
+) {
+  return client.query(
+    "select public.tpe_save_contractor_pricing($1::uuid, $2::uuid, $3::jsonb, $4::jsonb, $5::numeric) as result",
+    [estimateId, businessId, JSON.stringify(rows), tax === null ? null : JSON.stringify(tax), firstHourlyRate]
+  );
+}
+
+async function rowsFor(estimateId: string, client: PgClient = admin) {
+  const { rows } = await client.query(
+    "select item_type, description, quantity, unit, unit_price, markup_percent from tpe_estimate_items where estimate_id = $1 order by display_order",
+    [estimateId]
+  );
+  return rows;
+}
+
+async function estimateState(estimateId: string) {
+  const { rows } = await admin.query(
+    "select status, pricing_source, tax_label_snapshot, tax_rate_snapshot, deposit_percent_snapshot, deposit_threshold_snapshot from tpe_estimates where id = $1",
+    [estimateId]
+  );
+  return rows[0];
+}
+
+async function businessState(businessId: string) {
+  const { rows } = await admin.query(
+    "select labour_rate, markup_percent, tax_label, tax_rate from tpe_businesses where id = $1",
+    [businessId]
+  );
+  return rows[0];
+}
+
+/** Whether a promise is still unsettled after a grace period. */
+async function stillPending(promise: Promise<unknown>, ms: number): Promise<boolean> {
+  const marker = Symbol("pending");
+  const result = await Promise.race([
+    promise.then(() => "settled"),
+    new Promise((resolve) => setTimeout(() => resolve(marker), ms)),
+  ]);
+  return result === marker;
+}
+
+// ── Row replacement ──────────────────────────────────────────────────────────
+
+test("a second save replaces the prior rows instead of appending them", async () => {
+  const businessId = await newBusiness();
+  const estimateId = await newEstimate(businessId);
+
+  await save(admin, estimateId, businessId, [LABOUR_ROW, MATERIALS_ROW]);
+  expect(await rowsFor(estimateId)).toHaveLength(2);
+
+  await save(admin, estimateId, businessId, [LABOUR_ROW]);
+  const after = await rowsFor(estimateId);
+  expect(after).toHaveLength(1);
+  expect(after[0].item_type).toBe("labour");
+});
+
+// ── Delivery ─────────────────────────────────────────────────────────────────
+
+test("the transaction re-checks delivery, so a delivered estimate cannot be repriced", async () => {
+  const businessId = await newBusiness();
+
+  for (const delivered of [
+    { sent_at: new Date().toISOString() },
+    { copied_at: new Date().toISOString() },
+    { status: "sent" },
+    { status: "done" },
+  ]) {
+    const estimateId = await newEstimate(businessId, delivered);
+    await expect(save(admin, estimateId, businessId, [LABOUR_ROW])).rejects.toThrow(/ESTIMATE_DELIVERED/);
+    expect(await rowsFor(estimateId), JSON.stringify(delivered)).toHaveLength(0);
   }
 });
 
-test("the transaction re-checks delivery, so a delivered estimate cannot be repriced", async ({ page }) => {
-  test.setTimeout(60000);
-  const account = await signUpFreshAccount(page);
-  try {
-    const admin = adminClient();
-    const businessId = await businessFor(admin, account.userId);
+test("delivery is re-checked inside the transaction, not only by the route", async () => {
+  // The estimate is delivered after the route would have read it and before
+  // the save runs. Only the in-transaction check can catch this.
+  const businessId = await newBusiness();
+  const estimateId = await newEstimate(businessId);
 
-    // Every delivery signal, including copy link's, which never sets sent_at.
-    for (const delivered of [
-      { sent_at: new Date().toISOString() },
-      { copied_at: new Date().toISOString() },
-      { status: "sent" },
-      { status: "done" },
-    ]) {
-      const estimateId = await seedEstimate(admin, businessId, delivered);
-      const { error } = await save(admin, estimateId, businessId, [LABOUR_ROW]);
-      expect(error?.message, JSON.stringify(delivered)).toContain("ESTIMATE_DELIVERED");
-      expect(await rowsFor(admin, estimateId)).toHaveLength(0);
-    }
-  } finally {
-    await cleanupTestAccount(account.userId);
-  }
+  await admin.query("update tpe_estimates set copied_at = now() where id = $1", [estimateId]);
+  await expect(save(admin, estimateId, businessId, [LABOUR_ROW])).rejects.toThrow(/ESTIMATE_DELIVERED/);
+  expect(await rowsFor(estimateId)).toHaveLength(0);
 });
 
-test("an inbound quote is promoted on its first pricing save, complete or not", async ({ page }) => {
-  test.setTimeout(60000);
-  const account = await signUpFreshAccount(page);
-  try {
-    const admin = adminClient();
-    const businessId = await businessFor(admin, account.userId);
+// ── Promotion ────────────────────────────────────────────────────────────────
 
-    await admin
-      .from("tpe_businesses")
-      .update({ tax_label: "HST", tax_rate: 13, deposit_percent: 25, deposit_threshold: 1000 })
-      .eq("id", businessId);
+test("an inbound quote is promoted on its first pricing save, and copies all four snapshots", async () => {
+  const businessId = await newBusiness({
+    tax_label: "HST",
+    tax_rate: 13,
+    deposit_percent: 25,
+    deposit_threshold: 1000,
+  });
+  const estimateId = await newEstimate(businessId, {
+    source: "website_quote",
+    status: "needs_review",
+    pricing_source: "markdown",
+  });
 
-    const estimateId = await seedEstimate(admin, businessId, {
-      source: "website_quote",
-      status: "needs_review",
-      pricing_source: "markdown",
-    });
+  // Labour only: still incomplete, and it still promotes.
+  await save(admin, estimateId, businessId, [LABOUR_ROW]);
 
-    // Labour only: still incomplete, and it still promotes.
-    const { error } = await save(admin, estimateId, businessId, [LABOUR_ROW]);
-    expect(error).toBeNull();
-
-    const { data } = await admin
-      .from("tpe_estimates")
-      .select("status, pricing_source, tax_label_snapshot, tax_rate_snapshot, deposit_percent_snapshot, deposit_threshold_snapshot")
-      .eq("id", estimateId)
-      .maybeSingle();
-
-    const promoted = data as unknown as Record<string, unknown>;
-    expect(promoted.pricing_source).toBe("contractor_pricing");
-    expect(promoted.status).toBe("draft");
-    expect(promoted.tax_label_snapshot).toBe("HST");
-    expect(Number(promoted.tax_rate_snapshot)).toBe(13);
-    expect(Number(promoted.deposit_percent_snapshot)).toBe(25);
-    expect(Number(promoted.deposit_threshold_snapshot)).toBe(1000);
-  } finally {
-    await cleanupTestAccount(account.userId);
-  }
+  const state = await estimateState(estimateId);
+  expect(state.pricing_source).toBe("contractor_pricing");
+  expect(state.status).toBe("draft");
+  expect(state.tax_label_snapshot).toBe("HST");
+  expect(Number(state.tax_rate_snapshot)).toBe(13);
+  expect(Number(state.deposit_percent_snapshot)).toBe(25);
+  expect(Number(state.deposit_threshold_snapshot)).toBe(1000);
+  expect(await rowsFor(estimateId)).toHaveLength(1);
 });
 
-test("an existing contractor_pricing estimate keeps its snapshots unless tax is changed", async ({ page }) => {
-  test.setTimeout(60000);
-  const account = await signUpFreshAccount(page);
-  try {
-    const admin = adminClient();
-    const businessId = await businessFor(admin, account.userId);
-    const estimateId = await seedEstimate(admin, businessId, {
-      tax_label_snapshot: "GST",
-      tax_rate_snapshot: 5,
-      deposit_percent_snapshot: 25,
-      deposit_threshold_snapshot: 1000,
-    } as Record<string, unknown>);
+test("a legacy estimate is refused rather than promoted", async () => {
+  const businessId = await newBusiness();
+  const estimateId = await newEstimate(businessId, { pricing_source: "markdown", source: "ai_generated" });
 
-    await save(admin, estimateId, businessId, [LABOUR_ROW]);
-
-    const { data: unchanged } = await admin
-      .from("tpe_estimates")
-      .select("tax_label_snapshot, tax_rate_snapshot, deposit_percent_snapshot, deposit_threshold_snapshot")
-      .eq("id", estimateId)
-      .maybeSingle();
-    const kept = unchanged as unknown as Record<string, unknown>;
-    expect(kept.tax_label_snapshot).toBe("GST");
-    expect(Number(kept.deposit_percent_snapshot)).toBe(25);
-    expect(Number(kept.deposit_threshold_snapshot)).toBe(1000);
-
-    // An explicit change moves the estimate snapshot and the business default
-    // together, in one transaction.
-    await save(admin, estimateId, businessId, [LABOUR_ROW], { label: "HST", rate: 13 });
-
-    const { data: changed } = await admin
-      .from("tpe_estimates")
-      .select("tax_label_snapshot, tax_rate_snapshot, deposit_percent_snapshot")
-      .eq("id", estimateId)
-      .maybeSingle();
-    const updated = changed as unknown as Record<string, unknown>;
-    expect(updated.tax_label_snapshot).toBe("HST");
-    expect(Number(updated.tax_rate_snapshot)).toBe(13);
-    expect(Number(updated.deposit_percent_snapshot)).toBe(25);
-
-    const { data: businessRow } = await admin
-      .from("tpe_businesses")
-      .select("tax_label, tax_rate")
-      .eq("id", businessId)
-      .maybeSingle();
-    expect(businessRow?.tax_label).toBe("HST");
-    expect(Number(businessRow?.tax_rate)).toBe(13);
-  } finally {
-    await cleanupTestAccount(account.userId);
-  }
+  await expect(save(admin, estimateId, businessId, [LABOUR_ROW])).rejects.toThrow(
+    /ESTIMATE_NOT_CONTRACTOR_PRICING/
+  );
+  expect(await rowsFor(estimateId)).toHaveLength(0);
 });
 
-test("the first hourly rate becomes the business default, and a later override does not", async ({ page }) => {
-  test.setTimeout(60000);
-  const account = await signUpFreshAccount(page);
-  try {
-    const admin = adminClient();
-    const businessId = await businessFor(admin, account.userId);
-    await admin.from("tpe_businesses").update({ labour_rate: 0, markup_percent: 20 }).eq("id", businessId);
+// ── Snapshots and business defaults ──────────────────────────────────────────
 
-    const estimateId = await seedEstimate(admin, businessId);
-    await save(admin, estimateId, businessId, [{ ...LABOUR_ROW, unit_price: 125 }], null, 125);
+test("an existing estimate keeps its snapshots unless tax is explicitly changed", async () => {
+  const businessId = await newBusiness({ tax_label: "GST", tax_rate: 5 });
+  const estimateId = await newEstimate(businessId, {
+    tax_label_snapshot: "GST",
+    tax_rate_snapshot: 5,
+    deposit_percent_snapshot: 25,
+    deposit_threshold_snapshot: 1000,
+  });
 
-    const { data: afterFirst } = await admin
-      .from("tpe_businesses")
-      .select("labour_rate, markup_percent")
-      .eq("id", businessId)
-      .maybeSingle();
-    expect(Number(afterFirst?.labour_rate)).toBe(125);
+  await save(admin, estimateId, businessId, [LABOUR_ROW]);
+  const kept = await estimateState(estimateId);
+  expect(kept.tax_label_snapshot).toBe("GST");
+  expect(Number(kept.tax_rate_snapshot)).toBe(5);
+  expect(Number(kept.deposit_percent_snapshot)).toBe(25);
+  expect(Number(kept.deposit_threshold_snapshot)).toBe(1000);
 
-    // A per-estimate override on a business that already has a rate changes
-    // this estimate only.
-    await save(admin, estimateId, businessId, [{ ...LABOUR_ROW, unit_price: 150 }], null, 150);
-    const { data: afterOverride } = await admin
-      .from("tpe_businesses")
-      .select("labour_rate, markup_percent")
-      .eq("id", businessId)
-      .maybeSingle();
-    expect(Number(afterOverride?.labour_rate)).toBe(125);
-
-    // Markup never moves from this route.
-    await save(admin, estimateId, businessId, [{ ...MATERIALS_ROW, markup_percent: 40 }]);
-    const { data: afterMarkup } = await admin
-      .from("tpe_businesses")
-      .select("markup_percent")
-      .eq("id", businessId)
-      .maybeSingle();
-    expect(Number(afterMarkup?.markup_percent)).toBe(20);
-  } finally {
-    await cleanupTestAccount(account.userId);
-  }
+  await save(admin, estimateId, businessId, [LABOUR_ROW], { label: "HST", rate: 13 });
+  const changed = await estimateState(estimateId);
+  const business = await businessState(businessId);
+  expect(changed.tax_label_snapshot).toBe("HST");
+  expect(Number(changed.tax_rate_snapshot)).toBe(13);
+  // The deposit snapshot is untouched by a tax edit.
+  expect(Number(changed.deposit_percent_snapshot)).toBe(25);
+  // Estimate and business moved together, in one transaction.
+  expect(business.tax_label).toBe("HST");
+  expect(Number(business.tax_rate)).toBe(13);
 });
 
-test("a failed save leaves the previous rows, snapshots and defaults untouched", async ({ page }) => {
-  test.setTimeout(60000);
-  const account = await signUpFreshAccount(page);
-  try {
-    const admin = adminClient();
-    const businessId = await businessFor(admin, account.userId);
-    const estimateId = await seedEstimate(admin, businessId, {
-      tax_label_snapshot: "GST",
-      tax_rate_snapshot: 5,
-    } as Record<string, unknown>);
+test("the first hourly rate becomes the business default; a later override does not", async () => {
+  const businessId = await newBusiness({ labour_rate: 0, markup_percent: 20 });
+  const estimateId = await newEstimate(businessId);
 
-    await save(admin, estimateId, businessId, [LABOUR_ROW, MATERIALS_ROW]);
-    const before = await rowsFor(admin, estimateId);
+  await save(admin, estimateId, businessId, [{ ...LABOUR_ROW, unit_price: 125 }], null, 125);
+  expect(Number((await businessState(businessId)).labour_rate)).toBe(125);
 
-    // A blank description violates the not-blank CHECK inside the insert,
-    // after the delete has already run in the same transaction.
-    const { error } = await save(
-      admin,
-      estimateId,
-      businessId,
-      [{ ...LABOUR_ROW, description: "" }],
-      { label: "HST", rate: 13 }
-    );
-    expect(error).not.toBeNull();
+  await save(admin, estimateId, businessId, [{ ...LABOUR_ROW, unit_price: 150 }], null, 150);
+  expect(Number((await businessState(businessId)).labour_rate)).toBe(125);
 
-    expect(await rowsFor(admin, estimateId)).toEqual(before);
-    const { data } = await admin
-      .from("tpe_estimates")
-      .select("tax_label_snapshot")
-      .eq("id", estimateId)
-      .maybeSingle();
-    expect((data as unknown as Record<string, unknown>).tax_label_snapshot).toBe("GST");
-    const { data: businessRow } = await admin
-      .from("tpe_businesses")
-      .select("tax_label")
-      .eq("id", businessId)
-      .maybeSingle();
-    expect(businessRow?.tax_label).not.toBe("HST");
-  } finally {
-    await cleanupTestAccount(account.userId);
-  }
+  await save(admin, estimateId, businessId, [{ ...MATERIALS_ROW, markup_percent: 40 }]);
+  expect(Number((await businessState(businessId)).markup_percent)).toBe(20);
 });
 
-test("another business cannot save pricing onto this estimate", async ({ page }) => {
-  test.setTimeout(60000);
-  const account = await signUpFreshAccount(page);
-  try {
-    const admin = adminClient();
-    const businessId = await businessFor(admin, account.userId);
-    const estimateId = await seedEstimate(admin, businessId);
+// ── Rollback ─────────────────────────────────────────────────────────────────
 
-    const { error } = await save(
-      admin,
-      estimateId,
-      "00000000-0000-0000-0000-000000000000",
-      [LABOUR_ROW]
-    );
-    expect(error?.message).toContain("ESTIMATE_NOT_FOUND_OR_NOT_OWNED");
-    expect(await rowsFor(admin, estimateId)).toHaveLength(0);
-  } finally {
-    await cleanupTestAccount(account.userId);
-  }
+test("a failed save leaves the previous rows, snapshots and defaults untouched", async () => {
+  const businessId = await newBusiness({ tax_label: "GST", tax_rate: 5 });
+  const estimateId = await newEstimate(businessId, { tax_label_snapshot: "GST", tax_rate_snapshot: 5 });
+
+  await save(admin, estimateId, businessId, [LABOUR_ROW, MATERIALS_ROW]);
+  const before = await rowsFor(estimateId);
+
+  // A blank description violates the not-blank CHECK during the insert, after
+  // the delete and the tax writes have already run in the same transaction.
+  await expect(
+    save(admin, estimateId, businessId, [{ ...LABOUR_ROW, description: "" }], { label: "HST", rate: 13 })
+  ).rejects.toThrow();
+
+  expect(await rowsFor(estimateId)).toEqual(before);
+  expect((await estimateState(estimateId)).tax_label_snapshot).toBe("GST");
+  expect((await businessState(businessId)).tax_label).toBe("GST");
 });
 
-test("concurrent saves serialize, and no partial row set is observable", async ({ page }) => {
-  test.setTimeout(60000);
-  const account = await signUpFreshAccount(page);
-  try {
-    const admin = adminClient();
-    const businessId = await businessFor(admin, account.userId);
-    const estimateId = await seedEstimate(admin, businessId);
+// ── Ownership ────────────────────────────────────────────────────────────────
 
-    const [first, second] = await Promise.all([
-      save(admin, estimateId, businessId, [LABOUR_ROW, MATERIALS_ROW]),
-      save(admin, estimateId, businessId, [LABOUR_ROW]),
+test("another business cannot save pricing onto this estimate", async () => {
+  const businessId = await newBusiness();
+  const otherBusinessId = await newBusiness();
+  const estimateId = await newEstimate(businessId);
+
+  await expect(save(admin, estimateId, otherBusinessId, [LABOUR_ROW])).rejects.toThrow(
+    /ESTIMATE_NOT_FOUND_OR_NOT_OWNED/
+  );
+  expect(await rowsFor(estimateId)).toHaveLength(0);
+});
+
+// ── Concurrency ──────────────────────────────────────────────────────────────
+
+test("concurrent saves serialize, and no partial row set is ever observable", async () => {
+  test.setTimeout(60_000);
+  const businessId = await newBusiness();
+  const estimateId = await newEstimate(businessId);
+
+  // A committed starting state, so a mid-transaction reader has something
+  // definite to see.
+  await save(admin, estimateId, businessId, [LABOUR_ROW, MATERIALS_ROW]);
+  const beforeRows = await rowsFor(estimateId);
+  expect(beforeRows).toHaveLength(2);
+
+  const writerA = newClient();
+  const writerB = newClient();
+  const readerC = newClient();
+  await writerA.connect();
+  await writerB.connect();
+  await readerC.connect();
+
+  try {
+    // A runs the save inside an open transaction and holds the row lock.
+    await writerA.query("begin");
+    await save(writerA, estimateId, businessId, [{ ...LABOUR_ROW, unit_price: 111 }]);
+
+    // B attempts its own save and must wait for A's lock.
+    const bSave = save(writerB, estimateId, businessId, [
+      { ...LABOUR_ROW, unit_price: 222 },
+      { ...MATERIALS_ROW, unit_price: 333 },
     ]);
-    expect(first.error).toBeNull();
-    expect(second.error).toBeNull();
+    expect(await stillPending(bSave, 1_500), "B must block while A holds the estimate row lock").toBe(true);
 
-    // Whichever committed last owns the whole row set: one or two rows, never
-    // a mixture of both saves.
-    const rows = await rowsFor(admin, estimateId);
-    expect([1, 2]).toContain(rows.length);
-    if (rows.length === 1) {
-      expect(rows[0].item_type).toBe("labour");
-    } else {
-      expect(rows.map((row) => row.item_type)).toEqual(["labour", "material"]);
-    }
+    // C reads while A is mid-replacement: it must see the committed
+    // pre-transaction rows, never the state between DELETE and INSERT.
+    const duringRows = await rowsFor(estimateId, readerC);
+    expect(duringRows, "a reader must never observe a partially replaced row set").toEqual(beforeRows);
+
+    await writerA.query("commit");
+    await bSave;
+
+    // B ran against A's committed state and its own save is the whole story.
+    const finalRows = await rowsFor(estimateId);
+    expect(finalRows).toHaveLength(2);
+    expect(finalRows.map((row) => row.item_type)).toEqual(["labour", "material"]);
+    expect(Number(finalRows[0].unit_price)).toBe(222);
+    expect(Number(finalRows[1].unit_price)).toBe(333);
   } finally {
-    await cleanupTestAccount(account.userId);
+    await writerA.query("rollback").catch(() => {});
+    await writerA.end().catch(() => {});
+    await writerB.end().catch(() => {});
+    await readerC.end().catch(() => {});
   }
 });

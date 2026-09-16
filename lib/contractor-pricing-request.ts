@@ -118,7 +118,7 @@ function parseMaterials(raw: unknown): { ok: true; value: MaterialsInput | null 
 }
 
 function parseCharges(raw: unknown): { ok: true; value: ChargeInput[] } | { ok: false; error: string } {
-  if (raw === undefined || raw === null) return { ok: true, value: [] };
+  // No null shorthand: an empty list is how "no charges" is said.
   if (!Array.isArray(raw)) return { ok: false, error: "charges must be a list" };
 
   const charges: ChargeInput[] = [];
@@ -145,6 +145,21 @@ function parseTax(raw: unknown): { ok: true; value: TaxInput | null } | { ok: fa
 
 export function parseContractorPricingRequest(body: unknown): ParseResult {
   if (!isPlainObject(body)) return { ok: false, error: "Invalid request body" };
+
+  // A PUT carries the whole current pricing state, so all three inputs are
+  // required keys. Their values may be empty (null, null, []), but an omitted
+  // key is malformed, never a silent clear. That is the difference between
+  // "this contractor has no materials" and "the client forgot to send
+  // materials", and only one of those may delete a materials row.
+  if (!("labour" in body)) {
+    return { ok: false, error: "labour is required; send null when it is unknown" };
+  }
+  if (!("materials" in body)) {
+    return { ok: false, error: "materials is required; send null when it is unknown" };
+  }
+  if (!("charges" in body)) {
+    return { ok: false, error: "charges is required; send an empty list when there are none" };
+  }
 
   const labour = parseLabour(body.labour);
   if (!labour.ok) return labour;

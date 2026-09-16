@@ -16,7 +16,7 @@
 -- all of it back together. Same reasoning, and the same shape, as the existing
 -- tpe_convert_estimate_to_structured, which this does not touch.
 
--- ── Snapshots ────────────────────────────────────────────────────────────────
+-- --- Snapshots --------------------------------------------------------------
 --
 -- A later change to the business's Rates must never move an estimate that has
 -- already been priced, so the estimate carries its own copy. Nullable: an
@@ -32,7 +32,7 @@ alter table tpe_estimates
 comment on column tpe_estimates.tax_rate_snapshot is
   'The tax rate this estimate was priced with. Null means not priced yet, which is incomplete, not 0%.';
 
--- ── The one transactional pricing save ───────────────────────────────────────
+-- --- The one transactional pricing save ---------------------------------------
 --
 -- Persists inputs only. Every derived figure (subtotal, tax, total, deposit,
 -- balance) is calculated in lib/contractor-pricing.ts and never here, so there
