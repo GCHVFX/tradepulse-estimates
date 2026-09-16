@@ -46,6 +46,10 @@ const CANNOT_RUN_IN_UNIT_CONFIG = new Map<string, string>([
 
   // --- need a real Supabase account created via tests/smoke/helpers.ts ---
   [
+    "contractor-pricing-route.spec.ts",
+    "Exercises the tpe_save_contractor_pricing transaction itself: the delivered re-check under the row lock, inbound-quote promotion, atomic row replacement and the permitted business-default writes. Needs live Supabase plus the slice 2 migration, which is deliberately not applied to production, and this project has no local stack. The pure half (request validation and canonical encoding) runs in the unit config as contractor-pricing-request.spec.ts.",
+  ],
+  [
     "billing-gate-no-deadend.spec.ts",
     "Signs up a real account, expires its trial, and checks /subscribe is not a dead end. Needs live Supabase plus a browser.",
   ],

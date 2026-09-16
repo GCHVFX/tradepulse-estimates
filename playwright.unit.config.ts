@@ -50,6 +50,7 @@ export default defineConfig({
     "campaign-attribution.spec.ts",
     "outreach-click-tracking.spec.ts",
     "contractor-pricing-calculation.spec.ts",
+    "contractor-pricing-request.spec.ts",
     "share-delivered-renders-without-business.spec.ts",
     "tax-rate-from-rates-not-ai.spec.ts",
     "unit-suite-completeness.spec.ts",
