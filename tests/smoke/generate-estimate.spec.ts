@@ -52,6 +52,9 @@ test("a generated estimate contains no currency figures before contractor input"
     expect(bodyText, "no deposit may appear in generated prose").not.toMatch(/deposit/i);
     expect(bodyText, "no pricing summary is generated any more").not.toMatch(/pricing summary/i);
     expect(bodyText, "no estimated total is generated any more").not.toMatch(/estimated total/i);
+    expect(bodyText, "the model does not write the contractor's business terms").not.toMatch(
+      /payment terms|valid for \d+ days|quoted separately|cost will depend/i
+    );
   } finally {
     await cleanupTestAccount(account.userId);
   }

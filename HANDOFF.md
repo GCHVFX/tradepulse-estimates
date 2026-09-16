@@ -109,6 +109,29 @@ change, and additional charges/fees/costs (may) apply. Deliberately narrow: "The
 the wall is opened up" survives, and there is a test for that. This is the one place a Slice 4.2
 behaviour change exists; everything else in this correction is prompt text.
 
+**Slice 4 correction, second pass (2026-09-16 PT): no AI-authored business terms.** The second live
+run showed the photo restraint holding but the model still writing the contractor's own terms:
+"quoted separately", "cost will depend on what we find", "The balance is due upon completion", "This
+estimate is valid for 30 days". None of those is the model's to say, and TradePulse has no setting
+holding any of them, so there is nothing to substitute either.
+
+Phase 1 generation is now four sections: Job Summary, Scope of Work, Assumptions and Exclusions, and
+Notes. **The Payment Terms section is gone from generated output entirely**, and was deliberately not
+replaced with an invented default. The prompt says so, and `sanitizeGeneratedProse()` drops a Payment
+Terms section whole, heading and content together, if the model writes one anyway.
+
+`lib/estimate-prose.ts` now carries two patterns. `PRICE_LEAK` gained "quoted/priced/billed
+separately" and "cost/price/pricing will depend". A new `COMMERCIAL_TERM` catches an invented validity
+period, a payment due date or timing, payment terms, progress payments, a warranty, financing and a
+cancellation policy, wherever in the prose they appear. `SanitizedProse` gained `removedSections`.
+"Due to" is deliberately not matched, because it is ordinary scope language, and there is a nine-case
+test pinning the sentences the filter must never touch (timing, sequencing, access, condition,
+inspect-and-confirm wording, "the scope may change").
+
+When TradePulse grows real settings for validity, payment timing or warranty, those belong in the
+document deterministically from the contractor's own record, not from the model. Nothing here blocks
+that.
+
 **Reported, not fixed: the website-quote intake still injects pricing into prose.**
 `handleCreateEstimate` in `app/components/estimate-actions.tsx` fetches the price book and calls
 `buildDraftSummary(...)` in `lib/quote-templates.ts`, which writes price-book prices and a Pricing

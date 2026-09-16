@@ -99,14 +99,18 @@ test("prose with nothing to remove comes back byte for byte", () => {
     "- Swap the 100A panel for a 200A panel",
     "- Reconnect and label every circuit",
     "",
-    "## Payment Terms",
-    "Payment is due on completion. This estimate is valid for 30 days from the date above.",
+    "## Assumptions and Exclusions",
+    "The existing service entrance is sound. Drywall patching around the panel is not included.",
+    "",
+    "## Notes",
+    "The power is off for most of the day, so plan for that.",
   ].join("\n");
 
   const result = sanitizeGeneratedProse(clean);
   expect(result.prose).toBe(clean);
   expect(result.removedSentences).toBe(0);
   expect(result.removedHeadings).toBe(0);
+  expect(result.removedSections).toBe(0);
 });
 
 test("filtering an all-price section removes the section heading, not just the sentences", () => {
@@ -121,8 +125,8 @@ test("filtering an all-price section removes the section heading, not just the s
       "| Subtotal | $650 |",
       "| Total | $682.50 |",
       "",
-      "## Payment Terms",
-      "This estimate is valid for 30 days from the date above.",
+      "## Notes",
+      "The cleanout is behind the water heater, so allow room to work.",
     ].join("\n")
   );
 
@@ -136,15 +140,20 @@ test("filtering an all-price section removes the section heading, not just the s
   // anywhere in the output.
   expect(result.prose).toContain("## Scope of Work");
   expect(result.prose).toContain("- Clear the blocked main drain");
-  expect(result.prose).toContain("## Payment Terms");
-  expect(result.prose).toContain("This estimate is valid for 30 days from the date above.");
+  expect(result.prose).toContain("## Notes");
+  expect(result.prose).toContain("The cleanout is behind the water heater, so allow room to work.");
   expect(result.prose).not.toMatch(/\n#{1,6} [^\n]*\n\s*(#{1,6} |$)/);
 });
 
 test("a heading the model left empty on its own is not removed", () => {
   // Nothing was filtered out of it, so nothing about it is the filter's
   // doing. Only a section the filter emptied loses its heading.
-  const source = ["## Notes", "", "## Payment Terms", "Payment is due on completion."].join("\n");
+  const source = [
+    "## Notes",
+    "",
+    "## Assumptions and Exclusions",
+    "The shutoff valve is accessible.",
+  ].join("\n");
   const result = sanitizeGeneratedProse(source);
 
   expect(result.prose).toContain("## Notes");
@@ -195,6 +204,132 @@ test("contractor-authored prose is never run through the filter", () => {
   // And no other route sanitizes anything either.
   const pricingRoute = code("app/api/estimates/[id]/pricing/route.ts");
   expect(pricingRoute).not.toContain("sanitizeGeneratedProse");
+});
+
+// Commercial and contractual terms ---------------------------------------
+//
+// Second live run. The photo restraint held, but the model was still
+// writing the business's terms for it: "quoted separately", "cost will
+// depend on what we find", "The balance is due upon completion", "This
+// estimate is valid for 30 days". None of those is the model's to say, and
+// TradePulse has no setting holding any of them yet, so there is nothing to
+// substitute either. Phase 1 generation is the job summary, the scope, the
+// assumptions and exclusions, and job-specific notes. Nothing else.
+
+test("separate-quoting language is leakage", () => {
+  const leaks = [
+    "The tile work is quoted separately.",
+    "Drywall repair is priced separately.",
+    "Permit handling is separately quoted.",
+    "Disposal is billed separately.",
+  ];
+
+  for (const sentence of leaks) {
+    const result = sanitizeGeneratedProse(`## Assumptions and Exclusions\nThe shutoff is accessible. ${sentence}`);
+    expect(result.prose, sentence).toContain("The shutoff is accessible.");
+    expect(result.prose, sentence).not.toContain(sentence);
+    expect(result.removedSentences, sentence).toBe(1);
+  }
+});
+
+test("cost-will-depend language is leakage", () => {
+  const leaks = [
+    "The cost will depend on what we find behind the wall.",
+    "Costs will depend on the condition of the subfloor.",
+    "Final cost may depend on access to the crawlspace.",
+    "The price would depend on whether the valve is seized.",
+  ];
+
+  for (const sentence of leaks) {
+    const result = sanitizeGeneratedProse(`## Notes\nAccess is through the crawlspace. ${sentence}`);
+    expect(result.prose, sentence).toContain("Access is through the crawlspace.");
+    expect(result.prose, sentence).not.toContain(sentence);
+    expect(result.removedSentences, sentence).toBe(1);
+  }
+});
+
+test("the rewrite the prompt asks for instead of a pricing hedge survives", () => {
+  // The model is told to write the condition rather than talk about price.
+  // If the filter ate this too, the instruction would have nowhere to land.
+  const wanted =
+    "If additional deterioration is found, we will discuss the added scope with you before proceeding.";
+  const result = sanitizeGeneratedProse(`## Assumptions and Exclusions\n${wanted}`);
+
+  expect(result.prose).toContain(wanted);
+  expect(result.removedSentences).toBe(0);
+});
+
+test("an AI-written Payment Terms section is dropped whole, heading and all", () => {
+  const result = sanitizeGeneratedProse(
+    [
+      "# Under-Sink Repair",
+      "",
+      "## Scope of Work",
+      "- Replace the failed shutoff valve",
+      "",
+      "## Payment Terms",
+      "The balance is due upon completion.",
+      "This estimate is valid for 30 days from the date above.",
+      "",
+      "## Notes",
+      "The cabinet base is damp and should be checked once the valve is out.",
+    ].join("\n")
+  );
+
+  expect(result.prose).not.toContain("Payment Terms");
+  expect(result.prose).not.toContain("balance is due");
+  expect(result.prose).not.toContain("valid for 30 days");
+  expect(result.removedSections).toBe(1);
+
+  expect(result.prose).toContain("## Scope of Work");
+  expect(result.prose).toContain("- Replace the failed shutoff valve");
+  expect(result.prose).toContain("## Notes");
+  expect(result.prose).toContain("The cabinet base is damp and should be checked once the valve is out.");
+});
+
+test("an invented validity period or payment date is removed wherever it appears", () => {
+  // Not only under a Payment Terms heading: the model moves these around.
+  const terms = [
+    "This estimate is valid for 30 days from the date above.",
+    "This quote is valid for 14 business days.",
+    "The balance is due upon completion.",
+    "Payment is due within 15 days.",
+    "Standard payment terms apply.",
+    "The work carries a two year warranty.",
+    "Financing is available on request.",
+    "A cancellation fee applies inside 48 hours.",
+  ];
+
+  for (const sentence of terms) {
+    const result = sanitizeGeneratedProse(`## Notes\nThe unit sits in a tight closet. ${sentence}`);
+    expect(result.prose, sentence).toContain("The unit sits in a tight closet.");
+    expect(result.prose, sentence).not.toContain(sentence);
+    expect(result.removedSentences, sentence).toBe(1);
+  }
+});
+
+test("ordinary non-commercial scope prose still survives all of it", () => {
+  // The whole risk of this filter is eating the job. These are the sentences
+  // it must never touch: timing, sequencing, access, condition, what has to
+  // be confirmed on site.
+  const kept = [
+    "The work takes most of a day, so plan to be without water.",
+    "We will confirm the valve size on site before ordering.",
+    "Access is due to be cleared by the tenant before we arrive.",
+    "Damage behind the cabinet base is inspected once the valve is out.",
+    "The scope may change once the wall is opened up.",
+    "Dark staining is present under the sink and should be checked.",
+    "The braided supply line is inspected and replaced if damaged.",
+    "Old fittings are hauled away on completion.",
+    "Work is scheduled within two weeks of approval.",
+  ];
+
+  for (const sentence of kept) {
+    const result = sanitizeGeneratedProse(`## Scope of Work\n- ${sentence}`);
+    expect(result.prose, sentence).toContain(sentence);
+    expect(result.removedSentences, sentence).toBe(0);
+    expect(result.removedSections, sentence).toBe(0);
+  }
 });
 
 test("stripTitleHeading removes only the H1, for screens that show the title separately", () => {

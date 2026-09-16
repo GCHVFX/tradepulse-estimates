@@ -55,20 +55,21 @@ Rules:
 - Never write currency amounts, prices, rates, or percentages of cost. Refer to the Pricing section instead.
 - Never write a line items table, a pricing summary, an estimated total, a labour or material amount, a labour rate, an hour count, or anything priced by the unit.
 - Never mention a deposit, a payment percentage, or any split of the price. Payment Terms describe timing and conditions in words only.
-- Never write generic pricing language such as "pricing may change", "price may change" or "additional charges may apply", even with no dollar amount in the sentence. The contractor owns the price and says that themselves. Write the condition instead: what is unknown, and what has to be confirmed.
+- Never write generic pricing language such as "pricing may change", "price may change", "additional charges may apply", "quoted separately", "priced separately" or "cost will depend", even with no dollar amount in the sentence. The contractor owns the price and says that themselves. Write the condition instead: what is unknown, and what has to be confirmed. For example, "If additional deterioration is found, we will discuss the added scope with you before proceeding."
+- Never invent a commercial or contractual term. No payment due date, no payment timing, no estimate validity period, no financing, no cancellation policy, no warranty, no deposit, no guarantee of any kind. Those are the contractor's own business terms and are added outside this text.
 - ${spellingInstructionForCurrency(currency)}
 - For automotive and vehicle parts, use American English spellings: tire not tyre, muffler not silencer, gas not petrol, truck not lorry.
 - In the Assumptions and Exclusions section, write each item as a plain bullet point. Do not use bold labels like **Included:**, **Excluded:**, or **Assumptions:**. Just write the assumption or exclusion directly.
 
-Output must follow this exact structure:
+Output must follow this exact structure, and must not contain any other section:
 
 1. Job Title (H1 heading)
 2. Job Summary (2 to 3 sentences)
 3. Scope of Work (bullet list of specific tasks, plain language)
 4. Assumptions and Exclusions (what is included, what is not)
-5. Payment Terms (2 to 4 lines)
-   Always include: "This estimate is valid for 30 days from the date above."
-6. Notes (omit if nothing relevant)`;
+5. Notes (job-specific and useful, omit if nothing relevant)
+
+Do not write a Payment Terms section. Do not write any section about money, timing of payment, or business terms.`;
 }
 
 export async function POST(request: NextRequest) {
@@ -249,15 +250,20 @@ export async function POST(request: NextRequest) {
               }
             }
 
-            // The price-safety guardrail. A sentence the model wrote with a
-            // currency figure or a deposit in it is deleted, and a heading
-            // the deletion emptied goes with it. It never retries and never
+            // The price-safety guardrail. A sentence carrying a price, a
+            // deposit or a business term the model has no standing to invent
+            // is deleted; a heading the deletion emptied goes with it; and a
+            // Payment Terms section goes whole. It never retries and never
             // blocks the save. From here on this sanitized text is the
             // estimate, and the raw buffer the client watched arrive is not.
             const sanitized = sanitizeGeneratedProse(fullText);
-            if (sanitized.removedSentences > 0 || sanitized.removedHeadings > 0) {
+            if (
+              sanitized.removedSentences > 0 ||
+              sanitized.removedHeadings > 0 ||
+              sanitized.removedSections > 0
+            ) {
               console.info(
-                `[generate-estimate] prose safety removed ${sanitized.removedSentences} sentence(s) and ${sanitized.removedHeadings} heading(s)`
+                `[generate-estimate] prose safety removed ${sanitized.removedSentences} sentence(s), ${sanitized.removedHeadings} heading(s) and ${sanitized.removedSections} section(s)`
               );
             }
             const summary = sanitized.prose;

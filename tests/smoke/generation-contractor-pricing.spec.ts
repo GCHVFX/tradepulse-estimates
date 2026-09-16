@@ -150,7 +150,7 @@ test("the prompt asks for prose only, with no pricing sections left in it", () =
   expect(generate).toContain("Never mention a deposit");
   expect(generate).toContain("3. Scope of Work");
   expect(generate).toContain("4. Assumptions and Exclusions");
-  expect(generate).toContain("5. Payment Terms");
+  expect(generate).toContain("5. Notes (job-specific and useful, omit if nothing relevant)");
 });
 
 // 4. No AI-authored pricing rows ---------------------------------------
@@ -440,8 +440,8 @@ test("an Assumptions section that is nothing but pricing hedges loses its headin
       "Final pricing may change once the cabinet is opened up.",
       "Additional charges may apply if the supply line has to be replaced.",
       "",
-      "## Payment Terms",
-      "This estimate is valid for 30 days from the date above.",
+      "## Notes",
+      "The shutoff is behind the cabinet wall, so allow room to reach it.",
     ].join("\n")
   );
 
@@ -454,5 +454,30 @@ test("an Assumptions section that is nothing but pricing hedges loses its headin
   // The scope the photo genuinely supported is untouched, including its
   // inspect-first wording.
   expect(result.prose).toContain("- Inspect the cabinet base and confirm the extent of the damage");
-  expect(result.prose).toContain("## Payment Terms");
+  expect(result.prose).toContain("## Notes");
+});
+
+test("the prompt asks for four sections and no business terms at all", () => {
+  const generate = code("app/api/generate-estimate/route.ts");
+
+  // Phase 1 generation is the job, and only the job.
+  expect(generate).toContain("Output must follow this exact structure, and must not contain any other section:");
+  expect(generate).toContain("2. Job Summary");
+  expect(generate).toContain("3. Scope of Work");
+  expect(generate).toContain("4. Assumptions and Exclusions");
+  expect(generate).toContain("5. Notes (job-specific and useful, omit if nothing relevant)");
+  expect(generate).toContain("Do not write a Payment Terms section.");
+
+  // Nothing numbered past Notes, and no invented default left behind where
+  // Payment Terms used to be.
+  expect(generate).not.toContain("6. Notes");
+  expect(generate).not.toContain("This estimate is valid for 30 days");
+
+  expect(generate).toContain("Never invent a commercial or contractual term.");
+  expect(generate).toContain("no estimate validity period");
+  expect(generate).toContain('"quoted separately"');
+  expect(generate).toContain('"cost will depend"');
+  expect(generate).toContain(
+    'For example, "If additional deterioration is found, we will discuss the added scope with you before proceeding."'
+  );
 });
