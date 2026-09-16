@@ -1,6 +1,401 @@
 # TradePulse handoff
 
-Updated: 2026-09-16 (Phase 1 slice 5A committed locally and awaiting review: classification, the customer-safe contractor pricing projection, the share page and the PDF. 5B and 5C not started. Slices 1-4 and 5A are local only, unpushed, not deployed. Next: review 5A before beginning 5B.)
+Updated: 2026-09-16 (Phase 1 slice 5B security foundation committed locally: B1 and B2 closed in production by migration `revoke_browser_writes_on_estimate_tables_and_photos`, verified; B3 fixed on this branch but STILL LIVE in production until a separate hotfix on main is deployed. Remaining 5B delivery-lock work not started. Nothing pushed, no application deployed.)
+
+## Phase 1 slice 5B security foundation: B1 and B2 closed in production, B3 fixed locally (2026-09-16 PT)
+
+**Status:** security foundation only. B1 and B2 are **closed in production** and verified. B3 is fixed on
+`phase1-contractor-pricing` but **still live in production** until a separate hotfix on `main` is deployed.
+The remaining 5B work (completeness gating, send and copy-link enforcement, delivery locks, photo and
+customer-detail locking, legacy restrictions, UI) has **not** been started. Branch not pushed; no
+application code deployed.
+
+- **Starting commit:** `4a7f447051bfb97a9434b565bff533ec45066880` (final amended 5A).
+- **Deployed production commit audited:** `6f411e3`. (`origin/main` is at `3073774`, a HANDOFF-only commit
+  after it.)
+
+### Pre-apply checks (all passed before anything was applied)
+
+- **Deployed browser-write audit at `6f411e3`:** the browser Supabase client is constructed in
+  `profile-form.tsx`, `subscribe-sign-out.tsx`, `app/new/page.tsx` and `reset-password/page.tsx`. Its uses are
+  `auth.signOut`, `auth.getUser`, `auth.onAuthStateChange`, `auth.updateUser`, and one Storage write:
+  `profile-form.tsx` removing `logos/${userId}/logo`. No browser code writes `tpe_estimates`,
+  `tpe_estimate_items`, `tpe_estimate_photos` or `tpe-estimate-photos`. All 54 deployed accesses to those
+  tables and that bucket, and every deployed `.rpc(`, go through `supabaseAdmin`. Logo upload is server-side
+  (`/api/upload-logo`, service-role key).
+- **Deployed `/share/[id]` and PDF auth context:** the estimate, business, photo rows, pricing
+  (`loadCustomerPricingView`, a `server-only` module), currency and signed photo URLs are all read through
+  `supabaseAdmin`. The PDF is built in the browser by `lib/generate-pdf.ts` from page props; its only network
+  calls fetch the public `logos` URL and signed photo URLs, and neither is subject to RLS or these policies.
+  **No anonymous customer read depends on any grant or policy this migration changes.**
+- **Rollback prepared and proven** by a production round-trip dry run in one transaction, rolled back by a
+  raised exception: forward migration, then rollback, then comparison. `restored_equals_before = true` for
+  all 6 affected policies and all 63 grants, and `postgres` can alter the `storage.objects` policies (that
+  table is owned by `supabase_storage_admin`).
+- **Forward migration reviewed** from that dry run's forward-state output before the real apply.
+
+### Migration
+
+- **Forward:** `supabase/migrations/20260916155102_revoke_browser_writes_on_estimate_tables_and_photos.sql`.
+  Applied to production (`fctequqcwxyhmnjgxixg`) through `apply_migration`, registered as
+  `20260916155102 revoke_browser_writes_on_estimate_tables_and_photos`. The repo filenames use that exact
+  version, so local and production migration history match. They were first committed as
+  `20260916160000_...` and renamed before anything was pushed; production's recorded statement is
+  byte-identical to the file as applied, and the rename changed only the comment line that names
+  the rollback file.
+- **Manual rollback, not a migration:**
+  `supabase/rollbacks/20260916155102_revoke_browser_writes_on_estimate_tables_and_photos.rollback.sql`. It
+  lives outside `supabase/migrations/`, so it can never be applied as a forward migration. It deliberately
+  reopens B1 and B2; run it only to restore service.
+
+**B1 grants, before to after** (`anon` and `authenticated`, on each of `tpe_estimates`, `tpe_estimate_items`,
+`tpe_estimate_photos`): `DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE` to
+`REFERENCES, SELECT, TRIGGER`. `service_role` unchanged (all seven).
+
+**B1 policies, before to after:**
+- `tpe_estimates_owner_access` (PERMISSIVE, `public`, `ALL`, USING and WITH CHECK
+  `business_id IN (SELECT tpe_businesses.id FROM tpe_businesses WHERE tpe_businesses.owner_user_id = (SELECT auth.uid()))`)
+  replaced by `tpe_estimates_owner_select` (PERMISSIVE, `authenticated`, `SELECT`, same USING, no WITH CHECK).
+- `tpe_estimate_items_owner_access` and `tpe_estimate_photos_owner_access` (PERMISSIVE, `public`, `ALL`,
+  `estimate_id IN (SELECT e.id FROM tpe_estimates e JOIN tpe_businesses b ON b.id = e.business_id WHERE b.owner_user_id = (SELECT auth.uid()))`)
+  replaced by `tpe_estimate_items_owner_select` and `tpe_estimate_photos_owner_select` (`authenticated`,
+  `SELECT`, same USING).
+
+**B2 Storage policies, before to after** (`storage.objects`, role `authenticated`):
+- `tpe: owners can upload their own files` (INSERT) WITH CHECK
+  `bucket_id = ANY (ARRAY['logos','tpe-estimate-photos']) AND (storage.foldername(name))[1] = auth.uid()::text`
+  to `bucket_id = 'logos' AND (storage.foldername(name))[1] = auth.uid()::text`.
+- `tpe: owners can delete their own files` (DELETE) USING: the same change.
+- `tpe: owners can view their own files` (SELECT), the Portfolio policies, and both buckets' public/private
+  settings (`tpe-estimate-photos` private, `logos` public): unchanged. Still 11 policies on `storage.objects`.
+
+**Rollback SQL, verbatim:**
+
+```sql
+-- MANUAL ROLLBACK. NOT A MIGRATION. Do not move this file into
+-- supabase/migrations/, and do not apply it unless the forward migration below
+-- has to be undone:
+--
+--   supabase/migrations/20260916155102_revoke_browser_writes_on_estimate_tables_and_photos.sql
+--
+-- It restores the exact pre-change state captured from production on
+-- 2026-09-16 immediately before that migration was applied, and it deliberately
+-- reopens blockers B1 and B2 (browser writes to estimate tables, and browser
+-- delete-then-upload of estimate photos). Run it only to restore service, in
+-- one transaction, from the Supabase SQL editor or an equivalent postgres
+-- session.
+
+begin;
+
+-- ── B1: restore the browser write grants ────────────────────────────────────
+
+grant insert, update, delete, truncate
+  on public.tpe_estimates, public.tpe_estimate_items, public.tpe_estimate_photos
+  to anon, authenticated;
+
+-- ── B1: restore the original FOR ALL owner policies ─────────────────────────
+
+drop policy if exists tpe_estimates_owner_select on public.tpe_estimates;
+create policy tpe_estimates_owner_access
+  on public.tpe_estimates
+  as permissive
+  for all
+  to public
+  using (
+    business_id in (
+      select tpe_businesses.id
+        from public.tpe_businesses
+       where tpe_businesses.owner_user_id = (select auth.uid() as uid)
+    )
+  )
+  with check (
+    business_id in (
+      select tpe_businesses.id
+        from public.tpe_businesses
+       where tpe_businesses.owner_user_id = (select auth.uid() as uid)
+    )
+  );
+
+drop policy if exists tpe_estimate_items_owner_select on public.tpe_estimate_items;
+create policy tpe_estimate_items_owner_access
+  on public.tpe_estimate_items
+  as permissive
+  for all
+  to public
+  using (
+    estimate_id in (
+      select e.id
+        from public.tpe_estimates e
+        join public.tpe_businesses b on b.id = e.business_id
+       where b.owner_user_id = (select auth.uid() as uid)
+    )
+  )
+  with check (
+    estimate_id in (
+      select e.id
+        from public.tpe_estimates e
+        join public.tpe_businesses b on b.id = e.business_id
+       where b.owner_user_id = (select auth.uid() as uid)
+    )
+  );
+
+drop policy if exists tpe_estimate_photos_owner_select on public.tpe_estimate_photos;
+create policy tpe_estimate_photos_owner_access
+  on public.tpe_estimate_photos
+  as permissive
+  for all
+  to public
+  using (
+    estimate_id in (
+      select e.id
+        from public.tpe_estimates e
+        join public.tpe_businesses b on b.id = e.business_id
+       where b.owner_user_id = (select auth.uid() as uid)
+    )
+  )
+  with check (
+    estimate_id in (
+      select e.id
+        from public.tpe_estimates e
+        join public.tpe_businesses b on b.id = e.business_id
+       where b.owner_user_id = (select auth.uid() as uid)
+    )
+  );
+
+-- ── B2: restore both buckets on the owner Storage write policies ────────────
+
+alter policy "tpe: owners can upload their own files"
+  on storage.objects
+  with check (
+    bucket_id = any (array['logos'::text, 'tpe-estimate-photos'::text])
+    and (storage.foldername(name))[1] = (auth.uid())::text
+  );
+
+alter policy "tpe: owners can delete their own files"
+  on storage.objects
+  using (
+    bucket_id = any (array['logos'::text, 'tpe-estimate-photos'::text])
+    and (storage.foldername(name))[1] = (auth.uid())::text
+  );
+
+commit;
+```
+
+### Verification after apply (production)
+
+- **Final state SQL:** grants, policies, bucket flags and the migration registration exactly as above.
+- **B1 probe** (one transaction as `authenticated` with a real owner's uid, synthetic delivered
+  `contractor_pricing` estimate, rolled back by a raised exception):
+  - owner SELECT of its estimate, pricing row and photo row returns 1, 1 and 1;
+  - owner UPDATE, INSERT and DELETE on all three tables each fail with `42501 permission denied`;
+  - another authenticated user: SELECT returns 0/0/0, UPDATE is denied;
+  - `anon`: SELECT returns 0, and UPDATE, INSERT and DELETE are denied;
+  - `service_role`: update estimate 1; insert, update and delete items 1, 2, 2; insert and delete photos 1, 2;
+    delete estimate 1.
+- **B2 probe at the policy layer** (same approach on synthetic `storage.objects` rows, with
+  `storage.allow_delete_query` set exactly as the Storage API sets it):
+  - owner on `tpe-estimate-photos`: delete removes 0 rows, upload is refused with `42501` (RLS), overwrite
+    updates 0 rows, and the synthetic delivered photo is still present and unchanged. **Delete-then-re-upload
+    at an existing path is impossible.**
+  - owner on `logos`: upload allowed, delete removes 1 row; upload into another user's folder refused.
+  - `service_role`: upload allowed, delete removes 1 row.
+- **Live Storage API probe** on one disposable object (`tpe-estimate-photos/zz-security-probe-<uuid>/probe.txt`):
+  service-role upload succeeded; anon upload and anon upsert at the same path were refused by RLS; anon
+  remove returned 0 removed and the object remained; service-role remove removed 1; nothing left in the
+  folder, and 0 `zz-security-probe-%` objects remain in `storage.objects`.
+- **Anonymous delivered legacy share link** (`1e8facd4-00a6-4689-a287-ed39e1bd0896`, a Circuit & Co test
+  estimate, structured legacy, sent, with a logo): curl before and after the migration both returned 200 at
+  33,927 bytes, and the rendered `<main>` is **byte-identical** (10,320 bytes). In the in-app browser, with no
+  auth cookie or stored token: rendered, Pricing Summary and Total present, 20 amounts, Download PDF present,
+  public logo URL fetched `200 image/png`.
+- **Anonymous PDF:** clicking Download PDF generated one `application/pdf` blob of 1,169,944 bytes with no
+  errors. The save was intercepted in-page, so no file was written.
+- **Data unchanged:** probes left 0 rows or objects; `tpe_estimates` and `tpe_estimate_items` md5 fingerprints
+  equal their values from before this work; counts 15 businesses, 18 estimates, 58 items, 0 photo rows.
+- **Supabase security advisor after DDL:** nothing new and nothing about these tables or Storage. Existing
+  findings: INFO `rls_enabled_no_policy` on `tpe_delivery_claims`, `tpe_outreach_clicks`,
+  `tpe_photo_upload_reservations`, `tpe_rate_limits`, `tpe_sms_suppressions` (service-role-only tables, so
+  deny-all is intended); WARN `function_search_path_mutable` on `tpe_save_contractor_pricing` (from Slice 2;
+  worth pinning `search_path` the way the other functions do, as a separate change); WARN leaked password
+  protection disabled (Auth setting).
+
+### B3
+
+`DELETE /api/estimates` now calls `deleteOwnedEstimate()` in the new `lib/estimate-deletion.ts`. It loads the
+estimate by id **and** the caller's business id first, returns `404 Estimate not found or access denied`
+before touching anything if that fails, and only then removes Storage objects (paths read from the authorized
+estimate's own photo rows), photo rows, change log and payment reminders, then the parent. Child-deletion
+failures stay non-fatal, as before. The DELETE handler was byte-identical on `origin/main`, `6f411e3` and this
+branch before the change. `tests/smoke/estimate-deletion.spec.ts` (7 cases, registered in the unit config)
+covers: the owner still deletes everything; a foreign id gets 404 and its estimate, photo rows, Storage
+objects, change rows and reminders all survive; the ownership check is the only call made on refusal; a
+missing id and a failed lookup delete nothing; children use the authorized id; and a source check that the
+route deletes nothing before the helper.
+
+**B3 is still live in production** (`6f411e3`). Next: reproduce the helper, route change and spec on `main` as
+a separate hotfix, verify it there, and deploy only on Greg's instruction.
+
+### Local verification
+
+- `npx playwright test --config playwright.unit.config.ts estimate-deletion.spec.ts`: 7 passed.
+- `npx playwright test --config playwright.unit.config.ts`: 661 passed, 2 failed. Both are the same two
+  failures present before Slice 4 (`password-reset-canonical-host`, `unit-suite-completeness` naming the
+  three old marketing specs).
+- `npx tsc --noEmit`: clean. `npx eslint` on the changed application and test files: clean.
+  `git diff --check`: clean.
+
+### Not verified
+
+- No live Storage API call as a real *authenticated* user: that needs a real session, and creating an auth
+  user in production fires the signup webhook. The authenticated case is proven at the policy layer
+  (role `authenticated` plus JWT claims, the same evaluation PostgREST and the Storage API perform); the live
+  API probe covered `anon` and `service_role`.
+- Photo rendering on a delivered estimate: no estimate in production has a photo row.
+- The generated PDF was not saved to disk or opened; generation was verified by the blob.
+
+**Exact next step:** review this checkpoint. Then, on Greg's instruction, prepare the B3 hotfix on `main`
+(see above). The remaining 5B delivery-lock implementation follows the write-surface inventory below and has
+not started. Do not start 5C.
+
+## Phase 1 slice 5B: BLOCKED at the write-surface enumeration (2026-09-16 PT)
+
+> **Later the same day:** B1 and B2 below were closed in production and B3 fixed on this branch by the security
+> foundation above. B3 remains live in production. This section is kept as the full write-surface inventory
+> for the remaining 5B work.
+
+**Status: BLOCKED. No 5B lock code was written and there is no 5B commit.** 5B stopped at its mandatory
+enumeration because authenticated browser sessions can write customer estimate state directly, around any
+route-level lock. Nothing pushed, nothing deployed. No policy, grant, bucket or function was changed.
+
+- **Final amended 5A commit:** `4a7f447051bfb97a9434b565bff533ec45066880` (the 5A payload-verification note
+  amended into the former `e84a297`; never pushed).
+- **5B starting commit:** `4a7f447`.
+
+### The blockers
+
+**B1. Table RLS lets an owner rewrite, reprice and un-deliver a delivered estimate directly.** Production
+`tpe_estimates`, `tpe_estimate_items` and `tpe_estimate_photos` each have RLS enabled (not forced) and one
+PERMISSIVE policy (`tpe_estimates_owner_access`, `tpe_estimate_items_owner_access`,
+`tpe_estimate_photos_owner_access`) for role `public`, command `ALL`. Its USING and WITH CHECK are ownership
+only: the estimate's business `owner_user_id = auth.uid()`. There is no delivery condition. `anon` and
+`authenticated` hold INSERT, SELECT, UPDATE, DELETE, TRUNCATE, REFERENCES and TRIGGER on all three tables.
+The browser client ships the anon key, so a signed-in contractor can call `.from(...).update/insert/delete`
+from the console.
+
+Demonstrated, not inferred: a single transaction, rolled back by a raised exception, ran as role
+`authenticated` with `auth.uid()` set to a real owner. Against a synthetic delivered `contractor_pricing`
+estimate it updated `summary`, customer name/phone/email/address, `include_photos`, `currency` and the tax and
+deposit snapshots (1 row); updated, inserted and deleted pricing rows (1/1/2); inserted and deleted a photo
+row (1/1); and un-delivered the estimate (`status='draft'`, `sent_at` and `copied_at` cleared, 1 row).
+Controls: another authenticated user updated 0 rows and `anon` updated 0, so RLS was in force. Afterwards 0
+probe rows exist and the full-table md5 fingerprints of `tpe_businesses`, `tpe_estimates` and
+`tpe_estimate_items` are unchanged.
+
+**B2. Storage lets an owner replace a delivered photo's bytes at the same path.** Bucket
+`tpe-estimate-photos` is private. `storage.objects` has, for role `authenticated` on
+`bucket_id IN ('logos','tpe-estimate-photos')` with `(storage.foldername(name))[1] = auth.uid()`:
+`tpe: owners can upload their own files` (INSERT) and `tpe: owners can delete their own files` (DELETE), plus
+a matching SELECT policy. There is no UPDATE policy, so an upsert or move over an existing object is refused,
+but DELETE followed by INSERT at the same name is allowed. In-app photos are stored at
+`${user.id}/${estimateId}/${filename}` (`app/api/estimates/[id]/photos/route.ts`), so the first folder is the
+owner's uid and the path is fully predictable: the owner knows their uid and the estimate id, and can read
+`storage_path` from their own `tpe_estimate_photos` rows. The row stays unchanged, no route runs, and the
+share page (and the detail page) call `createSignedUrl(storage_path, ...)` on every render, so the next
+signed URL serves the replacement bytes. This one is proven from the policy text and the path code, **not
+exercised**: a real Storage write cannot be rolled back. Production currently has 14 orphaned objects in the
+bucket and 0 photo rows, so no live delivered photo is exposed today; every future in-app photo would be.
+
+**B3. `DELETE /api/estimates?id=` deletes another business's estimate children (pre-existing, cross-tenant).**
+Before its business-scoped parent delete, it removes the estimate's Storage objects, `tpe_estimate_photos`
+rows, `tpe_estimate_changes` and `tpe_payment_reminders` through the service role, scoped only by
+`estimate_id`. Any signed-in user who knows an estimate id (every share link carries it) can wipe another
+business's photos and reminders. The parent delete then matches 0 rows and the route still returns
+`success: true`. Found during the enumeration; not fixed, because 5B route changes are on hold.
+
+**No RPC bypass.** Every function that writes these tables is SECURITY INVOKER with EXECUTE granted only to
+`postgres` and `service_role`: `tpe_save_contractor_pricing` (items and estimates; re-checks ownership and
+delivery under a row lock), `tpe_convert_estimate_to_structured` (items and estimates; no application call
+site since Slice 4; not browser-reachable), `tpe_delete_business_account_data` (whole-account wipe, account
+deletion only). `reserve_estimate_photo_upload`, `claim_delivery`, `mark_delivery_sent`,
+`claim_estimate_generation`, `release_*`, `begin_business_deletion` and `take_rate_limit` write only their own
+claim, reservation or rate-limit tables. `PUBLIC`, `anon` and `authenticated` hold EXECUTE on none of them.
+There are no non-internal triggers on the three tables.
+
+### Smallest proposed security fixes (NOT applied; for review)
+
+1. **Tables:** `revoke insert, update, delete, truncate on public.tpe_estimates, public.tpe_estimate_items,
+   public.tpe_estimate_photos from anon, authenticated;` as a committed migration. Every application write
+   already uses `supabaseAdmin` (verified by search: no user-scoped client reads or writes these tables), no
+   first-party browser code writes them, Clearwater uses the service-role key, and every RPC runs as
+   `service_role`, so nothing legitimate depends on those grants. SELECT and the existing policies stay. This
+   also closes the same mutations through `/graphql/v1`, which uses the same roles.
+2. **Storage:** narrow `tpe: owners can upload their own files` and `tpe: owners can delete their own files`
+   to `bucket_id = 'logos'`, dropping `tpe-estimate-photos`. Keep `logos`: `app/components/profile-form.tsx`
+   removes logos directly from the browser. Every estimate-photo upload and removal is server-side
+   (TradePulse photo route, estimate delete, account deletion, Clearwater), all service role.
+3. **B3:** in `DELETE /api/estimates`, load the estimate by `id` and `business_id` first, return 404 when it
+   is not owned, and only then delete children. This is an application fix, and it is inside the 5B write
+   surface.
+
+Once (1) and (2) are applied and verified, route-level locking becomes authoritative and 5B can proceed.
+
+### Application writer inventory (every writer found by search, not by a likely-file list)
+
+All use `supabaseAdmin`. "Visible" means it can change what the customer receives.
+
+| Writer | Tables / fields | Visible | Allowed after delivery | Current guard | 5B must change |
+|---|---|---|---|---|---|
+| `PATCH /api/estimates` | estimates: `title`, `customer_name/phone/email`, `job_address`, `summary`, `include_photos`, `deposit_amount`, `status` (any string), `completed_at`, `copied_at`; on `structured` summary saves, deletes and re-inserts items | yes (title, prose, customer details, include_photos; status/copied_at can un-deliver or deliver) | only operational status progression (`sent` to `done`, `completed_at`) | ownership only; no classification, delivery or completeness | yes: lock the customer document after delivery, gate first delivery on completeness, refuse legacy edits including the structured item rewrite |
+| `DELETE /api/estimates` | photos (Storage + rows), estimate_changes, payment_reminders, estimates | yes | open question: the spec locks edits, not deletion | parent delete only (B3) | yes: ownership before children (B3) |
+| `POST /api/send-sms` | estimates: `status='sent'`, `sent_via`, `sent_at` after provider success; backfills `customer_phone` when empty | yes (delivery; phone backfill) | resend yes; the phone backfill must not alter a delivered document | delivery claims, suppression, ownership | yes: completeness gate on first delivery; no customer-detail backfill after delivery |
+| `POST /api/send-email` | estimates: same, backfills `customer_email` when empty | yes | resend yes; same backfill caveat | delivery claims, ownership | yes: same |
+| `PUT /api/estimates/[id]/pricing` | items (replace), estimate tax snapshots, promotion, business defaults, via `tpe_save_contractor_pricing` | yes | no | `isDelivered()` pre-check plus the same rule re-checked in SQL under a row lock | no (semantics already match `isDelivered()`) |
+| `POST /api/generate-estimate` | estimates insert; regenerate updates `title` + `summary` | yes | no | regenerate refused unless `contractor_pricing` and not `isDelivered()`, re-checked in the update filter | no (verify only) |
+| `POST /api/estimates/[id]/photos` | Storage upload + photo rows | yes | no | Pro + ownership; no delivery check | yes: refuse after delivery |
+| `DELETE /api/estimates/[id]/photos` | Storage remove + photo row | yes | no | Pro + ownership; no delivery check | yes: refuse after delivery |
+| `PATCH /api/estimates/[id]/pricing-mode` | estimates: `customer_pricing_mode` | yes, for legacy structured | no | only undelivered `structured` drafts; no UI caller since 5A | yes: legacy is read-only, refuse |
+| `PATCH /api/estimates/[id]/invoice` | estimates: `invoice_amount`, `due_date`, `payment_status`, `reminder_count`, `last_reminder_sent_at` | no | yes | Pro + ownership | no |
+| `PATCH /api/estimates/[id]/mark-paid` | estimates: `payment_status` | no | yes | ownership | no |
+| `POST /api/estimates/[id]/review-request` | estimates: `review_requested_at` | no | yes | Pro + ownership | no |
+| `POST /api/estimates/[id]/send-reminder` | estimates: `last_reminder_sent_at`, `reminder_count`; inserts payment_reminders | no | yes | ownership + compare-and-swap | no |
+| `GET /api/cron/payment-reminders` | estimates: `last_reminder_sent_at`, `reminder_count`; inserts payment_reminders | no | yes | `CRON_SECRET` | no |
+| `POST /api/account/delete` | all business data via `tpe_delete_business_account_data`, plus Storage | removes the whole account | yes (account deletion) | owner session, deletion claim | no |
+| Copy link (client, `estimate-actions.tsx`) | writes through `PATCH /api/estimates` (`status`, `copied_at`) | yes | re-copy yes | clipboard is written before the PATCH today | yes: confirm, then server check and PATCH, then clipboard |
+
+Read-only, verified no writes: `app/api/estimates/[id]/analyze-photos/route.ts`, `lib/currency-db.ts`,
+`lib/estimate-pricing-server.ts`, `app/share/[id]/page.tsx`, `app/estimates/[id]/page.tsx`,
+`app/estimates/page.tsx`, `app/payments/page.tsx`. No server actions exist. `convertEstimateToStructuredItems`
+has no importer; only `buildStructuredItemsSyncPlan` is still imported, by `PATCH /api/estimates`.
+
+### Known external writer
+
+`GCHVFX/clearwater-plumbing`, `app/api/quote/route.ts` (read, not modified). It uses the service-role key, so
+RLS never applies to it. It inserts `tpe_estimates` with `business_id`, `status='needs_review'`,
+`source='website_quote'`, customer name/phone/email/address, `service_type`, `location`, `urgency` and
+`description`; no `pricing_source` (defaults to `markdown`) and no snapshots. It uploads photos to
+`tpe-estimate-photos` at `${businessId}/${estimateId}/${uuid}_${name}` and inserts `tpe_estimate_photos`
+rows. Business id, not user uid, is the first folder, so the owner Storage policy never matched these
+objects. It is outside this repository and was not changed. Neither proposed fix affects it: it writes as
+`service_role`.
+
+### Verification actually run
+
+Read-only production queries: RLS flags, `pg_policies` for the three tables and `storage.objects`,
+`information_schema.role_table_grants`, `storage.buckets`, the function inventory with
+`has_function_privilege` for `public`, `anon`, `authenticated` and `service_role`, function write targets,
+triggers, and aggregate path/ownership counts for the photo bucket. One rolled-back RLS probe as described
+under B1, followed by a no-trace check. Repository search for every `.from("tpe_estimate*")`,
+`.from("tpe-estimate-photos")`, `.rpc(` and `"use server"`, with each writer's payload read. The Clearwater
+quote route read in the local clone at `631f9e0`. No product code changed, so no tests, `tsc` or lint were
+needed.
+
+**Not verified:** B2 was not exercised against real Storage (no rollback exists for object bytes). Whether a
+signed URL issued *before* a replacement also serves the new bytes is expected, because the token names a
+path rather than an object version, but was not tested; URLs generated *after* a replacement certainly do.
+
+**Exact next step:** review B1, B2 and B3 and the proposed fixes. After approval, apply (1) and (2) as a
+migration, verify them against production, then implement the 5B route-level locks against the inventory
+above. Do not start 5C.
 
 ## Phase 1 slice 5A: classification, customer-safe pricing, share and PDF (2026-09-16 PT)
 

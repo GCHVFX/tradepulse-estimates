@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
 import { buildStructuredItemsSyncPlan } from "@/lib/estimate-item-migration";
+import { deleteOwnedEstimate } from "@/lib/estimate-deletion";
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const { supabase, applyTo } = createApiClient(request);
@@ -204,37 +205,52 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
   const id = searchParams.get("id");
   if (!id) return applyTo(NextResponse.json({ error: "id is required" }, { status: 400 }));
 
-  // tpe_estimate_changes, tpe_estimate_photos, and tpe_payment_reminders all
-  // reference tpe_estimates with delete_rule NO ACTION (not CASCADE), so the
-  // parent delete below fails with a foreign key violation whenever any of
-  // them has a row for this estimate — which happens for any estimate that
-  // was ever sent, invoiced, or had a photo attached. Remove those children
-  // first so the parent delete can actually succeed.
-  const { data: photoRecords } = await supabaseAdmin
-    .from("tpe_estimate_photos")
-    .select("id, storage_path")
-    .eq("estimate_id", id);
+  // Ownership first: nothing below runs until the estimate is found under this
+  // caller's business, and every child deletion uses that authorized estimate's
+  // id. See lib/estimate-deletion.ts for why the order is the security fix.
+  const result = await deleteOwnedEstimate(id, business.id, {
+    findOwnedEstimate: async (estimateId, businessId) => {
+      const { data, error } = await supabaseAdmin
+        .from("tpe_estimates")
+        .select("id")
+        .eq("id", estimateId)
+        .eq("business_id", businessId)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    listPhotoStoragePaths: async (estimateId) => {
+      const { data } = await supabaseAdmin
+        .from("tpe_estimate_photos")
+        .select("storage_path")
+        .eq("estimate_id", estimateId);
+      return (data ?? []).map((photo) => photo.storage_path);
+    },
+    removePhotoObjects: async (storagePaths) => {
+      await supabaseAdmin.storage.from("tpe-estimate-photos").remove(storagePaths);
+    },
+    deletePhotoRows: async (estimateId) => {
+      await supabaseAdmin.from("tpe_estimate_photos").delete().eq("estimate_id", estimateId);
+    },
+    deleteEstimateChanges: async (estimateId) => {
+      await supabaseAdmin.from("tpe_estimate_changes").delete().eq("estimate_id", estimateId);
+    },
+    deletePaymentReminders: async (estimateId) => {
+      await supabaseAdmin.from("tpe_payment_reminders").delete().eq("estimate_id", estimateId);
+    },
+    deleteEstimate: async (estimateId, businessId) => {
+      const { error } = await supabaseAdmin
+        .from("tpe_estimates")
+        .delete()
+        .eq("id", estimateId)
+        .eq("business_id", businessId);
+      return error ? error.message : null;
+    },
+  });
 
-  if (photoRecords && photoRecords.length > 0) {
-    await supabaseAdmin.storage
-      .from("tpe-estimate-photos")
-      .remove(photoRecords.map((p) => p.storage_path));
-    await supabaseAdmin
-      .from("tpe_estimate_photos")
-      .delete()
-      .eq("estimate_id", id);
+  if (!result.ok) {
+    return applyTo(NextResponse.json({ error: result.error }, { status: result.status }));
   }
-
-  await supabaseAdmin.from("tpe_estimate_changes").delete().eq("estimate_id", id);
-  await supabaseAdmin.from("tpe_payment_reminders").delete().eq("estimate_id", id);
-
-  const { error } = await supabaseAdmin
-    .from("tpe_estimates")
-    .delete()
-    .eq("id", id)
-    .eq("business_id", business.id);
-
-  if (error) return applyTo(NextResponse.json({ error: error.message }, { status: 500 }));
 
   return applyTo(NextResponse.json({ success: true }));
 }
