@@ -161,9 +161,11 @@ export async function PUT(
 
   const rows = toCanonicalRows(parsed.value);
 
-  // The generated types are produced from production, which does not have this
-  // function or the snapshot columns yet, so this one call is cast. Everything
-  // it returns is narrowed by hand above rather than trusted.
+  // The generated function signature expects Json args and undefined (not
+  // null) for the optional ones; CanonicalPricingRow/TaxInput and this route's
+  // null-based optionality don't line up with that cleanly, so this one call
+  // is still cast. Everything it returns is narrowed by hand above rather than
+  // trusted.
   const { data, error } = await (
     supabaseAdmin.rpc as unknown as (
       name: string,

@@ -1,6 +1,40 @@
 # TradePulse handoff
 
-Updated: 2026-09-15 (Tax hotfix, spec Appendix A: the business's Rates settings are now the tax authority for every undelivered estimate, and delivered estimates render byte-identically to before. Committed, pushed, deployed, and production-verified. Production is currently serving `6f411e3`. Phase 1 has not started; run a Phase 1 grill pass against `specs/contractor-owned-pricing.md` before any implementation.)
+Updated: 2026-09-15 (Phase 1 slice 2 schema activation: the contractor-pricing snapshot columns and the `tpe_save_contractor_pricing` function are now live in production Supabase. Slices 1-2 application code is local only, unpushed, not deployed. Slice 3 is unblocked.)
+
+## Phase 1 slice 2: schema activated in production (2026-09-15 PT)
+
+**Status:** the Slice 2 migration (`supabase/migrations/20260916000000_add_contractor_pricing_snapshots_and_save_fn.sql`)
+is applied to the production Supabase project (`fctequqcwxyhmnjgxixg`). Verified read-only afterward:
+`tpe_estimates` has `tax_label_snapshot`, `tax_rate_snapshot`, `deposit_percent_snapshot`,
+`deposit_threshold_snapshot` (all nullable, as designed), the `tpe_save_contractor_pricing` function
+exists with its expected five-argument signature, and its EXECUTE privilege is granted only to the
+function owner and `service_role`, not `anon` or `authenticated`. No estimate or business rows were
+touched. `lib/database.types.ts` was regenerated from the now-current production schema; the pricing
+route's hand-written RPC cast (`app/api/estimates/[id]/pricing/route.ts`) was evaluated for removal but
+kept, because the generated function signature wants `Json` args and `undefined` (not `null`) for the
+optional ones, and this route's `CanonicalPricingRow`/`TaxInput` types use `null`-based optionality --
+removing the cast would mean reworking those types, which is out of this checkpoint's scope. Its comment
+was updated to state the real reason.
+
+**Local commits (all still unpushed, per this task's scope limits):**
+
+- `bfe6692a4c8947f5f16c5e981c1f45bb605cf84c` -- spec corrections
+- `e34fef5a93c445d68076edc50dd9cb87cbc499c6` -- Slice 1 calculator
+- `43045b73e92d34d964a54aac19521fcc7df74603` -- Slice 2 route/RPC
+- `2dc508971b46b86b4c15a567c3de44dca0424758` -- Slice 2 verification (transaction proved against real
+  disposable PostgreSQL 18.4: rollback, promotion, snapshot preservation, cross-business protection, the
+  three-connection concurrency test)
+
+**Verification run for this checkpoint:** the three contractor-pricing spec files
+(`tests/smoke/contractor-pricing-calculation.spec.ts`, `contractor-pricing-request.spec.ts`,
+`contractor-pricing-route.spec.ts`), all 49 passing against the disposable PostgreSQL harness;
+`npx tsc --noEmit` clean; `git diff --check` clean. The full smoke suite was deliberately not run.
+
+**Unresolved / not done:** no Phase 1 application code has been deployed. Slice 3 (wiring the app's editor
+and generation paths through this schema) has not started and is now unblocked.
+
+**Exact next step:** start Slice 3 against `specs/contractor-owned-pricing.md`.
 
 ## Tax hotfix (Appendix A): Rates is the tax authority for undelivered estimates (2026-09-15 PT)
 
