@@ -6,8 +6,10 @@ import { CustomerDetailsBlock } from "@/app/components/customer-details-block";
 import { EstimatePricingEditor } from "@/app/components/estimate-pricing-editor";
 import { EstimatePhotos } from "@/app/components/estimate-photos";
 import { BottomNav } from "@/app/components/bottom-nav";
-import { loadCustomerPricingView } from "@/lib/estimate-pricing-server";
+import { loadContractorPricingRows, loadCustomerPricingView } from "@/lib/estimate-pricing-server";
 import { businessTax, taxAuthorityFor } from "@/lib/estimate-tax";
+import { ContractorPricingEditor } from "@/app/components/contractor-pricing-editor";
+import { calculateContractorPricing } from "@/lib/contractor-pricing";
 import { readEstimateCurrency } from "@/lib/currency-db";
 import { supabaseAdmin, createSupabaseServerClient } from "@/lib/supabase-server";
 import { normalizePhoneE164 } from "@/lib/sms-suppression";
@@ -30,7 +32,7 @@ export default async function EstimatePage({
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("id, logo_url, name, show_company_name_below_logo, email, phone, plan, google_review_link, payment_link, tax_label, tax_rate")
+    .select("id, logo_url, name, show_company_name_below_logo, email, phone, plan, google_review_link, payment_link, tax_label, tax_rate, labour_rate, markup_percent")
     .eq("owner_user_id", user.id)
     .maybeSingle();
 
@@ -94,6 +96,29 @@ export default async function EstimatePage({
   const googleReviewLink = business?.google_review_link ?? null;
   const isQuoteRequest = estimate.status === "needs_review" && estimate.source === "website_quote";
   const estimateTotal = pricing.selected.total;
+
+  // Phase 1 classification (specs/contractor-owned-pricing.md section 2).
+  // Only a contractor_pricing estimate uses the new editor; everything else
+  // keeps the path it has today, including pricing_source='structured', which
+  // is the old AI-priced model and not this one.
+  const isContractorPricing = estimate.pricing_source === "contractor_pricing";
+  const contractorRows = isContractorPricing ? await loadContractorPricingRows(estimate.id) : [];
+  const contractorPricing = isContractorPricing
+    ? calculateContractorPricing(
+        contractorRows.map((row) => ({
+          item_type: row.item_type,
+          unit: row.unit,
+          quantity: row.quantity,
+          unit_price: row.unit_price,
+          markup_percent: row.markup_percent,
+        })),
+        {
+          taxRatePercent: estimate.tax_rate_snapshot,
+          depositPercent: estimate.deposit_percent_snapshot,
+          depositThresholdDollars: estimate.deposit_threshold_snapshot,
+        }
+      )
+    : null;
 
   // Only unpaid invoiced estimates need this check -- opting out doesn't
   // matter for an estimate that was never invoiced or is already paid, and
@@ -238,19 +263,37 @@ export default async function EstimatePage({
                 dateStr={estimate.created_at ?? ""}
               />
 
-              <EstimatePricingEditor
-                currency={estimateCurrency}
-                key={estimate.id}
-                estimateId={estimate.id}
-                summary={estimate.summary ?? ""}
-                detailedSummary={pricing.detailedSummary}
-                groupedSummary={pricing.groupedSummary}
-                initialMode={pricing.selected.renderedMode}
-                structuredPricing={estimate.pricing_source === "structured"}
-                taxAuthority={taxAuthorityFor(estimate, rates)}
-                canEditMode={pricing.canEditMode}
-                pricingError={!pricing.selected.ok}
-              />
+              {isContractorPricing && contractorPricing ? (
+                <ContractorPricingEditor
+                  key={estimate.id}
+                  estimateId={estimate.id}
+                  currency={estimateCurrency}
+                  initialRows={contractorRows}
+                  initialTax={{
+                    label: estimate.tax_label_snapshot,
+                    rate: estimate.tax_rate_snapshot,
+                  }}
+                  initialPricing={contractorPricing}
+                  defaults={{
+                    labourRate: business.labour_rate,
+                    markupPercent: business.markup_percent,
+                  }}
+                />
+              ) : (
+                <EstimatePricingEditor
+                  currency={estimateCurrency}
+                  key={estimate.id}
+                  estimateId={estimate.id}
+                  summary={estimate.summary ?? ""}
+                  detailedSummary={pricing.detailedSummary}
+                  groupedSummary={pricing.groupedSummary}
+                  initialMode={pricing.selected.renderedMode}
+                  structuredPricing={estimate.pricing_source === "structured"}
+                  taxAuthority={taxAuthorityFor(estimate, rates)}
+                  canEditMode={pricing.canEditMode}
+                  pricingError={!pricing.selected.ok}
+                />
+              )}
 
               <EstimatePhotos
                 estimateId={estimate.id}

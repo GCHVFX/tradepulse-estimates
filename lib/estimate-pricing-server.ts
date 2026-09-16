@@ -96,6 +96,30 @@ export async function loadStructuredPricingItems(
   return (data ?? []).map(toStructuredPricingItem);
 }
 
+/** One stored contractor-pricing row, as the editor needs it. */
+export type ContractorPricingRow = Pick<
+  Database["public"]["Tables"]["tpe_estimate_items"]["Row"],
+  "item_type" | "unit" | "quantity" | "unit_price" | "markup_percent" | "description" | "display_order"
+>;
+
+/**
+ * The canonical pricing rows for a contractor-priced estimate.
+ *
+ * Separate from loadStructuredPricingItems above, which serves the legacy
+ * customer view and does not select item_type. The editor cannot tell labour
+ * from materials from a charge without it.
+ */
+export async function loadContractorPricingRows(estimateId: string): Promise<ContractorPricingRow[]> {
+  const { data, error } = await supabaseAdmin
+    .from("tpe_estimate_items")
+    .select("item_type, unit, quantity, unit_price, markup_percent, description, display_order")
+    .eq("estimate_id", estimateId)
+    .order("display_order", { ascending: true });
+
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
 export async function loadCustomerPricingView(
   estimate: EstimatePricingInput,
   businessTax: EstimateTax | null
