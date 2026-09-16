@@ -133,6 +133,14 @@ lib/
   rate-limit.ts                  checkRateLimit() — DB-backed, uses tpe_rate_limits table
   format-phone.ts                Canadian phone formatting
   generate-pdf.ts                jsPDF estimate rendering
+  contractor-pricing.ts          The one deterministic pricing calculation. Pure. Never duplicate it.
+  contractor-pricing-request.ts  Parses and validates the pricing save payload into canonical rows
+  contractor-pricing-form.ts     Field rules for the contractor pricing editor
+  generated-estimate.ts          What generation sends the model, and the row it writes
+  estimate-prose.ts              Price-safety filter for model prose, plus stripTitleHeading()
+  estimate-delivery.ts           isDelivered() — the one delivery rule
+  estimate-tax.ts                businessTax(), resolveEstimateTax(), taxAuthorityFor()
+  subscription-access.ts         hasSubscriptionAccess(), SUBSCRIPTION_ACCESS_COLUMNS
   database.types.ts              Generated from live schema. Do not edit manually.
   hooks/
     use-business-profile.ts      Shared profile hook — logoUrl, businessName, businessEmail, preparedBy, isPro, googleReviewLink, isLoading
@@ -147,7 +155,7 @@ docs/
 
 ### Starter Features (live)
 
-- Estimate creation: text input → AI streaming → save to DB
+- Estimate creation: text input (or photos, or dictation) → AI writes the job wording only → saved as a `contractor_pricing` draft → contractor enters the pricing
 - Estimate list, detail, edit, delete
 - Send estimate: SMS (Twilio), email (Resend), copy link, PDF download
 - Business profile: name, phone, email, logo, prepared_by
@@ -198,8 +206,19 @@ docs/
 - `payment_link` field on profile (PayPal link or e-transfer email) is included in reminders; omitted cleanly when not set
 - Requires `CRON_SECRET` env var
 
+### Contractor-owned pricing (Phase 1, in progress on `phase1-contractor-pricing`)
+
+`specs/contractor-owned-pricing.md` is the authority. Local only, not deployed.
+
+- The AI writes the job wording. It authors no number that changes the selling price.
+- A generated estimate saves as `source='ai_generated'`, `status='draft'`, `pricing_source='contractor_pricing'`, with the business tax and deposit settings snapshotted onto the row and **no pricing rows**. It is deliberately incomplete until the contractor prices it. That is correct, not a regression.
+- The contractor enters labour, materials, markup and optional charges in the pricing editor on the saved estimate. `lib/contractor-pricing.ts` does the arithmetic, and it is the only implementation of it.
+- `/new` renders the saved sanitized prose the server returns, never its own stream buffer.
+- Regenerate replaces the wording on the same estimate id. Pricing rows, snapshots, customer details and photos survive.
+
 ### Not Yet Built
 
+- Customer output and delivery locking for contractor pricing (Phase 1 slice 5)
 - Follow-Up (scheduled customer outreach)
 - Pro upgrade flow (no Pro subscribers yet, STRIPE_PRO_PRICE_ID not set)
 
@@ -258,17 +277,20 @@ Public paths are listed in `proxy.ts PUBLIC_PATHS`. Every `/api/` path is alread
 Pricing columns (the price book "rates"): `labour_rate`, `markup_percent`, `deposit_percent`, `deposit_threshold`, `tax_label` (default 'GST'), `tax_rate` (default 5)
 
 **`tpe_estimates`**
-`id`, `business_id` (FK to tpe_businesses.id), `title`, `summary` (full markdown content), `status` ('draft'|'sent'|'done'|'needs_review'), `source` ('app'|'website_quote'), `customer_name`, `customer_phone`, `customer_email`, `job_address`, `prepared_by`, `deposit_amount`, `sent_via`, `sent_at`, `copied_at`, `completed_at`, `review_requested_at`, `created_at`, `updated_at`
+`id`, `business_id` (FK to tpe_businesses.id), `title`, `summary` (the estimate prose; for a `contractor_pricing` estimate this is prose only and carries no pricing), `status` ('draft'|'sent'|'done'|'needs_review'), `source` ('ai_generated'|'app'|'website_quote'), `customer_name`, `customer_phone`, `customer_email`, `job_address`, `prepared_by`, `deposit_amount`, `sent_via`, `sent_at`, `copied_at`, `completed_at`, `review_requested_at`, `created_at`, `updated_at`
 Inbound website-quote columns: `description`, `service_type`, `location`, `urgency`
 Photos: `include_photos` (boolean), controls whether attached photos render on the share page and in the PDF
 Payments columns: `payment_status`, `invoice_amount`, `due_date`, `last_reminder_sent_at`, `reminder_count`
-Grouped-pricing columns (added 2026-07-31, **not yet used by any code**): `pricing_source` ('markdown'|'structured', default 'markdown', check-constrained) and `customer_pricing_mode` ('detailed'|'grouped', default 'detailed', check-constrained). All existing estimates are 'markdown' and 'detailed'.
+`pricing_source` ('markdown'|'structured'|'contractor_pricing', default 'markdown', check-constrained). Phase 1 classification, evaluated top down: `contractor_pricing` is the current model; `source='website_quote'` with `status='needs_review'` is unpriced inbound intake; everything else is legacy and read-only. The default stays 'markdown' so an inbound quote, which has no contractor-authored price, never defaults into `contractor_pricing`.
+Pricing snapshots, copied from `tpe_businesses` at estimate creation so a later change to Rates cannot move an estimate that already exists: `tax_label_snapshot`, `tax_rate_snapshot`, `deposit_percent_snapshot`, `deposit_threshold_snapshot` (all nullable).
+`customer_pricing_mode` ('detailed'|'grouped', default 'detailed', check-constrained): **not used by any code.** Grouped customer pricing is obsolete for new estimates.
 Unused columns, present in the schema but never read or written by app code: `scope`, `assumptions`, `payment_terms`, `notes`. That content lives inside `summary`.
 There is no `customer_id` column.
 
-**`tpe_estimate_items`** (added 2026-07-31, **currently empty and unused by any code**)
+**`tpe_estimate_items`**
 `id`, `estimate_id` (FK to tpe_estimates, ON DELETE CASCADE), `description`, `item_type` ('labour'|'material'|'service'|'allowance'|'other'), `is_allowance`, `quantity`, `unit`, `unit_price`, `line_total`, `labour_hours`, `labour_rate`, `markup_percent`, `group_label`, `customer_visible`, `display_order`, `taxable`, `created_at`, `updated_at`
-Structured priced rows for future grouped customer pricing. Money and quantities are `numeric`, never floating point. Percentages are whole numbers (20 means 20%). Markdown remains authoritative for pricing until `pricing_source` says otherwise. See `TRADEPULSE_ESTIMATE_ITEMS_SCHEMA.md`.
+**This is the source of truth for contractor pricing.** One row per pricing input, written only by `PUT /api/estimates/[id]/pricing`. The AI never writes to this table. Encoding: hourly labour is `item_type='labour'` with `unit='hr'`, quantity hours and unit_price the rate; fixed labour is the same with `unit=null`, quantity 1 and unit_price the amount; materials are `item_type='material'`, quantity 1, unit_price the pre-markup cost, with the applied percentage on `markup_percent`; an optional charge is `item_type='other'`, quantity 1. No row means unknown and blocks delivery; a row holding 0 is a deliberate zero and is valid.
+Money and quantities are `numeric`, never floating point. Percentages are whole numbers (20 means 20%). `line_total` is written by the calculation module and is never read back as authority. `labour_hours` and `labour_rate` are redundant with quantity/unit_price and stay null. See `specs/contractor-owned-pricing.md` and `TRADEPULSE_ESTIMATE_ITEMS_SCHEMA.md`.
 
 **`tpe_estimate_photos`**
 `id`, `estimate_id` (FK to tpe_estimates), `storage_path`, `original_filename`, `mime_type`, `file_size`, `created_at`, `updated_at`. Photo metadata, files in the private `tpe-estimate-photos` bucket, served via signed URLs. There is no `note` or `file_name` column.
@@ -362,11 +384,13 @@ import { stripe } from "@/lib/stripe";
 - `GET /api/estimates` — list user's estimates (id, title, status, customer_name, created_at)
 - `PATCH /api/estimates` — update estimate fields (selective — only fields present in body are updated)
 - `DELETE /api/estimates?id=` — delete estimate
-- `POST /api/generate-estimate` — streams AI estimate, saves to `tpe_estimates`
+- `POST /api/generate-estimate` — streams AI prose, saves to `tpe_estimates`
   - Rate limited: 10 calls per user per 60 seconds via `tpe_rate_limits` table
-  - Input `jobDescription` capped at 2000 characters
-  - `controller.close()` must come AFTER the `__ID__` chunk is enqueued
-  - Injects price book data (labour rate, markup, common items) into the prompt
+  - Input `jobDescription` capped at 2000 characters; optional `photoAnalysis` capped at 4000
+  - Reads no `labour_rate`, no `markup_percent` and no price book. A value this route never loads cannot reach the model.
+  - Saves explicitly as `source='ai_generated'`, `status='draft'`, `pricing_source='contractor_pricing'`, and snapshots the business tax and deposit settings onto the row. It writes no pricing rows.
+  - Optional `estimateId` regenerates the wording on that estimate instead of inserting a new one. The write is title and summary only, so pricing rows, snapshots, customer details and photos survive. Refused for anything that is not an undelivered `contractor_pricing` estimate the caller owns.
+  - Stream markers, in order: `__ID__` then `__SAVED__` (the saved sanitized prose, which is what `/new` renders). `controller.close()` must come AFTER both are enqueued.
 - `POST /api/estimates/[id]/review-request` — sends Google review SMS via Twilio, Pro-gated
 - `PATCH /api/estimates/[id]/invoice` — sets invoice amount + due date, starts payment reminders
 - `PATCH /api/estimates/[id]/mark-paid` — marks invoice paid, stops reminders
@@ -444,16 +468,47 @@ Every Twilio send path (`app/api/send-sms/route.ts`, `app/api/cron/payment-remin
 
 ## Estimate Output Structure
 
-Every generated estimate follows this exact structure:
+**The AI writes the job. The contractor owns the price. TradePulse owns the maths.**
+
+Every generated estimate is prose only, in this exact structure:
 
 1. Job Title (H1 heading — filtered from rendered output by EstimateMarkdown)
 2. Job Summary (2 to 3 sentences)
 3. Scope of Work (bullet list, specific tasks, plain language)
-4. Line Items (labour and materials, pipe table)
-5. Assumptions and Exclusions (plain bullets, no bold labels)
-6. Pricing Summary (pipe table: subtotal, tax, total, deposit, balance)
-7. Payment Terms (2 to 4 lines, always includes "This estimate is valid for 30 days")
-8. Notes (optional, omit if nothing relevant)
+4. Assumptions and Exclusions (plain bullets, no bold labels)
+5. Notes (job-specific and useful, omit if nothing relevant)
+
+**The model must never author any of these.** There is no Line Items table and no
+Pricing Summary in generated output:
+
+- labour hours, labour rates, material prices, markup, tax, deposits, totals
+- any other value whose purpose is to decide a selling price
+- Payment Terms, estimate validity periods ("valid for 30 days"), warranties,
+  cancellation or financing terms, payment due dates or timing, or any other
+  contractor business term
+
+Pricing is contractor-owned and calculated deterministically from the structured
+rows in `tpe_estimate_items` by `lib/contractor-pricing.ts`. Business terms are
+the contractor's own and are added outside the model; there is no setting holding
+them yet, so generated output simply does not carry them rather than carrying an
+invented default.
+
+`lib/estimate-prose.ts` is the guardrail behind those rules, not a substitute for
+them. It runs on model output only, once, before the estimate row is written. It
+deletes a sentence carrying a currency figure, a deposit, a pricing hedge
+("pricing may change", "quoted separately", "cost will depend") or an invented
+business term, deletes a heading its deletions emptied, and drops a Payment Terms
+section whole. It never rewrites contractor-typed prose, never retries the model
+and never blocks a save.
+
+Photos may help the model understand the job: visible conditions, materials and
+components, access difficulty, likely scope, and what belongs in assumptions and
+exclusions. Photos must not author a price-driving value. The photo instruction in
+`app/api/analyze-photo/route.ts` keeps an observation separate from the action it
+calls for: it describes what is visible, does not state an uncertain diagnosis as
+fact ("dark staining, possible moisture-related deterioration", not "mould"), does
+not call for replacement just because something is visible (inspect, verify, or
+replace if damaged), and does not assume an adjacent component has failed.
 
 Customer details are stored as columns on `tpe_estimates` and rendered via `CustomerDetailsBlock`. Not baked into AI output. H1 lines are filtered from markdown rendering. Business name and job title are displayed separately in the UI.
 

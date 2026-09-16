@@ -1,6 +1,10 @@
 # Spec: Contractor-owned pricing (Phase 1)
 
-**Status:** Not started. The constraint migration is already applied to live Supabase (2026-09-15).
+**Status:** Slices 1 to 4 are implemented and committed locally on `phase1-contractor-pricing`,
+unpushed and not deployed. Slice 4 was manually approved after a live photo-generation smoke test.
+Slice 5, customer output and delivery locking (sections 11, 12 and 13), is next. The constraint
+migration is applied to live Supabase (2026-09-15), as is the slice 2 snapshot and save-function
+migration. HANDOFF.md carries the per-slice detail.
 **Supersedes:** the AI-authored pricing model audited at commit `4dae358`.
 **Prerequisite:** the tax hotfix (Appendix A) ships and is verified first, as a separate change.
 **Authority:** this file is the authoritative Phase 1 pricing specification. The root `SPEC.md` is an

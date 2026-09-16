@@ -1,11 +1,40 @@
 # TradePulse handoff
 
-Updated: 2026-09-15 (Phase 1 slice 4 committed locally: generation writes prose only and every new estimate is a contractor_pricing draft. Slices 1-4 application code is local only, unpushed, not deployed. Slice 5, customer output and delivery locking, is next.)
+Updated: 2026-09-16 (Phase 1 slice 4 complete and manually approved after a live photo-generation smoke test. Slices 1-4 application code is local only, unpushed, not deployed. Slice 5, customer output and delivery locking, is next.)
 
-## Phase 1 slice 4: generation and the new-estimate flow (2026-09-15 PT)
+## Phase 1 slice 4: generation and the new-estimate flow (2026-09-15 PT, approved 2026-09-16)
 
-**Status:** implemented and committed locally on `phase1-contractor-pricing`. Nothing pushed, nothing
-deployed. No production data touched, and no real AI generation call made during verification.
+**Status: COMPLETE and manually approved**, after a live photo-generation smoke test. Committed
+locally on `phase1-contractor-pricing`. Nothing pushed, nothing deployed. No production data touched.
+
+What the slice established, in one place:
+
+- The AI writes scope and prose only. It authors no number that changes the selling price, and no
+  contractor business term.
+- A newly generated estimate is `source='ai_generated'`, `status='draft'`,
+  `pricing_source='contractor_pricing'`, all written explicitly rather than inherited from the column
+  defaults, and carries **no AI-authored pricing rows**.
+- The business tax and deposit settings are snapshotted onto the estimate at creation, so a later
+  change to Rates cannot move an estimate that already exists.
+- `/new` renders the saved sanitized prose the server returns in the `__SAVED__` marker, not its own
+  raw stream buffer. That is what closed F1.
+- Regenerate replaces the wording on the same estimate id. Pricing rows, tax and deposit snapshots,
+  customer details and photos all survive.
+- The live photo test proved photo observations reach generation and influence the scope.
+- The photo and generation instructions were then tightened twice, because the model overclaimed
+  uncertain conditions ("mould" from dark staining, prescribed replacements with no evidence) and
+  wrote the contractor's own business terms.
+- Generated pricing language, commercial language and any Payment Terms section are filtered out of
+  saved prose by `lib/estimate-prose.ts`.
+
+The three corrections that followed the first commit are recorded in their own sections below.
+
+**Recorded for later, not built:** a future Pro "Pricing Insights" feature (the contractor's own job
+history, and an anonymous aggregate TradePulse benchmark) is described in
+`TRADEPULSE_ESTIMATES_ROADMAP.md`, with the data-retention principle it depends on in
+`docs/SCALING-NOTES.md`. No benchmark tables, taxonomy, classification columns or analytics pipeline
+are to be built now. The only obligation today is not to destructively overwrite historical estimate
+data where it can be avoided.
 
 **What changed.** The AI now writes the job and nothing else. A generated estimate is a
 `contractor_pricing` draft from the moment it is saved, with zero pricing rows, and the contractor
@@ -150,11 +179,19 @@ which this repo's AI Control Centre CLI rejects (`handoff record` accepts only
 Planning|Review|Research|Debugging|Other). The browser-chat handoff was therefore **not** recorded, and
 no substitute value was invented. The Claude Code session itself was recorded normally.
 
-**Exact next step:** Phase 1 Slice 5, customer output and delivery locking, against
-`specs/contractor-owned-pricing.md` sections 11, 12 and 13. The customer must never see the
-contractor's material cost or markup percentage, and the old sticky Send Estimate bar ("Add pricing to
-your line items before sending") still needs re-sourcing onto the contractor-pricing completeness
-check.
+**Exact next step: Phase 1 Slice 5**, against `specs/contractor-owned-pricing.md` sections 11, 12 and
+13:
+
+- customer-facing output for a `contractor_pricing` estimate. The customer must never see the
+  contractor's material cost or markup percentage.
+- send and completeness gating: client and server, including the 409s in `send-sms` and `send-email`
+  and the "estimate not ready" state on `/share/[id]`.
+- delivery locking, server-side at every mutation route that can change the customer's document.
+- resend rules, and the fixed copy-link order (confirm, then server-side check and PATCH, then
+  clipboard).
+- photo locking after delivery, including `include_photos` and the photo add/delete routes.
+- the old sticky Send Estimate bar, which still reads "Add pricing to your line items before sending"
+  and needs re-sourcing onto the contractor-pricing completeness check.
 
 ## Phase 1 slice 3: contractor pricing editor approved (2026-09-15 PT)
 

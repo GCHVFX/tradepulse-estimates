@@ -202,3 +202,43 @@ Feature access:
 
 plan = starter | pro
 
+
+\---
+
+
+
+\## Data Retention for Future Pricing Analysis
+
+
+
+A future Pro feature, "Pricing Insights", is recorded in `TRADEPULSE_ESTIMATES_ROADMAP.md`: a contractor's own job history, and an anonymous aggregate TradePulse benchmark. **None of it is being built now**, and nothing in this note authorises benchmark tables, an analytics pipeline, classification columns, a trade or job taxonomy, historical backfill, new AI output fields, or recommendation logic.
+
+
+
+The only thing required of the product today is a guardrail: **do not destructively overwrite historical estimate data where it can be avoided.** Future analysis has to be derivable from what was already stored, because the taxonomy that would classify these jobs does not exist yet and should not be invented before there is data to test it against.
+
+
+
+Retain, and avoid destroying in place:
+
+
+
+\- the original job description and the generated prose
+
+\- retained job photos, where applicable
+
+\- the structured contractor pricing rows in `tpe_estimate_items`
+
+\- the estimate's currency snapshot
+
+\- estimate status and lifecycle transitions
+
+\- timestamps
+
+\- location and region data already stored
+
+\- the final sent, accepted or completed pricing state, where available
+
+
+
+This is a retention principle, not a schema requirement. It mostly means preferring an additive change over an in-place overwrite when a cheap choice exists, and noticing when a cleanup would erase the only record of what a job was actually priced at. Phase 1 already follows it: an estimate's tax and deposit settings are snapshotted onto the row rather than read live, and regenerating an estimate replaces its wording without touching its pricing rows.

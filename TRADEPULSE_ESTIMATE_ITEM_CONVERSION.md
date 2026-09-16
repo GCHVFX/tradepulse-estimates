@@ -1,5 +1,13 @@
 # Lazy Per-Estimate Conversion Service
 
+> **SUPERSEDED, 2026-09-16.** Kept as a record of what was built, not as a
+> description of current behaviour. Phase 1 slice 4 removed the call from
+> `/api/generate-estimate`, so **nothing in the application calls this service
+> any more**. A new estimate is `pricing_source='contractor_pricing'` with no
+> pricing rows until the contractor enters them; markdown is never converted.
+> The RPC `tpe_convert_estimate_to_structured` is deliberately left in the
+> database with no call sites. See `specs/contractor-owned-pricing.md`.
+
 Labels: **Confirmed** (verified by execution), **Recommendation**, **Unknown**.
 
 ---

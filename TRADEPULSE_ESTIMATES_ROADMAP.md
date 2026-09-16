@@ -194,6 +194,13 @@ A short implementation note containing:
 
 ## Phase 1: Customer-Friendly Pricing Presentation
 
+> **Name collision, read this first.** This is not the same thing as "Phase 1" in
+> `specs/contractor-owned-pricing.md`, which is the contractor-owned pricing work
+> currently in progress on `phase1-contractor-pricing`. That spec is the authority
+> wherever the two disagree, and it already supersedes the grouped and detailed
+> customer pricing modes described in this section: Phase 1 ships one customer
+> format.
+
 **Priority:** Highest  
 **Purpose:** Improve estimate readability without removing contractor detail.
 
@@ -610,6 +617,36 @@ Do not build LiDAR or 3D room scanning as an early priority. Start with simple d
 
 ---
 
+## Future direction: Pricing Insights (Pro, not scheduled)
+
+Recorded so the architecture does not foreclose it. **Do not build any of this now.**
+
+Two future views, both descriptive:
+
+1. **Contractor history.** Compare the estimate in front of the contractor against
+   that contractor's own past similar jobs: a historical median and range from their
+   own work. Estimated-versus-actual learning is a possible later extension.
+2. **TradePulse benchmark.** Anonymous aggregate pricing context drawn from a
+   sufficiently large group of similar TradePulse jobs. Context, not a
+   recommendation.
+
+A TradePulse benchmark must be anonymous, aggregated, historical, shown only when
+the cohort is large enough to be meaningful, and descriptive rather than
+prescriptive. It must never automatically change a contractor's estimate. The
+contractor owns the price; this only tells them what the surrounding numbers look
+like.
+
+**Do not build benchmark infrastructure now.** No benchmark tables, no analytics
+pipeline, no classification columns, no trade or job taxonomy, no historical
+backfill, no new AI output fields, and no recommendation logic. A taxonomy designed
+before there is data to test it against will be the wrong taxonomy. Classification
+of historical jobs can be derived later from the source data already retained.
+
+The only thing required of the product today is retention: see the data-retention
+principle in `docs/SCALING-NOTES.md`.
+
+---
+
 ## 6. Estimate Output Specification
 
 ## Customer-Facing Estimate
@@ -675,23 +712,39 @@ Internal details must never leak into customer output unless the contractor choo
 
 ## 7. Estimate Generation Rules
 
-The generator must use, in order:
+**Superseded by `specs/contractor-owned-pricing.md`, which is the authority.** This
+section previously told the generator to price a job from saved line items, the
+labour rate and markup preferences. It must not: the model authors no number that
+changes the selling price.
 
-1. User-defined saved line items
-2. User-defined labour rate
-3. User pricing and markup preferences
-4. Relevant trade template
-5. Prior accepted edits, when implemented
-6. Model-generated assumptions only when no user source exists
+The rule now:
+
+> AI may interpret, structure and write the estimate. It must never author a number
+> that changes the selling price.
+
+The generator produces prose only, in four sections: Job Summary, Scope of Work,
+Assumptions and Exclusions, and Notes. No Line Items table, no Pricing Summary, no
+estimated total, no labour hours or rates, no material prices, no markup, no tax, no
+deposits. It also writes no Payment Terms, estimate validity period, warranty, or
+cancellation or financing term: those are the contractor's own business terms and
+are supplied outside the model, or not at all.
+
+Photos may help the model understand visible conditions, materials and components,
+access difficulty, likely scope, and what belongs in assumptions and exclusions.
+Photos must not author a price-driving value.
+
+Pricing comes from the contractor, as structured rows in `tpe_estimate_items`, and
+is calculated deterministically by `lib/contractor-pricing.ts`.
 
 ### Confidence handling
 
-When a key price or quantity is uncertain:
+When a key quantity or condition is uncertain:
 
-- Flag it internally
-- Use an allowance where appropriate
 - Add a relevant assumption or exclusion
-- Do not present invented precision as verified pricing
+- Say what has to be inspected, verified or confirmed on site
+- Do not state an uncertain diagnosis as fact
+- Do not present invented precision as verified scope
+- Do not discuss price. An allowance is a charge the contractor enters, not prose the model writes
 
 ### Follow-up questions
 

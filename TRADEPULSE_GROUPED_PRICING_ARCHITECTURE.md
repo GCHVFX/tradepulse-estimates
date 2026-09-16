@@ -1,5 +1,13 @@
 # Grouped Customer Pricing: Storage Architecture Decision
 
+> **SUPERSEDED, 2026-09-16.** Kept as the record of why `tpe_estimate_items`
+> exists and why it is shaped the way it is; that decision still stands and
+> Phase 1 builds on it. What no longer stands is the grouped customer pricing
+> feature on top of it. `specs/contractor-owned-pricing.md` is the authority:
+> there is one customer pricing format in Phase 1, and `customer_pricing_mode`,
+> `group_label`, `assignGroupLabel` and `renderGroupedLineItemsBlock` are
+> obsolete for new estimates. Do not implement grouped mode from this document.
+
 Date: 2026-07-30. Branch `main`, base commit `2906fcc`.
 Prerequisite reading: `TRADEPULSE_ESTIMATES_BASELINE.md` (Phase 0 audit), roadmap Phase 1.
 
