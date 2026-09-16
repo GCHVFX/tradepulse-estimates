@@ -9,6 +9,8 @@ import { BottomNav } from "@/app/components/bottom-nav";
 import { loadContractorPricingRows, loadCustomerPricingView } from "@/lib/estimate-pricing-server";
 import { businessTax, taxAuthorityFor } from "@/lib/estimate-tax";
 import { ContractorPricingEditor } from "@/app/components/contractor-pricing-editor";
+import { EstimateMarkdown } from "@/app/components/estimate-markdown";
+import { stripTitleHeading } from "@/lib/estimate-prose";
 import { calculateContractorPricing } from "@/lib/contractor-pricing";
 import { readEstimateCurrency } from "@/lib/currency-db";
 import { supabaseAdmin, createSupabaseServerClient } from "@/lib/supabase-server";
@@ -264,21 +266,29 @@ export default async function EstimatePage({
               />
 
               {isContractorPricing && contractorPricing ? (
-                <ContractorPricingEditor
-                  key={estimate.id}
-                  estimateId={estimate.id}
-                  currency={estimateCurrency}
-                  initialRows={contractorRows}
-                  initialTax={{
-                    label: estimate.tax_label_snapshot,
-                    rate: estimate.tax_rate_snapshot,
-                  }}
-                  initialPricing={contractorPricing}
-                  defaults={{
-                    labourRate: business.labour_rate,
-                    markupPercent: business.markup_percent,
-                  }}
-                />
+                <>
+                  {/* The saved job wording. A contractor_pricing estimate
+                      stores prose only, so this is the whole generated
+                      document; every figure below it comes from the pricing
+                      rows, never from this text. The H1 is stripped because
+                      the title is already shown above. */}
+                  <EstimateMarkdown content={stripTitleHeading(estimate.summary ?? "")} />
+                  <ContractorPricingEditor
+                    key={estimate.id}
+                    estimateId={estimate.id}
+                    currency={estimateCurrency}
+                    initialRows={contractorRows}
+                    initialTax={{
+                      label: estimate.tax_label_snapshot,
+                      rate: estimate.tax_rate_snapshot,
+                    }}
+                    initialPricing={contractorPricing}
+                    defaults={{
+                      labourRate: business.labour_rate,
+                      markupPercent: business.markup_percent,
+                    }}
+                  />
+                </>
               ) : (
                 <EstimatePricingEditor
                   currency={estimateCurrency}

@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { parseSummary, serializeSummary } from "../../lib/estimate-summary";
+import { isQuantityItem, parseSummary, serializeSummary } from "../../lib/estimate-summary";
 
 const root = path.resolve(__dirname, "../..");
 
@@ -31,4 +31,61 @@ test("structured estimate edits use estimate-item storage and do not update the 
   expect(estimateRoute).toContain('.from("tpe_estimate_items")');
   expect(estimateRoute).not.toContain("tpe_pricebook_items");
   expect(pricingServer).toContain("loadStructuredPricingItems");
+});
+
+/**
+ * Legacy parser lock, moved here from the browser half of
+ * tests/smoke/line-item-qty-clear-does-not-lock.spec.ts when Phase 1 slice 4
+ * removed the markdown line-item editor from /new.
+ *
+ * quantityBased is decided once, strictly, at parse time: both Qty and Rate
+ * must be present. An OR-based check treated an AI row with Qty and Unit but
+ * no Rate as quantity-based with a zero rate, silently discarding the cost
+ * the AI actually stated.
+ */
+test("an AI row with qty and unit but no rate is never treated as quantity-based", () => {
+  const parsed = parseSummary(
+    [
+      "## Line Items",
+      "",
+      "| Item | Qty | Unit | Rate | Cost |",
+      "|------|-----|------|------|------|",
+      "| Labour | 4.5 | hrs | $65.00 | $292.50 |",
+      "| Drywall compound and spackling | 1 | ea |  | $16.00 |",
+      "| Permit fee |  |  |  | $150.00 |",
+    ].join("\n")
+  );
+
+  const byLabel = (label: string) => {
+    const item = parsed.lineItems.find((i) => i.label === label);
+    if (!item) throw new Error(`no line item named ${label}`);
+    return item;
+  };
+
+  expect(isQuantityItem(byLabel("Labour"))).toBe(true);
+
+  // Qty and Unit present, Rate blank: a flat fee that keeps its own cost,
+  // not a quantity row recomputed to $0.00.
+  const ambiguous = byLabel("Drywall compound and spackling");
+  expect(isQuantityItem(ambiguous)).toBe(false);
+  expect(ambiguous.cost).toContain("16");
+
+  expect(isQuantityItem(byLabel("Permit fee"))).toBe(false);
+});
+
+test("quantityBased is a stored flag, not re-derived from the live field values", () => {
+  const parsed = parseSummary(
+    [
+      "## Line Items",
+      "",
+      "| Item | Qty | Unit | Rate | Cost |",
+      "|------|-----|------|------|------|",
+      "| Labour | 10 | hrs | $65.00 | $650.00 |",
+    ].join("\n")
+  );
+
+  // Clearing the quantity mid-edit, the way a contractor retypes a number,
+  // must not reclassify the row and unmount the inputs they are typing into.
+  const cleared = { ...parsed.lineItems[0], quantity: "" };
+  expect(isQuantityItem(cleared)).toBe(true);
 });

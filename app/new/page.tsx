@@ -3,12 +3,9 @@
 import { useState, useEffect, useRef, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { EditableEstimateBody } from "@/app/components/editable-estimate-body";
 import { CompanyEstimateHeader } from "@/app/components/company-estimate-header";
 import { EstimateMarkdown } from "@/app/components/estimate-markdown";
-import { formatEstimateForDisplay } from "@/lib/estimate-summary";
-import { parseTaxHeaders, TAX_LABEL_HEADER, TAX_RATE_HEADER, type EstimateTax } from "@/lib/estimate-tax";
-import { DEFAULT_CURRENCY, parseCurrency, type Currency } from "@/lib/currency";
+import { stripTitleHeading } from "@/lib/estimate-prose";
 import { STARTER_MONTHLY_PHOTO_LIMIT } from "@/lib/rate-limit";
 import { formatPhoneInput } from "@/lib/format-phone";
 import { Logo } from "@/app/components/logo";
@@ -144,12 +141,6 @@ interface EstimateViewProps {
   error: string;
   saved: boolean;
   savedEstimateId: string | null;
-  // Snapshot currency of the estimate being shown, from the generate
-  // response header. Required, so this screen cannot fall back to CAD.
-  estimateCurrency: Currency;
-  // The business's Rates tax the estimate was saved with, from the generate
-  // response headers. null only before the first response arrives.
-  estimateTax: EstimateTax | null;
   needsProfileSetup: boolean;
   logoUrl: string | null;
   businessName: string;
@@ -205,8 +196,6 @@ function EstimateView({
   error,
   saved,
   savedEstimateId,
-  estimateCurrency,
-  estimateTax,
   needsProfileSetup,
   logoUrl,
   businessName,
@@ -311,28 +300,18 @@ function EstimateView({
                 businessEmail={businessEmail || undefined}
                 dateStr={new Date().toISOString()}
               />
-              {/* A freshly generated estimate is undelivered, so the
-                  business's Rates tax is the authority on this screen. */}
-              {!estimateTax ? null : savedEstimateId ? (
-                <EditableEstimateBody
-                  key={savedEstimateId ?? "default"}
-                  summary={estimate}
-                  estimateId={savedEstimateId}
-                  currency={estimateCurrency}
-                  taxAuthority={{ kind: "rates", tax: estimateTax }}
-                />
-              ) : (
-                // Before the estimate is saved (still streaming, no ID yet),
-                // there's no EditableEstimateBody to collapse the AI's raw
-                // Qty/Unit/Rate table down to two columns. Run it through the
-                // same display formatter so the live-typing view never shows
-                // the wide table, even for the few seconds before the swap.
-                // formatEstimateForDisplay strips the H1 line itself and
-                // never throws on a mid-stream, partially-written string.
-                <EstimateMarkdown
-                  content={formatEstimateForDisplay(estimate, estimateCurrency, { kind: "rates", tax: estimateTax })}
-                />
-              )}
+              {/* The job wording, and nothing else. A generated estimate
+                  carries no prices at all now: the contractor enters those
+                  in the pricing editor on the saved record, so this screen
+                  renders no money and needs no currency or tax.
+
+                  While the stream is open this is the live buffer, which is
+                  a progress view and is never saved from here. The moment
+                  the server sends the saved record back (__SAVED__), the
+                  buffer is thrown away and replaced by it, so sentences the
+                  price-safety filter removed cannot stay on screen and
+                  cannot be written back on a later save. */}
+              <EstimateMarkdown content={stripTitleHeading(estimate)} />
               {saved && !generating && !error && (
                 <p className="mt-4 text-xs text-zinc-400 flex items-center gap-1.5">
                   <svg
@@ -351,6 +330,18 @@ function EstimateView({
                   </svg>
                   Estimate saved
                 </p>
+              )}
+              {/* Where the contractor goes next. A generated estimate has no
+                  pricing yet by design, and the pricing editor lives on the
+                  saved record, which is the only place pricing can be
+                  entered or changed. */}
+              {saved && savedEstimateId && !generating && !error && (
+                <Link
+                  href={`/estimates/${savedEstimateId}`}
+                  className="mt-4 flex w-full items-center justify-center rounded-xl bg-zinc-900 py-4 text-base font-bold text-white transition-colors hover:bg-zinc-800 min-h-[56px]"
+                >
+                  Add Pricing
+                </Link>
               )}
             </div>
           </div>
@@ -453,6 +444,10 @@ function FormView({
   const [transcribing, setTranscribing] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [dictationError, setDictationError] = useState("");
+  // Regenerating rewrites the wording on an estimate that is already saved,
+  // so it asks first. The pricing on that estimate is not touched, and the
+  // confirmation says so.
+  const [confirmRegenerate, setConfirmRegenerate] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -759,10 +754,37 @@ function FormView({
           <p className="text-red-400 text-sm">{error}</p>
         )}
 
+        {saved && confirmRegenerate && (
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-4">
+            <p className="text-sm text-zinc-200">
+              Regenerate replaces the current job wording. Your pricing will stay the same.
+            </p>
+            <div className="mt-3 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirmRegenerate(false)}
+                className="flex-1 rounded-xl bg-zinc-800 py-3 text-sm font-semibold text-white transition-colors hover:bg-zinc-700 min-h-[44px]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmRegenerate(false);
+                  onGenerate();
+                }}
+                className="flex-1 rounded-xl bg-amber-500 py-3 text-sm font-bold text-zinc-950 transition-colors hover:bg-amber-400 min-h-[44px]"
+              >
+                Regenerate
+              </button>
+            </div>
+          </div>
+        )}
+
         <button
           type="button"
           disabled={(!jobDescription.trim() && photos.length === 0) || photoAnalysing}
-          onClick={onGenerate}
+          onClick={() => (saved ? setConfirmRegenerate(true) : onGenerate())}
           className="w-full flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 active:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
         >
           {photoAnalysing ? (
@@ -935,10 +957,6 @@ function NewPageInner() {
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [savedEstimateId, setSavedEstimateId] = useState<string | null>(null);
-  // Set from the generate response header, which carries the exact value
-  // snapshotted onto the row. CAD until then, when no estimate exists yet.
-  const [estimateCurrency, setEstimateCurrency] = useState<Currency>(DEFAULT_CURRENCY);
-  const [estimateTax, setEstimateTax] = useState<EstimateTax | null>(null);
   const [showSendSheet, setShowSendSheet] = useState(false);
   const [customerDetailsSaved, setCustomerDetailsSaved] = useState(false);
   const { logoUrl, businessName, showCompanyNameBelowLogo, businessEmail, preparedBy, isPro, aiPhotoEstimatesRemaining, isLoading: profileLoading } = useBusinessProfile();
@@ -955,9 +973,9 @@ function NewPageInner() {
 
   // Only needed while FormView's empty-textarea placeholder is on screen.
   // Left running unconditionally, this re-renders EstimateView too (same
-  // component's return path), which recreates the inline ref callbacks on
-  // every textarea in EditableEstimateBody and re-runs their auto-resize
-  // measurement every 3s with no user input — the source of the post-
+  // component's return path), which used to recreate the inline ref callbacks
+  // on every textarea in the old markdown editor and re-run their auto-resize
+  // measurement every 3s with no user input, the source of the post-
   // generation scroll drift.
   useEffect(() => {
     if (view !== "form") return;
@@ -1054,12 +1072,17 @@ function NewPageInner() {
     const description = jobDescription.trim() || photoAnalysis;
     if (!description) return;
 
+    // Regenerate replaces the wording on the estimate that already exists.
+    // Its id is kept, so the server updates that row instead of inserting a
+    // second one, and its pricing rows and snapshots are never touched.
+    const regenerateId = saved && savedEstimateId ? savedEstimateId : null;
+
     setView("estimate");
     setGenerating(true);
     setEstimate("");
     setError("");
     setSaved(false);
-    setSavedEstimateId(null);
+    if (!regenerateId) setSavedEstimateId(null);
     setJobTitle("");
 
     try {
@@ -1073,6 +1096,7 @@ function NewPageInner() {
           customerPhone: customerPhone || undefined,
           customerEmail: customerEmail || undefined,
           jobAddress: jobAddress || undefined,
+          estimateId: regenerateId || undefined,
         }),
       });
 
@@ -1085,22 +1109,16 @@ function NewPageInner() {
         throw new Error("No response body returned from server");
       }
 
-      // parseCurrency refuses anything it does not recognise, so a missing
-      // or malformed header reads as CAD rather than rendering the wrong one.
-      setEstimateCurrency(parseCurrency(res.headers.get("X-Estimate-Currency")) ?? DEFAULT_CURRENCY);
-
-      // No fallback tax: the server sends the business's Rates tax with every
-      // estimate, and a price must not render against a guessed one.
-      const responseTax = parseTaxHeaders(res.headers.get(TAX_LABEL_HEADER), res.headers.get(TAX_RATE_HEADER));
-      if (!responseTax) {
-        throw new Error("Could not read your tax settings. Please try again.");
-      }
-      setEstimateTax(responseTax);
-
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
       let createdEstimateId: string | null = null;
+      // The saved, sanitized prose the server sends back once the estimate
+      // row is written. The moment it arrives it replaces the stream buffer
+      // on screen: from then on this view shows the record, not the raw
+      // model text, so a sentence the price-safety filter removed cannot
+      // reappear here or be written back on a later save.
+      let savedProse: string | null = null;
 
       while (true) {
         let readResult;
@@ -1130,23 +1148,42 @@ function NewPageInner() {
           throw new Error(errorMessage || "Estimate generation failed");
         }
 
+        // __ID__ is emitted first and __SAVED__ last, so the id is what
+        // sits between them and everything after __SAVED__ is the prose.
         const idMarkerIndex = buffer.indexOf("\n__ID__:");
+        const savedMarkerIndex = buffer.indexOf("\n__SAVED__:");
+
         if (idMarkerIndex !== -1) {
-          const id = buffer.slice(idMarkerIndex + "\n__ID__:".length).trim();
-          createdEstimateId = id;
-          setSavedEstimateId(id);
-          buffer = buffer.slice(0, idMarkerIndex);
+          const idEnd = savedMarkerIndex === -1 ? buffer.length : savedMarkerIndex;
+          const id = buffer.slice(idMarkerIndex + "\n__ID__:".length, idEnd).trim();
+          if (id) {
+            createdEstimateId = id;
+            setSavedEstimateId(id);
+          }
         }
 
-        const h1Line = buffer.split("\n").find((l) => l.startsWith("# "));
+        if (savedMarkerIndex !== -1) {
+          savedProse = buffer.slice(savedMarkerIndex + "\n__SAVED__:".length);
+        }
+
+        // The saved record wins the moment it exists. Until then this is
+        // the live stream, shown as progress only and never saved from here.
+        const visible =
+          savedProse !== null
+            ? savedProse
+            : idMarkerIndex !== -1
+              ? buffer.slice(0, idMarkerIndex)
+              : buffer;
+
+        const h1Line = visible.split("\n").find((l) => l.startsWith("# "));
         if (h1Line) setJobTitle(h1Line.replace(/^# /, ""));
         setEstimateStarted(true);
-        setEstimate(buffer);
+        setEstimate(visible);
       }
 
       // Save any job photos onto the estimate (Pro only). They stay hidden
       // until the contractor turns them on from the estimate view.
-      if (isPro && createdEstimateId && photos.length > 0) {
+      if (isPro && !regenerateId && createdEstimateId && photos.length > 0) {
         try {
           await fetch(`/api/estimates/${createdEstimateId}/photos`, {
             method: "POST",
@@ -1205,8 +1242,6 @@ function NewPageInner() {
         error={error}
         saved={saved}
         savedEstimateId={savedEstimateId}
-        estimateCurrency={estimateCurrency}
-        estimateTax={estimateTax}
         needsProfileSetup={needsProfileSetup}
         logoUrl={logoUrl}
         businessName={businessName}

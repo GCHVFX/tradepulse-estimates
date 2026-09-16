@@ -1,6 +1,108 @@
 # TradePulse handoff
 
-Updated: 2026-09-15 (Phase 1 slice 3 approved after a real phone review and closed locally. Production disposable test data cleaned up. Slices 1-3 application code is local only, unpushed, not deployed. Slice 4 is next.)
+Updated: 2026-09-15 (Phase 1 slice 4 committed locally: generation writes prose only and every new estimate is a contractor_pricing draft. Slices 1-4 application code is local only, unpushed, not deployed. Slice 5, customer output and delivery locking, is next.)
+
+## Phase 1 slice 4: generation and the new-estimate flow (2026-09-15 PT)
+
+**Status:** implemented and committed locally on `phase1-contractor-pricing`. Nothing pushed, nothing
+deployed. No production data touched, and no real AI generation call made during verification.
+
+**What changed.** The AI now writes the job and nothing else. A generated estimate is a
+`contractor_pricing` draft from the moment it is saved, with zero pricing rows, and the contractor
+prices it in the Slice 3 editor on the saved record.
+
+- `lib/estimate-prose.ts` (new): `sanitizeGeneratedProse()`, the price-safety guardrail from spec
+  section 10, plus `stripTitleHeading()` for the screens that render the title separately. A sentence
+  containing a currency sign, a digit followed by "dollar" or "dollars", or the word "deposit" is
+  deleted; a heading whose section the deletion emptied is deleted with it; a heading that was already
+  empty, or that only introduces a subheading, is left alone. A line with no leakage is returned byte
+  for byte, so ordinary prose is never reflowed. It counts what it removed, never retries, and never
+  blocks a save. Only model output goes through it.
+- `lib/generated-estimate.ts` (new): `buildGenerationUserMessage()`, `newGeneratedEstimateInsert()` and
+  `regeneratedEstimateUpdate()`. The user message has no field for a rate, a markup, a price-book
+  price, a tax rate or a deposit rule, so one cannot reach the model by accident. The insert sets
+  `source='ai_generated'`, `status='draft'` and `pricing_source='contractor_pricing'` explicitly, and
+  copies `tax_label`, `tax_rate`, `deposit_percent` and `deposit_threshold` into the estimate's own
+  snapshot columns. The regenerate update is exactly title plus summary.
+- `app/api/generate-estimate/route.ts`: the prompt asks for Job Title, Job Summary, Scope of Work,
+  Assumptions and Exclusions, Payment Terms and Notes, and explicitly forbids currency amounts, line
+  item tables, pricing summaries, estimated totals, hour counts and deposits. The price-book query, the
+  labour-rate and markup injections, the deposit-rule instruction, `applyDeterministicDeposit` and the
+  `convertEstimateToStructuredItems` call are all gone. The currency and tax response headers are gone
+  too, because nothing renders money on `/new` any more. The route now accepts an optional
+  `estimateId` and, when present, updates that row instead of inserting a new one.
+- `app/new/page.tsx`: the markdown editor (`EditableEstimateBody`) and `formatEstimateForDisplay` are
+  gone from this screen, along with its currency and tax state. The stream emits a `__SAVED__` marker
+  last, carrying the saved sanitized prose, and the client throws away its own buffer the moment that
+  arrives. An "Add Pricing" link takes the contractor to the Slice 3 editor on the saved record.
+  "Regenerate Estimate" now confirms first ("Regenerate replaces the current job wording. Your pricing
+  will stay the same."), sends the existing id, and does not re-upload photos.
+- `app/estimates/[id]/page.tsx`: a `contractor_pricing` estimate now renders its saved prose above the
+  pricing editor. Before this it rendered no job wording at all, which made the editor unusable as a
+  landing place for a freshly generated estimate.
+
+**How F1 was closed.** `/new` no longer holds a document state of its own after the save. The server
+sanitizes, writes the row, then sends the saved text back in the same stream, and the client renders
+that. A sentence the filter removed cannot stay on screen, so it cannot be written back later.
+
+**How regenerate preserves pricing.** The write is two columns on the existing row. Pricing rows, tax
+and deposit snapshots, currency, customer details and photos are never in the statement. The route
+refuses a regenerate that is not an undelivered `contractor_pricing` estimate owned by the caller, both
+before the stream opens and again in the filter on the update itself, so a send that lands
+mid-generation cannot have its wording overwritten underneath it.
+
+**Verification actually run.**
+
+- `npx tsc --noEmit` clean.
+- `npx playwright test --config playwright.unit.config.ts`: 620 passed, 2 failed. Both failures are
+  identical at HEAD before this work, verified by stashing the change and re-running:
+  `password-reset-canonical-host` (passes in isolation, fails in the full run) and
+  `unit-suite-completeness` (the three pre-existing unregistered marketing specs).
+- `npx eslint` on every changed source file: the same one pre-existing error (an `<a>` to `/estimates`)
+  and one pre-existing unused-variable warning. Nothing new.
+- `git diff --check` clean.
+- No browser test and no live-AI test was run, and no account was created.
+
+**New tests.** `tests/smoke/estimate-prose-safety.spec.ts` (10 cases) and
+`tests/smoke/generation-contractor-pricing.spec.ts` (15 cases), both registered in
+`playwright.unit.config.ts`. Together they cover all ten behaviours the slice was asked to prove.
+
+**Existing tests updated, because they asserted behaviour this slice deliberately removed:**
+`currency.spec.ts`, `currency-rendering.spec.ts`, `estimate-deposit.spec.ts` and
+`tax-rate-from-rates-not-ai.spec.ts` (all unit, all passing), plus `generate-estimate.spec.ts` (live AI
+browser test, rewritten into the spec's `pricing-ai-authors-no-numbers` acceptance test; **not run**,
+it needs a fresh live account).
+
+**Parked, and a real coverage loss.** `tests/smoke/line-item-qty-clear-does-not-lock.spec.ts` drove the
+markdown line-item editor through `/new`, which no longer has one. Both cases are now `test.skip()`
+with the reason stated in the file. The parse-level half of what they locked was moved into
+`tests/smoke/estimate-line-item-editing.spec.ts` as two pure cases and passes there. What is still
+parked is the UI half: the edit panel staying mounted through a blank quantity field. Re-homing it on a
+service-role-seeded legacy estimate belongs with the legacy display slice.
+
+**Reported, not fixed: the website-quote intake still injects pricing into prose.**
+`handleCreateEstimate` in `app/components/estimate-actions.tsx` fetches the price book and calls
+`buildDraftSummary(...)` in `lib/quote-templates.ts`, which writes price-book prices and a Pricing
+Summary into the prose, then PATCHes `status: 'draft'` while `pricing_source` is still `markdown`,
+stranding the quote as legacy before it can be priced. That is spec section 15's work (inbound-quote
+promotion on first pricing save), not section 9 or 12, so it was left alone deliberately. There are
+zero `website_quote` rows in production.
+
+**Known dead exports.** `taxHeaders`, `parseTaxHeaders`, `TAX_LABEL_HEADER` and `TAX_RATE_HEADER` in
+`lib/estimate-tax.ts` no longer have an application caller now that `/new` renders no money. They are
+still exported and still unit-tested. Removing them touches `lib/estimate-tax.ts` and its spec for no
+behaviour change, so it was left for a later slice.
+
+**AICC header conflict, unresolved.** The task's `[AICC]` block carries `Session type: Implementation`,
+which this repo's AI Control Centre CLI rejects (`handoff record` accepts only
+Planning|Review|Research|Debugging|Other). The browser-chat handoff was therefore **not** recorded, and
+no substitute value was invented. The Claude Code session itself was recorded normally.
+
+**Exact next step:** Phase 1 Slice 5, customer output and delivery locking, against
+`specs/contractor-owned-pricing.md` sections 11, 12 and 13. The customer must never see the
+contractor's material cost or markup percentage, and the old sticky Send Estimate bar ("Add pricing to
+your line items before sending") still needs re-sourcing onto the contractor-pricing completeness
+check.
 
 ## Phase 1 slice 3: contractor pricing editor approved (2026-09-15 PT)
 

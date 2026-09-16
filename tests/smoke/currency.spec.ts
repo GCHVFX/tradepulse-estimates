@@ -244,8 +244,13 @@ test("changing Profile estimate currency never calls Stripe and only writes when
 
 test("a new estimate snapshots the business estimate currency", () => {
   const route = code("app/api/generate-estimate/route.ts");
-  expect(route).toContain("estimateCurrencyPatch");
   expect(route).toContain("readBusinessEstimateCurrency(supabaseAdmin, business.id)");
+  expect(route).toContain("currency: estimateCurrency,");
+
+  // The snapshot itself moved into the insert builder with the rest of the
+  // generated-estimate record (Phase 1 slice 4). It is still the same patch.
+  const record = code("lib/generated-estimate.ts");
+  expect(record).toContain("estimateCurrencyPatch(input.currency)");
 });
 
 test("existing Price-ID webhook mapping is unchanged", () => {

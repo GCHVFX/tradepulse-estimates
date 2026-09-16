@@ -5,12 +5,17 @@ import { validateContentType } from "@/lib/api-utils";
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
-import { convertEstimateToStructuredItems } from "@/lib/estimate-item-migration";
 import { notifyInternalError } from "@/lib/notify-error";
-import { estimateCurrencyPatch, readBusinessEstimateCurrency } from "@/lib/currency-db";
-import { applyDeterministicDeposit, type DepositRule } from "@/lib/estimate-summary";
+import { readBusinessEstimateCurrency } from "@/lib/currency-db";
 import { spellingInstructionForCurrency, type Currency } from "@/lib/currency";
-import { businessTax, taxHeaders } from "@/lib/estimate-tax";
+import { businessTax } from "@/lib/estimate-tax";
+import { isDelivered } from "@/lib/estimate-delivery";
+import { sanitizeGeneratedProse } from "@/lib/estimate-prose";
+import {
+  buildGenerationUserMessage,
+  newGeneratedEstimateInsert,
+  regeneratedEstimateUpdate,
+} from "@/lib/generated-estimate";
 import { hasSubscriptionAccess, SUBSCRIPTION_ACCESS_COLUMNS } from "@/lib/subscription-access";
 import {
   claimEstimateGeneration,
@@ -21,62 +26,44 @@ import {
 
 const client = new Anthropic();
 
+/**
+ * The model writes the job. The contractor owns the price. TradePulse owns
+ * the maths (specs/contractor-owned-pricing.md section 9).
+ *
+ * Nothing in this prompt, and nothing in the user message built by
+ * buildGenerationUserMessage, gives the model a labour rate, a markup, a
+ * price book price, a tax rate, a deposit rule or any contractor-entered
+ * amount. It has no basis on which to invent a selling price, it is told not
+ * to write one, and lib/estimate-prose.ts deletes any it writes anyway.
+ */
 function buildSystemPrompt(currency: Currency): string {
-  // Capitalized so the Line Items example row below matches whichever
-  // spelling convention the instruction just below it asks for -- otherwise
-  // a literal "Labour" example risks getting echoed into a USD estimate's
-  // own line items despite the instruction to write American English.
-  const labourExample = currency === "usd" ? "Labor" : "Labour";
-  return `You are a professional contractor writing a job estimate for a customer. Turn the job description into a complete, professional estimate. Write it the way an experienced contractor would. Clear, specific, and direct. Ready to send with minimal editing.
+  return `You are a professional contractor writing a job estimate for a customer. Turn the job description into a clear, specific description of the work. Write it the way an experienced contractor would. The contractor adds the pricing separately, so you write the words only.
 
 Rules:
 - Write like a contractor, not like software
 - Use plain language the homeowner can understand
 - Be specific. Vague scope descriptions are not acceptable
-- Never ask for more information. No matter how brief the input, always generate a complete estimate.
+- Never ask for more information. No matter how brief the input, always write a complete description of the work.
 - Make reasonable assumptions for any missing details and list them in the Assumptions and Exclusions section.
 - Never overstate certainty when key details are unknown
 - Do not use em dashes
 - Do not use: ensure, streamline, leverage, utilize, seamless, comprehensive, facilitate
-- Prices must be specific and labelled, never vague
+- Never write currency amounts, prices, rates, or percentages of cost. Refer to the Pricing section instead.
+- Never write a line items table, a pricing summary, an estimated total, a labour or material amount, a labour rate, an hour count, or anything priced by the unit.
+- Never mention a deposit, a payment percentage, or any split of the price. Payment Terms describe timing and conditions in words only.
 - ${spellingInstructionForCurrency(currency)}
 - For automotive and vehicle parts, use American English spellings: tire not tyre, muffler not silencer, gas not petrol, truck not lorry.
-- Never show markup as a separate line item. Apply markup to material prices directly and list each material at its marked-up price. The customer sees final prices only.
 - In the Assumptions and Exclusions section, write each item as a plain bullet point. Do not use bold labels like **Included:**, **Excluded:**, or **Assumptions:**. Just write the assumption or exclusion directly.
-- Estimate labour hours the way an experienced tradesperson actually works, not with a built-in safety margin. Do not round up to a full day, a full shift, or a round number out of caution. A small, contained job, such as capping off one or two pipes, patching a small section of drywall, or swapping a single fixture, is typically 1 to 3 hours of hands-on labour, not more. Reserve larger hour counts for jobs that genuinely involve that much physical work, such as a full room repaint, a panel upgrade, or a multi-fixture rough-in.
 
 Output must follow this exact structure:
 
 1. Job Title (H1 heading)
 2. Job Summary (2 to 3 sentences)
-3. Estimated Total (after the summary, write the total price as a simple line like "Estimated total: $1,943". This is plain text, not a heading or table.)
-4. Scope of Work (bullet list of specific tasks)
-5. Line Items (labour and materials, individually priced)
-   Line Items MUST be formatted as markdown pipe tables, not bullet points or plain text. Use this exact format:
-   | Item | Qty | Unit | Rate | Cost |
-   |------|-----|------|------|------|
-   | ${labourExample} | 3 | hrs | $95.00 | $285.00 |
-   | Interior paint | 4 | gal | $62.00 | $248.00 |
-   | Permit fee |  |  |  | $150.00 |
-   Decide per item which type it is:
-   - Quantity-based: anything measured in a natural unit, such as labour hours, paint by the gallon, wire by the foot, tile by the square foot. Fill in Qty, Unit, and Rate, and put quantity x rate in the Cost column.
-   - Flat fee: anything priced as one lump sum, such as a permit, trip charge, or disposal fee. Leave Qty, Unit, and Rate empty and put the amount in the Cost column.
-   Unit is short free text you choose (hrs, gal, sqft, ft, ea). Cost must always be filled in. Money columns use two decimal places.
-   Never use bullet points or plain text for line items. Always use pipe table format.
-   Do not include a Subtotal, Tax, Total, Deposit, or Balance row in the Line Items table. These are handled separately in the Pricing Summary section. The last row in the Line Items table must be a labour or material line item. Nothing else.
-6. Assumptions and Exclusions (what is included, what is not)
-7. Pricing Summary (subtotal, total, deposit, balance)
-   Pricing Summary MUST be formatted as markdown pipe tables, not bullet points or plain text. Use this exact format:
-   | | |
-   |---|---|
-   | Subtotal | $XXX |
-   | **Total** | **$XXX** |
-   | Deposit required | $XXX |
-   | Balance on completion | $XXX |
-   Never use bullet points or plain text for the pricing summary. Always use pipe table format.
-8. Payment Terms (2 to 4 lines)
+3. Scope of Work (bullet list of specific tasks, plain language)
+4. Assumptions and Exclusions (what is included, what is not)
+5. Payment Terms (2 to 4 lines)
    Always include: "This estimate is valid for 30 days from the date above."
-9. Notes (omit if nothing relevant)`;
+6. Notes (omit if nothing relevant)`;
 }
 
 export async function POST(request: NextRequest) {
@@ -94,9 +81,13 @@ export async function POST(request: NextRequest) {
     return applyTo(new NextResponse("Too many requests. Please wait a moment.", { status: 429 }));
   }
 
+  // No labour_rate, no markup_percent, no price book read. A value this route
+  // never loads cannot reach the model by accident. deposit_percent,
+  // deposit_threshold, tax_label and tax_rate are loaded only for the
+  // estimate's own snapshots and are never put in the prompt.
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select(`id, name, prepared_by, ${SUBSCRIPTION_ACCESS_COLUMNS}, labour_rate, markup_percent, deposit_percent, deposit_threshold, tax_label, tax_rate`)
+    .select(`id, name, prepared_by, ${SUBSCRIPTION_ACCESS_COLUMNS}, deposit_percent, deposit_threshold, tax_label, tax_rate`)
     .eq("owner_user_id", user.id)
     .maybeSingle();
 
@@ -107,12 +98,6 @@ export async function POST(request: NextRequest) {
   const contentTypeError = validateContentType(request);
   if (contentTypeError) return applyTo(contentTypeError);
 
-  const { data: priceItemsData } = await supabaseAdmin
-    .from("tpe_pricebook_items")
-    .select("name, labour_price")
-    .eq("business_id", business.id)
-    .order("created_at", { ascending: true });
-
   let body: unknown;
   try {
     body = await request.json();
@@ -120,13 +105,14 @@ export async function POST(request: NextRequest) {
     return new Response("Invalid JSON", { status: 400 });
   }
 
-  const { jobDescription, photoAnalysis, customerName, customerPhone, customerEmail, jobAddress } = body as {
+  const { jobDescription, photoAnalysis, customerName, customerPhone, customerEmail, jobAddress, estimateId } = body as {
     jobDescription?: unknown;
     photoAnalysis?: unknown;
     customerName?: unknown;
     customerPhone?: unknown;
     customerEmail?: unknown;
     jobAddress?: unknown;
+    estimateId?: unknown;
   };
 
   if (typeof jobDescription !== "string" || !jobDescription.trim()) {
@@ -135,58 +121,58 @@ export async function POST(request: NextRequest) {
   if (jobDescription.length > 2000) {
     return new Response("Job description too long. Please keep it under 2000 characters.", { status: 400 });
   }
+  if (typeof photoAnalysis === "string" && photoAnalysis.length > 4000) {
+    return new Response("Photo analysis too long.", { status: 400 });
+  }
 
-  // Pass customer details to Claude for context only, not output in the estimate
-  const lines: string[] = [jobDescription.trim()];
-  if (typeof photoAnalysis === "string" && photoAnalysis.trim()) {
-    if (photoAnalysis.length > 4000) {
-      return new Response("Photo analysis too long.", { status: 400 });
+  // Regenerate replaces the wording on an estimate that already exists. Its
+  // pricing rows, tax and deposit snapshots, customer details and photos are
+  // never touched, so regenerating cannot move a price.
+  const regenerateId = typeof estimateId === "string" && estimateId.trim() ? estimateId.trim() : null;
+  if (regenerateId) {
+    const { data: existing } = await supabaseAdmin
+      .from("tpe_estimates")
+      .select("id, status, sent_at, copied_at, pricing_source")
+      .eq("id", regenerateId)
+      .eq("business_id", business.id)
+      .maybeSingle();
+
+    if (!existing) {
+      return applyTo(NextResponse.json({ error: "Estimate not found or access denied" }, { status: 404 }));
     }
-    lines.push(`What the job site photos show: ${photoAnalysis.trim()}`);
-  }
-  if (business?.name) lines.push(`Business name: ${business.name}`);
-  if (typeof customerName === "string" && customerName.trim()) {
-    lines.push(`Customer name (for context only, do not include in output): ${customerName.trim()}`);
-  }
-  if (typeof customerPhone === "string" && customerPhone.trim()) {
-    lines.push(`Customer phone (for context only, do not include in output): ${customerPhone.trim()}`);
-  }
-  if (typeof jobAddress === "string" && jobAddress.trim()) {
-    lines.push(`Job address (for context only, do not include in output): ${jobAddress.trim()}`);
+    if (existing.pricing_source !== "contractor_pricing") {
+      return applyTo(
+        NextResponse.json(
+          { error: "This estimate uses the previous pricing system and is read-only" },
+          { status: 409 }
+        )
+      );
+    }
+    if (isDelivered(existing)) {
+      return applyTo(
+        NextResponse.json(
+          { error: "This estimate has already gone to the customer and cannot be changed" },
+          { status: 409 }
+        )
+      );
+    }
   }
 
-  // Inject price book data from tpe_businesses columns
-  if (business.labour_rate) {
-    lines.push(`Labour rate: $${business.labour_rate}/hr. Use this rate for all labour line items`);
-  }
-  if (business.markup_percent) {
-    lines.push(`Materials markup: ${business.markup_percent}%. Apply this markup on top of all material costs`);
-  }
-  const priceItems = priceItemsData ?? [];
-  if (priceItems.length > 0) {
-    lines.push(`Common line items from contractor's price book (use these prices when applicable):`);
-    priceItems.forEach((item) => {
-      lines.push(`  - ${item.name}: $${item.labour_price}`);
-    });
-  }
-  // No tax instruction to the model. Tax comes only from the business's Rates
-  // settings, applied when the estimate is serialized after generation; the
-  // model is not asked to write, and cannot set, a tax row.
+  const userMessage = buildGenerationUserMessage({
+    jobDescription,
+    photoAnalysis: typeof photoAnalysis === "string" ? photoAnalysis : undefined,
+    businessName: business.name ?? undefined,
+    customerName: typeof customerName === "string" ? customerName : undefined,
+    customerPhone: typeof customerPhone === "string" ? customerPhone : undefined,
+    jobAddress: typeof jobAddress === "string" ? jobAddress : undefined,
+  });
+
+  // The tax this estimate is snapshotted with. It is never sent to the model.
   const tax = businessTax(business);
 
-  if (business.deposit_percent && business.deposit_threshold) {
-    lines.push(`Deposit rule: if the job total exceeds $${business.deposit_threshold}, include a deposit row in the Pricing Summary table showing ${business.deposit_percent}% of the total. Calculate the exact dollar amount. If the total is under $${business.deposit_threshold}, write "No deposit required" in the deposit row.`);
-  } else {
-    lines.push("Deposit: write 'No deposit required' in the deposit row of the Pricing Summary.");
-  }
-
-  const userMessage = lines.join("\n");
-
   // Read the snapshot currency once, before the stream opens, so the value
-  // written to the row, the value the client renders with, and the spelling
-  // convention the AI is told to write in are all the same read. /new has no
-  // estimate row to query, so the response header is how it learns the
-  // snapshot instead of guessing from the business setting.
+  // written to the row and the spelling convention the AI is told to write in
+  // come from the same read.
   const estimateCurrency = await readBusinessEstimateCurrency(supabaseAdmin, business.id);
 
   const claimInput = { businessId: business.id, ownerUserId: user.id };
@@ -238,7 +224,6 @@ export async function POST(request: NextRequest) {
   const safeCustomerPhone = typeof customerPhone === "string" ? customerPhone.trim() : "";
   const safeCustomerEmail = typeof customerEmail === "string" ? customerEmail.trim() : "";
   const safeJobAddress = typeof jobAddress === "string" ? jobAddress.trim() : "";
-  const safePreparedBy = business?.prepared_by ?? "";
 
   const readable = new ReadableStream({
     async start(controller) {
@@ -259,9 +244,22 @@ export async function POST(request: NextRequest) {
               }
             }
 
+            // The price-safety guardrail. A sentence the model wrote with a
+            // currency figure or a deposit in it is deleted, and a heading
+            // the deletion emptied goes with it. It never retries and never
+            // blocks the save. From here on this sanitized text is the
+            // estimate, and the raw buffer the client watched arrive is not.
+            const sanitized = sanitizeGeneratedProse(fullText);
+            if (sanitized.removedSentences > 0 || sanitized.removedHeadings > 0) {
+              console.info(
+                `[generate-estimate] prose safety removed ${sanitized.removedSentences} sentence(s) and ${sanitized.removedHeadings} heading(s)`
+              );
+            }
+            const summary = sanitized.prose;
+
             // Extract job title, find first H1 that isn't the business name
             const businessNameClean = (business?.name ?? "").trim().toLowerCase();
-            const titleLine = fullText
+            const titleLine = summary
               .split("\n")
               .filter((l) => l.startsWith("# "))
               .find((l) => {
@@ -270,102 +268,69 @@ export async function POST(request: NextRequest) {
               });
             const title = titleLine?.replace(/^#\s*/, "").trim() ?? "Untitled Estimate";
 
-            // Whether a deposit applies, and how much, must come from the
-            // business's own Rates settings, never from the model's Pricing
-            // Summary / Payment Terms text -- the model has repeatedly
-            // written a "No deposit required" row alongside Payment Terms
-            // prose stating a specific deposit dollar amount, contradicting
-            // itself. This rewrites both to agree, deterministically, before
-            // the estimate is ever saved.
-            //
-            // A normalization failure must NOT fall back to saving the
-            // model's raw, potentially self-contradictory deposit text as if
-            // it were authoritative -- that would defeat the entire point.
-            // It is deliberately left uncaught here: it propagates to this
-            // stream's own top-level catch below, which is the existing,
-            // already-correct behaviour for any other generation failure --
-            // the client gets the standard error message, nothing is
-            // inserted into the database, and the error is logged.
-            const depositRule: DepositRule | null =
-              business.deposit_percent && business.deposit_threshold
-                ? { percent: business.deposit_percent, thresholdDollars: business.deposit_threshold }
-                : null;
-            let normalizedSummary: string;
-            try {
-              normalizedSummary = applyDeterministicDeposit(fullText, estimateCurrency, depositRule, tax);
-            } catch (depositErr) {
-              throw new Error(
-                `Deterministic deposit normalization failed, refusing to save unverified deposit terms: ${
-                  depositErr instanceof Error ? depositErr.message : String(depositErr)
-                }`
-              );
-            }
+            let savedEstimateId: string;
+            if (regenerateId) {
+              // Title and summary, nothing else. The ownership and delivery
+              // checks ran before the stream opened and are repeated in this
+              // filter, so a send that landed mid-generation cannot have its
+              // wording overwritten underneath it.
+              const { data, error } = await supabaseAdmin
+                .from("tpe_estimates")
+                .update(regeneratedEstimateUpdate(title, summary))
+                .eq("id", regenerateId)
+                .eq("business_id", business.id)
+                .eq("pricing_source", "contractor_pricing")
+                .is("sent_at", null)
+                .is("copied_at", null)
+                .in("status", ["draft", "needs_review"])
+                .select("id");
 
-            const { data, error } = await supabaseAdmin
-              .from("tpe_estimates")
-              .insert({
-                title,
-                summary: normalizedSummary,
-                status: "draft",
-                source: "ai_generated",
-                business_id: business.id,
-                customer_name: safeCustomerName,
-                customer_phone: safeCustomerPhone,
-                customer_email: safeCustomerEmail,
-                job_address: safeJobAddress,
-                description: safeJobAddress,
-                service_type: "estimate",
-                location: "",
-                urgency: "flexible",
-                prepared_by: safePreparedBy,
-                deposit_amount: null,
-                // Immutable snapshot. Changing the business estimate currency
-                // later must never move an estimate that is already saved.
-                ...estimateCurrencyPatch(estimateCurrency),
-              })
-              .select();
-
-            if (error || !data?.[0]?.id) {
-              console.error("[generate-estimate] DB insert failed", error?.message ?? "no id returned");
-              controller.enqueue(new TextEncoder().encode(`\n__ERROR__:Failed to save estimate. Please try again.`));
-              controller.close();
-              return;
-            }
-            const newEstimateId = data[0].id;
-            controller.enqueue(new TextEncoder().encode(`\n__ID__:${newEstimateId}`));
-
-            // Structured pricing, for NEWLY GENERATED estimates only.
-            //
-            // Best effort and strictly non-fatal. The estimate is already saved and
-            // the client already has its id, so if anything here refuses or throws,
-            // the estimate simply stays markdown-authoritative, exactly as every
-            // estimate created before today. No existing estimate is touched.
-            //
-            // The markdown summary is preserved either way, so detailed rendering
-            // (share page, PDF, editor, preview) is byte-for-byte what it was.
-            // Grouping is written to the rows only; nothing renders it yet.
-            //
-            // This runs before controller.close() so it cannot be cut short by the
-            // runtime freezing the instance once the response completes. It costs a
-            // few database round trips after a generation that already took seconds.
-            try {
-              const conversion = await convertEstimateToStructuredItems({
-                estimateId: newEstimateId,
-                userId: user.id,
-                dryRun: false,
-                assignGroups: true,
-              });
-              if (!conversion.success) {
-                console.info(
-                  `[generate-estimate] structured pricing skipped for ${newEstimateId}: ${conversion.refusalReason}`
+              if (error || !data?.[0]?.id) {
+                console.error("[generate-estimate] regenerate failed", error?.message ?? "no row updated");
+                controller.enqueue(
+                  new TextEncoder().encode(
+                    `\n__ERROR__:Could not replace the wording on this estimate. Please try again.`
+                  )
                 );
+                controller.close();
+                return;
               }
-            } catch (conversionErr) {
-              console.error(
-                "[generate-estimate] structured pricing failed, estimate remains markdown:",
-                conversionErr instanceof Error ? conversionErr.message : conversionErr
-              );
+              savedEstimateId = data[0].id;
+            } else {
+              const { data, error } = await supabaseAdmin
+                .from("tpe_estimates")
+                .insert(
+                  newGeneratedEstimateInsert({
+                    title,
+                    summary,
+                    business,
+                    tax,
+                    currency: estimateCurrency,
+                    customerName: safeCustomerName,
+                    customerPhone: safeCustomerPhone,
+                    customerEmail: safeCustomerEmail,
+                    jobAddress: safeJobAddress,
+                  })
+                )
+                .select();
+
+              if (error || !data?.[0]?.id) {
+                console.error("[generate-estimate] DB insert failed", error?.message ?? "no id returned");
+                controller.enqueue(new TextEncoder().encode(`\n__ERROR__:Failed to save estimate. Please try again.`));
+                controller.close();
+                return;
+              }
+              savedEstimateId = data[0].id;
             }
+
+            controller.enqueue(new TextEncoder().encode(`\n__ID__:${savedEstimateId}`));
+
+            // The saved record, handed straight back so the client can stop
+            // showing the raw stream buffer it collected. Without this the
+            // sentences the filter just removed stay on the contractor's
+            // screen and get written back on the next save. Emitted last, so
+            // everything after the marker is the prose.
+            controller.enqueue(new TextEncoder().encode(`\n__SAVED__:${summary}`));
 
             controller.close();
           } catch (err) {
@@ -400,13 +365,6 @@ export async function POST(request: NextRequest) {
   return applyTo(new NextResponse(readable, {
     headers: {
       "Content-Type": "text/plain; charset=utf-8",
-      // The snapshot the row was saved with. A header rather than a body
-      // marker so the existing __ID__ / __ERROR__ stream protocol is
-      // untouched and an older client simply ignores it.
-      "X-Estimate-Currency": estimateCurrency,
-      // The Rates tax the estimate was saved with, for /new's editor and
-      // streaming preview, which have no business row of their own.
-      ...taxHeaders(tax),
     },
   }));
 }

@@ -344,18 +344,23 @@ test("the currency label and the amounts beside it always agree", () => {
 });
 
 test("no customer-facing surface can render an estimate without its currency", () => {
-  // /new was the fourth call site: it rendered EditableEstimateBody and the
+  // /new was the fourth call site: it rendered the markdown editor and the
   // streaming preview with no currency at all, so every USD estimate showed
-  // CA$ on the screen that creates it.
+  // CA$ on the screen that creates it. Phase 1 slice 4 removed the money from
+  // that screen entirely rather than giving it a currency: a generated
+  // estimate carries no prices, the contractor enters those on the saved
+  // record, and the pricing editor there renders from the estimate's own
+  // currency snapshot. So the rule for /new is now the stronger one.
   const newPage = code("app/new/page.tsx");
-  expect(newPage).toContain("X-Estimate-Currency");
-  expect(newPage).toContain("currency={estimateCurrency}");
-  expect(newPage).toContain('formatEstimateForDisplay(estimate, estimateCurrency, { kind: "rates", tax: estimateTax })');
+  expect(newPage).not.toContain("formatEstimateForDisplay");
+  expect(newPage).not.toContain("estimateCurrency");
+  expect(newPage).not.toContain("formatCurrency");
 
-  // The generate route snapshots and reports the same value it saved.
+  // The generate route still snapshots the currency onto the row it writes.
   const generate = code("app/api/generate-estimate/route.ts");
-  expect(generate).toContain("estimateCurrencyPatch(estimateCurrency)");
-  expect(generate).toContain('"X-Estimate-Currency": estimateCurrency');
+  expect(generate).toContain("currency: estimateCurrency,");
+  const record = code("lib/generated-estimate.ts");
+  expect(record).toContain("estimateCurrencyPatch(input.currency)");
 
   // The pricing view carries the snapshot on the record itself.
   const mode = code("lib/estimate-pricing-mode.ts");
