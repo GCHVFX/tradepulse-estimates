@@ -1,6 +1,49 @@
 # TradePulse handoff
 
-Updated: 2026-09-15 (Phase 1 slice 2 schema activation: the contractor-pricing snapshot columns and the `tpe_save_contractor_pricing` function are now live in production Supabase. Slices 1-2 application code is local only, unpushed, not deployed. Slice 3 is unblocked.)
+Updated: 2026-09-15 (Phase 1 slice 3 approved after a real phone review and closed locally. Production disposable test data cleaned up. Slices 1-3 application code is local only, unpushed, not deployed. Slice 4 is next.)
+
+## Phase 1 slice 3: contractor pricing editor approved (2026-09-15 PT)
+
+**Status:** approved after a manual review on a real phone, and closed locally. Nothing pushed, nothing
+deployed.
+
+**Local commits:**
+
+- `cae8700a31c512cbeeb9aa133a7fbbab699a59f9` -- Slice 3 contractor pricing editor
+- `90c294c` -- tests only, pinning estimate-owned markup
+
+**What the phone review confirmed:** hourly and fixed labour both worked, materials cost plus markup
+worked, the customer selling price updated correctly, optional charges worked, and the tax, totals and
+deposit arithmetic was correct.
+
+**Markup is owned by the estimate.** The Markup % field sits in the estimate's own Materials section and
+is edited there, not in Profile/Rates. The stored `tpe_estimate_items.markup_percent` on the material row
+is what fills it. `tpe_businesses.markup_percent` is only the starting value offered to an estimate that
+has no material row yet: changing Rates later never moves an estimate that is already priced, and an
+estimate-side markup edit never writes the business default. A review note suggesting markup could only be
+changed in Rates was investigated and did not match the code at any layer; the likely cause was the
+un-hydrated LAN page described below. `tests/smoke/contractor-pricing-form.spec.ts` cases 26 to 30 pin all
+of this, including 0% staying explicitly editable.
+
+**The LAN manual-testing fix, since reverted.** Next 16 blocks cross-origin access to dev resources unless
+the origin is listed in `allowedDevOrigins`, and localhost is exempt from that block. Without it the phone
+received the server-rendered HTML and no working client JavaScript, so React never hydrated and every
+control on the page was inert. A temporary `allowedDevOrigins: ["192.168.68.55"]` entry in
+`next.config.ts` made the review possible and was reverted once the review finished. If LAN device testing
+is needed again, re-add it temporarily with the machine's current IP and remove it afterwards.
+
+**Production disposable test data cleaned up.** The disposable business
+`c5e44bd3-0522-4ea7-9f8e-1502471afcc7`, its estimates `499affeb-e831-46b2-9fe8-2b487ce7f871` and
+`55a82176-578f-4ed7-8ab4-291bdfe8b479`, all of their estimate items, and the auth user
+`7c2f3741-ad28-4a46-aa47-4cec7f3ca038` were deleted. Cleanup was verified externally.
+
+**Known and parked, not Slice 3 defects.** The customer must never see the contractor's material cost or
+markup percentage, which is a delivery-surface rule for a later slice. The old send bar still reads "Add
+pricing to your line items before sending" and overlays part of the editor. Both are deliberately left to
+the delivery/send slice.
+
+**Exact next step:** Phase 1 Slice 4, the generation and new-estimate flow, against
+`specs/contractor-owned-pricing.md`.
 
 ## Phase 1 slice 2: schema activated in production (2026-09-15 PT)
 
