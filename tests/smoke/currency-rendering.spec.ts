@@ -17,6 +17,7 @@ import {
 import { buildCustomerPricingView } from "../../lib/estimate-pricing-mode";
 import { renderGroupedLineItemsBlock } from "../../lib/estimate-groups";
 import { allAmountsInLabel, type Currency } from "../../lib/currency";
+import { GST_5, RATES_GST_5 } from "../fixtures/tax";
 
 function code(path: string): string {
   return readFileSync(path, "utf8")
@@ -88,8 +89,8 @@ test("a USD estimate survives a serialize / parse / re-serialize round trip", ()
     parsed.depositPercent,
     parsed.beforePricingSections,
     parsed.afterPricingSections,
-    parsed.taxLabel,
-    parsed.taxRate,
+    GST_5.label,
+    GST_5.rate,
     "usd"
   );
   expect(reserialized).toContain("US$");
@@ -270,13 +271,14 @@ const PRICED_RECORD = {
   paymentStatus: null,
   invoiceAmount: null,
   reviewRequestedAt: null,
+  businessTax: GST_5,
 };
 
 test("formatEstimateForDisplay renders the estimate's own currency, not CAD", () => {
   for (const currency of ["cad", "usd"] as const) {
     expectOnly(
       currency,
-      formatEstimateForDisplay(estimateSummary(currency), currency),
+      formatEstimateForDisplay(estimateSummary(currency), currency, RATES_GST_5),
       `display formatter (${currency})`
     );
   }
@@ -287,7 +289,7 @@ test("formatEstimateForDisplayWithPricing renders the estimate's own currency", 
     const parsed = parseSummary(estimateSummary(currency));
     expectOnly(
       currency,
-      formatEstimateForDisplayWithPricing(estimateSummary(currency), parsed.lineItems, currency),
+      formatEstimateForDisplayWithPricing(estimateSummary(currency), parsed.lineItems, currency, RATES_GST_5),
       `pricing formatter (${currency})`
     );
   }
@@ -348,7 +350,7 @@ test("no customer-facing surface can render an estimate without its currency", (
   const newPage = code("app/new/page.tsx");
   expect(newPage).toContain("X-Estimate-Currency");
   expect(newPage).toContain("currency={estimateCurrency}");
-  expect(newPage).toContain("formatEstimateForDisplay(estimate, estimateCurrency)");
+  expect(newPage).toContain('formatEstimateForDisplay(estimate, estimateCurrency, { kind: "rates", tax: estimateTax })');
 
   // The generate route snapshots and reports the same value it saved.
   const generate = code("app/api/generate-estimate/route.ts");
@@ -357,7 +359,7 @@ test("no customer-facing surface can render an estimate without its currency", (
 
   // The pricing view carries the snapshot on the record itself.
   const mode = code("lib/estimate-pricing-mode.ts");
-  expect(mode).toContain("formatEstimateForDisplay(estimate.summary, estimate.currency)");
+  expect(mode).toContain("formatEstimateForDisplay(estimate.summary, estimate.currency, taxAuthority)");
   expect(mode).toContain("renderGroupedLineItemsBlock(groupable, estimate.currency)");
 
   // ...and the only CAD fallback left sits at the database boundary.

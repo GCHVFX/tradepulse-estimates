@@ -10,6 +10,7 @@ import { notifyInternalError } from "@/lib/notify-error";
 import { estimateCurrencyPatch, readBusinessEstimateCurrency } from "@/lib/currency-db";
 import { applyDeterministicDeposit, type DepositRule } from "@/lib/estimate-summary";
 import { spellingInstructionForCurrency, type Currency } from "@/lib/currency";
+import { businessTax, taxHeaders } from "@/lib/estimate-tax";
 import { hasSubscriptionAccess, SUBSCRIPTION_ACCESS_COLUMNS } from "@/lib/subscription-access";
 import {
   claimEstimateGeneration,
@@ -64,12 +65,11 @@ Output must follow this exact structure:
    Never use bullet points or plain text for line items. Always use pipe table format.
    Do not include a Subtotal, Tax, Total, Deposit, or Balance row in the Line Items table. These are handled separately in the Pricing Summary section. The last row in the Line Items table must be a labour or material line item. Nothing else.
 6. Assumptions and Exclusions (what is included, what is not)
-7. Pricing Summary (subtotal, tax, total, deposit, balance)
+7. Pricing Summary (subtotal, total, deposit, balance)
    Pricing Summary MUST be formatted as markdown pipe tables, not bullet points or plain text. Use this exact format:
    | | |
    |---|---|
    | Subtotal | $XXX |
-   | Tax (TAX_LABEL TAX_RATE%) | $XXX |
    | **Total** | **$XXX** |
    | Deposit required | $XXX |
    | Balance on completion | $XXX |
@@ -169,9 +169,10 @@ export async function POST(request: NextRequest) {
       lines.push(`  - ${item.name}: $${item.labour_price}`);
     });
   }
-  const taxLabel = business.tax_label ?? 'GST';
-  const taxRate = business.tax_rate ?? 5;
-  lines.push(`Tax: use "${taxLabel} ${taxRate}%" as the tax label in the Pricing Summary. Calculate tax as ${taxRate}% of the subtotal.`);
+  // No tax instruction to the model. Tax comes only from the business's Rates
+  // settings, applied when the estimate is serialized after generation; the
+  // model is not asked to write, and cannot set, a tax row.
+  const tax = businessTax(business);
 
   if (business.deposit_percent && business.deposit_threshold) {
     lines.push(`Deposit rule: if the job total exceeds $${business.deposit_threshold}, include a deposit row in the Pricing Summary table showing ${business.deposit_percent}% of the total. Calculate the exact dollar amount. If the total is under $${business.deposit_threshold}, write "No deposit required" in the deposit row.`);
@@ -291,7 +292,7 @@ export async function POST(request: NextRequest) {
                 : null;
             let normalizedSummary: string;
             try {
-              normalizedSummary = applyDeterministicDeposit(fullText, estimateCurrency, depositRule);
+              normalizedSummary = applyDeterministicDeposit(fullText, estimateCurrency, depositRule, tax);
             } catch (depositErr) {
               throw new Error(
                 `Deterministic deposit normalization failed, refusing to save unverified deposit terms: ${
@@ -403,6 +404,9 @@ export async function POST(request: NextRequest) {
       // marker so the existing __ID__ / __ERROR__ stream protocol is
       // untouched and an older client simply ignores it.
       "X-Estimate-Currency": estimateCurrency,
+      // The Rates tax the estimate was saved with, for /new's editor and
+      // streaming preview, which have no business row of their own.
+      ...taxHeaders(tax),
     },
   }));
 }

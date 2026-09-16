@@ -2,6 +2,7 @@ import "server-only";
 
 import type { Database } from "./database.types";
 import { estimateCurrencyOf } from "./currency-db";
+import type { EstimateTax } from "./estimate-tax";
 import { isGroupedPricingEnabled } from "./estimate-groups";
 import {
   buildCustomerPricingView,
@@ -41,7 +42,10 @@ type StructuredItemRow = Pick<
   | "display_order"
 >;
 
-export function toEstimatePricingRecord(estimate: EstimatePricingInput): EstimatePricingRecord {
+export function toEstimatePricingRecord(
+  estimate: EstimatePricingInput,
+  businessTax: EstimateTax | null
+): EstimatePricingRecord {
   return {
     id: estimate.id,
     businessId: estimate.business_id,
@@ -60,6 +64,7 @@ export function toEstimatePricingRecord(estimate: EstimatePricingInput): Estimat
     // predates the column or arrives unreadable. Every layer above this one
     // takes the currency as a required argument.
     currency: estimateCurrencyOf(estimate),
+    businessTax,
   };
 }
 
@@ -91,8 +96,11 @@ export async function loadStructuredPricingItems(
   return (data ?? []).map(toStructuredPricingItem);
 }
 
-export async function loadCustomerPricingView(estimate: EstimatePricingInput) {
-  const record = toEstimatePricingRecord(estimate);
+export async function loadCustomerPricingView(
+  estimate: EstimatePricingInput,
+  businessTax: EstimateTax | null
+) {
+  const record = toEstimatePricingRecord(estimate, businessTax);
   const featureEnabled = isGroupedPricingEnabled();
   let items: StructuredPricingItem[] = [];
   let loadError: string | null = null;

@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { EditableEstimateBody } from "./editable-estimate-body";
 import { EstimateMarkdown } from "./estimate-markdown";
 import type { CustomerPricingMode } from "@/lib/estimate-pricing-mode";
+import type { TaxAuthority } from "@/lib/estimate-tax";
 
 export function EstimatePricingEditor({
   estimateId,
@@ -18,6 +19,7 @@ export function EstimatePricingEditor({
   canEditMode,
   pricingError,
   currency,
+  taxAuthority,
 }: {
   estimateId: string;
   summary: string;
@@ -29,6 +31,8 @@ export function EstimatePricingEditor({
   structuredPricing: boolean;
   canEditMode: boolean;
   pricingError: boolean;
+  /** Rates for an undelivered estimate, the stored tax row once delivered. */
+  taxAuthority: TaxAuthority;
 }) {
   const router = useRouter();
   const [selectedMode, setSelectedMode] = useState<CustomerPricingMode>(initialMode);
@@ -111,6 +115,7 @@ export function EstimatePricingEditor({
           estimateId={estimateId}
           structuredPricing={structuredPricing}
           currency={currency}
+          taxAuthority={taxAuthority}
         />
       ) : (
         <EstimateMarkdown content={detailedSummary} />

@@ -4,6 +4,7 @@ import { formatEstimateForDisplay, parseSummary } from "../../lib/estimate-summa
 import { parsedToItems } from "../../lib/estimate-items";
 import { draftToItemRow } from "../../lib/estimate-item-migration";
 import { validFixtures } from "../fixtures/estimate-summaries";
+import { GST_5, RATES_GST_5, STORED_GST_5 } from "../fixtures/tax";
 import {
   buildCustomerPricingView,
   canEditCustomerPricingMode,
@@ -105,6 +106,7 @@ const DRAFT: EstimatePricingRecord = {
   reviewRequestedAt: null,
   summary: SUMMARY,
   currency: "cad",
+  businessTax: GST_5,
 };
 
 test("structured detailed pricing stays byte-equivalent to the current customer display", () => {
@@ -116,7 +118,7 @@ test("structured detailed pricing stays byte-equivalent to the current customer 
 
   expect(view.ok).toBe(true);
   expect(view.renderedMode).toBe("detailed");
-  expect(view.summary).toBe(formatEstimateForDisplay(SUMMARY, "cad"));
+  expect(view.summary).toBe(formatEstimateForDisplay(SUMMARY, "cad", RATES_GST_5));
   expect(view.detailedSubtotal).toBe(300);
   expect(view.tax).toBe(15);
   expect(view.total).toBe(315);
@@ -145,7 +147,7 @@ test("every convertible fixture keeps the same detailed customer view from struc
     });
 
     expect(view.ok, fixture.name).toBe(true);
-    expect(view.summary, fixture.name).toBe(formatEstimateForDisplay(fixture.summary, "cad"));
+    expect(view.summary, fixture.name).toBe(formatEstimateForDisplay(fixture.summary, "cad", RATES_GST_5));
   }
 });
 
@@ -197,7 +199,7 @@ test("a quantity row with one unit and a blank unit label keeps its detailed des
   });
 
   expect(view.ok).toBe(true);
-  expect(view.summary).toBe(formatEstimateForDisplay(summary, "cad"));
+  expect(view.summary).toBe(formatEstimateForDisplay(summary, "cad", RATES_GST_5));
   expect(view.summary).toContain("Service allowance (1 @ $40.00)");
   expect(view.summary.match(/Service allowance/g)).toHaveLength(1);
 });
@@ -267,7 +269,7 @@ test("a hidden priced row or subtotal mismatch fails closed to detailed markdown
   expect(view.ok).toBe(false);
   expect(view.error).toBe("STRUCTURED_SUBTOTAL_MISMATCH");
   expect(view.renderedMode).toBe("detailed");
-  expect(view.summary).toBe(formatEstimateForDisplay(SUMMARY, "cad"));
+  expect(view.summary).toBe(formatEstimateForDisplay(SUMMARY, "cad", RATES_GST_5));
   expect(view.summary).not.toContain("| Work package | Price |");
 });
 
@@ -284,7 +286,7 @@ test("markdown estimates always use the old renderer and ignore grouped mode", (
 
   expect(view.ok).toBe(true);
   expect(view.renderedMode).toBe("detailed");
-  expect(view.summary).toBe(formatEstimateForDisplay(SUMMARY, "cad"));
+  expect(view.summary).toBe(formatEstimateForDisplay(SUMMARY, "cad", RATES_GST_5));
 });
 
 test("sent markdown estimates remain on the old renderer", () => {
@@ -299,7 +301,8 @@ test("sent markdown estimates remain on the old renderer", () => {
 
   expect(view.ok).toBe(true);
   expect(view.renderedMode).toBe("detailed");
-  expect(view.summary).toBe(formatEstimateForDisplay(SUMMARY, "cad"));
+  // Delivered, so the stored tax row is the authority.
+  expect(view.summary).toBe(formatEstimateForDisplay(SUMMARY, "cad", STORED_GST_5));
   expect(canEditCustomerPricingMode(estimate, 0, true)).toBe(false);
 });
 
@@ -308,9 +311,9 @@ test("contractor, share, and PDF are wired to one server-built customer summary"
   const sharePage = readFileSync("app/share/[id]/page.tsx", "utf8");
   const pdf = readFileSync("lib/generate-pdf.ts", "utf8");
 
-  expect(contractorPage).toContain("loadCustomerPricingView(estimate)");
+  expect(contractorPage).toContain("loadCustomerPricingView(estimate, rates)");
   expect(contractorPage).toContain("summary={pricing.selected.summary}");
-  expect(sharePage).toContain("loadCustomerPricingView(estimate)");
+  expect(sharePage).toContain("loadCustomerPricingView(estimate, business ? businessTax(business) : null)");
   expect(sharePage).toContain("<EstimateMarkdown content={pricing.selected.summary}");
   expect(sharePage).toContain("summary={pricing.selected.summary}");
   expect(pdf).not.toContain("groupItemsForDisplay");

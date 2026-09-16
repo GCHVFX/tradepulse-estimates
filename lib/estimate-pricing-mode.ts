@@ -1,10 +1,17 @@
 import {
   computeTotals,
+  effectiveDepositPercent,
   formatEstimateForDisplay,
   formatEstimateForDisplayWithPricing,
   parseSummary,
   type LineItem,
 } from "./estimate-summary";
+import {
+  resolveEstimateTax,
+  taxAuthorityFor,
+  type EstimateTax,
+  type TaxAuthority,
+} from "./estimate-tax";
 import type { Currency } from "./currency";
 import {
   groupItemsForDisplay,
@@ -41,6 +48,12 @@ export interface EstimatePricingRecord {
   // The estimate's immutable snapshot. Part of the record, not an option, so
   // no pricing view can be built without one.
   currency: Currency;
+  // The owning business's Rates tax. Part of the record for the same reason:
+  // an undelivered estimate's tax comes from here, and a delivered one falls
+  // back to it only when its stored summary has no tax row. null when the
+  // business row could not be read, which a delivered estimate survives and
+  // an undelivered one does not.
+  businessTax: EstimateTax | null;
 }
 
 export type CustomerPricingError =
@@ -137,6 +150,7 @@ function matchSourceLineItems(
 
 function fallbackView(
   estimate: EstimatePricingRecord,
+  taxAuthority: TaxAuthority,
   error: CustomerPricingError | null,
   detailedSubtotal: number,
   tax: number,
@@ -148,7 +162,7 @@ function fallbackView(
     error,
     requestedMode: estimate.customerPricingMode,
     renderedMode: "detailed",
-    summary: formatEstimateForDisplay(estimate.summary, estimate.currency),
+    summary: formatEstimateForDisplay(estimate.summary, estimate.currency, taxAuthority),
     detailedSubtotal,
     groupedSubtotal: null,
     tax,
@@ -172,12 +186,22 @@ export function buildCustomerPricingView({
   featureEnabled: boolean;
 }): CustomerPricingView {
   const parsed = parseSummary(estimate.summary);
-  const markdownTotals = computeTotals(parsed.lineItems, parsed.taxRate);
-  const markdownDeposit = Math.round(markdownTotals.total * (parsed.depositPercent / 100));
+  // Undelivered: the business's Rates tax. Delivered: the tax row the
+  // customer was given. One rule for both, from lib/estimate-tax.ts.
+  const taxAuthority = taxAuthorityFor(
+    { sent_at: estimate.sentAt, copied_at: estimate.copiedAt, status: estimate.status },
+    estimate.businessTax
+  );
+  const tax = resolveEstimateTax(parsed.storedTax, taxAuthority);
+  const markdownTotals = computeTotals(parsed.lineItems, tax.rate);
+  const markdownDeposit = Math.round(
+    markdownTotals.total * (effectiveDepositPercent(parsed, parsed.lineItems, tax.rate) / 100)
+  );
 
   if (estimate.pricingSource !== "structured") {
     return fallbackView(
       estimate,
+      taxAuthority,
       null,
       markdownTotals.subtotal,
       markdownTotals.tax,
@@ -189,6 +213,7 @@ export function buildCustomerPricingView({
   if (!isCustomerPricingMode(estimate.customerPricingMode)) {
     return fallbackView(
       estimate,
+      taxAuthority,
       "INVALID_PRICING_MODE",
       markdownTotals.subtotal,
       markdownTotals.tax,
@@ -200,6 +225,7 @@ export function buildCustomerPricingView({
   if (items.length === 0) {
     return fallbackView(
       estimate,
+      taxAuthority,
       "STRUCTURED_ROWS_MISSING",
       markdownTotals.subtotal,
       markdownTotals.tax,
@@ -213,6 +239,7 @@ export function buildCustomerPricingView({
   if (visibleItems.length === 0) {
     return fallbackView(
       estimate,
+      taxAuthority,
       "CUSTOMER_VISIBLE_ROWS_MISSING",
       markdownTotals.subtotal,
       markdownTotals.tax,
@@ -229,6 +256,7 @@ export function buildCustomerPricingView({
   ) {
     return fallbackView(
       estimate,
+      taxAuthority,
       "STRUCTURED_SUBTOTAL_MISMATCH",
       markdownTotals.subtotal,
       markdownTotals.tax,
@@ -241,11 +269,14 @@ export function buildCustomerPricingView({
   const detailedLineItems = visibleItems.map((item, index) =>
     toLineItem(item, sourceLineItems[index])
   );
-  const detailedTotals = computeTotals(detailedLineItems, parsed.taxRate);
-  const deposit = Math.round(detailedTotals.total * (parsed.depositPercent / 100));
+  const detailedTotals = computeTotals(detailedLineItems, tax.rate);
+  const deposit = Math.round(
+    detailedTotals.total * (effectiveDepositPercent(parsed, detailedLineItems, tax.rate) / 100)
+  );
   if (!moneyMatches(detailedTotals.subtotal, structuredSubtotal)) {
     return fallbackView(
       estimate,
+      taxAuthority,
       "STRUCTURED_SUBTOTAL_MISMATCH",
       markdownTotals.subtotal,
       markdownTotals.tax,
@@ -257,6 +288,7 @@ export function buildCustomerPricingView({
   if (estimate.customerPricingMode === "grouped" && !featureEnabled) {
     return fallbackView(
       estimate,
+      taxAuthority,
       "GROUPED_PRICING_DISABLED",
       detailedTotals.subtotal,
       detailedTotals.tax,
@@ -275,6 +307,7 @@ export function buildCustomerPricingView({
   if (!moneyMatches(groupedSubtotal, detailedTotals.subtotal)) {
     return fallbackView(
       estimate,
+      taxAuthority,
       "STRUCTURED_SUBTOTAL_MISMATCH",
       markdownTotals.subtotal,
       markdownTotals.tax,
@@ -288,6 +321,7 @@ export function buildCustomerPricingView({
     estimate.summary,
     detailedLineItems,
     estimate.currency,
+    taxAuthority,
     renderedMode === "grouped"
       ? renderGroupedLineItemsBlock(groupable, estimate.currency)
       : undefined

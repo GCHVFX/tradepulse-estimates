@@ -3,6 +3,8 @@ import { RowLockup } from "@/app/components/wordmark";
 import { DownloadPdfButton } from "@/app/components/download-pdf-button";
 import { CompanyEstimateHeader } from "@/app/components/company-estimate-header";
 import { loadCustomerPricingView } from "@/lib/estimate-pricing-server";
+import { businessTax } from "@/lib/estimate-tax";
+import { isDelivered } from "@/lib/estimate-delivery";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { allAmountsInLabel } from "@/lib/currency";
 import { readEstimateCurrency } from "@/lib/currency-db";
@@ -34,22 +36,34 @@ export default async function ShareEstimatePage({
     );
   }
 
-  const businessPromise = estimate.business_id
-    ? supabaseAdmin
-        .from("tpe_businesses")
-        .select("name, logo_url, show_company_name_below_logo")
-        .eq("id", estimate.business_id)
-        .maybeSingle()
-    : Promise.resolve({ data: null });
-
-  const [pricing, { data: business }, { data: photoRecords }] = await Promise.all([
-    loadCustomerPricingView(estimate),
-    businessPromise,
+  // The estimate is loaded first, and delivery decides what the business row
+  // is needed for. A delivered estimate is priced from its own stored tax row,
+  // so a missing or failed business read must never stop the customer's
+  // estimate from rendering; branding just falls back to the same empty values
+  // it always did. An undelivered estimate is priced from Rates and cannot
+  // render without it: loadCustomerPricingView raises rather than pricing
+  // against a guessed tax (lib/estimate-tax.ts).
+  const [{ data: business, error: businessError }, { data: photoRecords }] = await Promise.all([
+    supabaseAdmin
+      .from("tpe_businesses")
+      .select("name, logo_url, show_company_name_below_logo, tax_label, tax_rate")
+      .eq("id", estimate.business_id)
+      .maybeSingle(),
     supabaseAdmin
       .from("tpe_estimate_photos")
       .select("storage_path")
       .eq("estimate_id", id),
   ]);
+
+  if (!business) {
+    console.error("[share] business row unavailable", {
+      estimateId: id,
+      delivered: isDelivered(estimate),
+      error: businessError?.message ?? "not found",
+    });
+  }
+
+  const pricing = await loadCustomerPricingView(estimate, business ? businessTax(business) : null);
 
   const estimateCurrency = await readEstimateCurrency(supabaseAdmin, id);
   const businessName = business?.name ?? "";

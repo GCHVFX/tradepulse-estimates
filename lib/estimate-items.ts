@@ -26,6 +26,7 @@ import {
   type ParsedSummary,
 } from "./estimate-summary";
 import type { Currency } from "./currency";
+import type { EstimateTax } from "./estimate-tax";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -396,13 +397,17 @@ export function findMalformedRows(items: EstimateItemDraft[]): MalformedRow[] {
 // serializer requires a real one, so the caller passes the estimate snapshot.
 export function validateConversionTotals(
   parsed: ParsedSummary,
-  currency: Currency
+  currency: Currency,
+  // The tax that applies to this estimate, resolved by the caller with
+  // resolveEstimateTax() (lib/estimate-tax.ts). Never recovered from the
+  // summary text in here.
+  tax: EstimateTax
 ): ConversionValidation {
   const items = parsedToItems(parsed);
 
-  const originalTotals = computeTotals(parsed.lineItems, parsed.taxRate);
+  const originalTotals = computeTotals(parsed.lineItems, tax.rate);
   const convertedLineItems = items.map(draftToLineItem);
-  const convertedTotals = computeTotals(convertedLineItems, parsed.taxRate);
+  const convertedTotals = computeTotals(convertedLineItems, tax.rate);
 
   const convertedSubtotal = calculateItemsSubtotal(items);
 
@@ -511,9 +516,10 @@ export function validateConversionTotals(
  */
 export function assertConversionSafe(
   parsed: ParsedSummary,
-  currency: Currency
+  currency: Currency,
+  tax: EstimateTax
 ): EstimateItemDraft[] {
-  const validation = validateConversionTotals(parsed, currency);
+  const validation = validateConversionTotals(parsed, currency, tax);
   if (!validation.ok) throw new EstimateConversionError(validation);
   return parsedToItems(parsed);
 }

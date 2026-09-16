@@ -12,7 +12,7 @@ test("an edited estimate copy keeps its changed description and price", () => {
   parsed.lineItems[0].cost = "$1,750.00";
 
   const saved = parseSummary(
-    serializeSummary(parsed.preamble, parsed.scopeItems, parsed.lineItems, parsed.depositPercent, parsed.beforePricingSections, parsed.afterPricingSections, parsed.taxLabel, parsed.taxRate, "cad")
+    serializeSummary(parsed.preamble, parsed.scopeItems, parsed.lineItems, parsed.depositPercent, parsed.beforePricingSections, parsed.afterPricingSections, "GST", 5, "cad")
   );
   expect(saved.lineItems[0].label).toBe("200A panel and 40-space breaker package");
   expect(saved.lineItems[0].cost).toContain("1,750");

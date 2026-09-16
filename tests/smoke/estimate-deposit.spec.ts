@@ -12,6 +12,7 @@ import {
   type DepositRule,
   type LineItem,
 } from "../../lib/estimate-summary";
+import { GST_5 } from "../fixtures/tax";
 
 // Deposit state and amount must come from the business's Rates settings
 // (deposit_percent / deposit_threshold), never from the model's own writing.
@@ -93,7 +94,7 @@ function rawGeneratedSummary(): string {
 }
 
 test("consistency: Pricing Summary and Payment Terms agree on the deposit decision and amount after normalization", () => {
-  const normalized = applyDeterministicDeposit(rawGeneratedSummary(), "cad", RULE_500_25);
+  const normalized = applyDeterministicDeposit(rawGeneratedSummary(), "cad", RULE_500_25, GST_5);
 
   // Pricing Summary now states the deterministic deposit, to the cent.
   // Bare $, not CA$: Deposit is an intermediate value, not the final Total.
@@ -120,7 +121,7 @@ test("consistency: Pricing Summary and Payment Terms agree on the deposit decisi
 });
 
 test("consistency: no deposit required is stated the same way in both sections when the rule doesn't apply", () => {
-  const normalized = applyDeterministicDeposit(rawGeneratedSummary(), "cad", null);
+  const normalized = applyDeterministicDeposit(rawGeneratedSummary(), "cad", null, GST_5);
 
   expect(normalized).toContain("| No deposit required | |");
   expect(normalized).not.toContain("| Deposit required");
@@ -148,7 +149,7 @@ function simulateLineItemEdit(persistedSummary: string, currency: "cad" | "usd",
   const nextLine: LineItem[] = [
     { id: "edited", label: "Materials and labour", cost: `$${flatCost.toFixed(2)}` },
   ];
-  const nextTotal = computeTotals(nextLine, parsed.taxRate).total;
+  const nextTotal = computeTotals(nextLine, GST_5.rate).total;
   const nextDepositPercent =
     parsed.depositRule !== undefined
       ? resolveDepositPercent(nextTotal, parsed.depositRule)
@@ -166,15 +167,15 @@ function simulateLineItemEdit(persistedSummary: string, currency: "cad" | "usd",
     nextDepositPercent,
     parsed.beforePricingSections,
     reconciledAfter,
-    parsed.taxLabel,
-    parsed.taxRate,
+    GST_5.label,
+    GST_5.rate,
     currency,
     parsed.depositRule
   );
 }
 
 test("edit above threshold: total changes from $2,990 to $2,000, deposit becomes $500.00 everywhere", () => {
-  const generated = applyDeterministicDeposit(rawGeneratedSummary(), "cad", RULE_500_25);
+  const generated = applyDeterministicDeposit(rawGeneratedSummary(), "cad", RULE_500_25, GST_5);
   // Subtotal $1,905 + 5% tax ($95, rounded) = total $2,000 exactly.
   const edited = simulateLineItemEdit(generated, "cad", 1905);
 
@@ -190,7 +191,7 @@ test("edit above threshold: total changes from $2,990 to $2,000, deposit becomes
 });
 
 test("edit below threshold: total drops to $450, no deposit required and no stale amount remains anywhere", () => {
-  const generated = applyDeterministicDeposit(rawGeneratedSummary(), "cad", RULE_500_25);
+  const generated = applyDeterministicDeposit(rawGeneratedSummary(), "cad", RULE_500_25, GST_5);
   // Subtotal $429 + 5% tax ($21, rounded) = total $450 exactly.
   const edited = simulateLineItemEdit(generated, "cad", 429);
 
@@ -207,7 +208,7 @@ test("edit below threshold: total drops to $450, no deposit required and no stal
 });
 
 test("cross threshold again: total goes back above $500 after a dip below it, the deposit becomes applicable again", () => {
-  const generated = applyDeterministicDeposit(rawGeneratedSummary(), "cad", RULE_500_25);
+  const generated = applyDeterministicDeposit(rawGeneratedSummary(), "cad", RULE_500_25, GST_5);
   const belowThreshold = simulateLineItemEdit(generated, "cad", 429); // total $450: no deposit
   const aboveAgain = simulateLineItemEdit(belowThreshold, "cad", 1905); // total $2,000: deposit again
 
@@ -225,7 +226,7 @@ test("business Rates changing later does not retroactively move an already-gener
   // rule used is the one carried on the estimate, not a live business
   // lookup. (Nothing in this test file re-fetches business settings; this
   // documents the invariant the marker exists to guarantee.)
-  const generated = applyDeterministicDeposit(rawGeneratedSummary(), "cad", RULE_500_25);
+  const generated = applyDeterministicDeposit(rawGeneratedSummary(), "cad", RULE_500_25, GST_5);
   const parsed = parseSummary(generated);
   expect(parsed.depositRule).toEqual(RULE_500_25);
   expect(parsed.depositRule).not.toEqual({ percent: 50, thresholdDollars: 1000 });
@@ -240,7 +241,7 @@ test("normalization failure: a thrown error is never swallowed into a fallback s
   // text as if it were authoritative.
   function normalizeOrThrow(rawSummary: string, currency: "cad" | "usd", rule: DepositRule | null): string {
     try {
-      return applyDeterministicDeposit(rawSummary, currency, rule);
+      return applyDeterministicDeposit(rawSummary, currency, rule, GST_5);
     } catch (err) {
       throw new Error(
         `Deterministic deposit normalization failed, refusing to save unverified deposit terms: ${
@@ -275,6 +276,6 @@ test("the generation route never falls back to the model's raw text when deposit
   // The old unsafe pattern this replaced: initializing the saved value to
   // the raw model text and only overwriting it on success.
   expect(routeSource).not.toContain("let normalizedSummary = fullText;");
-  expect(routeSource).toContain("applyDeterministicDeposit(fullText, estimateCurrency, depositRule)");
+  expect(routeSource).toContain("applyDeterministicDeposit(fullText, estimateCurrency, depositRule, tax)");
   expect(routeSource).toContain("throw new Error(");
 });

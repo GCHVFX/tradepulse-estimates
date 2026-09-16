@@ -7,6 +7,7 @@ import { EditableEstimateBody } from "@/app/components/editable-estimate-body";
 import { CompanyEstimateHeader } from "@/app/components/company-estimate-header";
 import { EstimateMarkdown } from "@/app/components/estimate-markdown";
 import { formatEstimateForDisplay } from "@/lib/estimate-summary";
+import { parseTaxHeaders, TAX_LABEL_HEADER, TAX_RATE_HEADER, type EstimateTax } from "@/lib/estimate-tax";
 import { DEFAULT_CURRENCY, parseCurrency, type Currency } from "@/lib/currency";
 import { STARTER_MONTHLY_PHOTO_LIMIT } from "@/lib/rate-limit";
 import { formatPhoneInput } from "@/lib/format-phone";
@@ -146,6 +147,9 @@ interface EstimateViewProps {
   // Snapshot currency of the estimate being shown, from the generate
   // response header. Required, so this screen cannot fall back to CAD.
   estimateCurrency: Currency;
+  // The business's Rates tax the estimate was saved with, from the generate
+  // response headers. null only before the first response arrives.
+  estimateTax: EstimateTax | null;
   needsProfileSetup: boolean;
   logoUrl: string | null;
   businessName: string;
@@ -202,6 +206,7 @@ function EstimateView({
   saved,
   savedEstimateId,
   estimateCurrency,
+  estimateTax,
   needsProfileSetup,
   logoUrl,
   businessName,
@@ -306,12 +311,15 @@ function EstimateView({
                 businessEmail={businessEmail || undefined}
                 dateStr={new Date().toISOString()}
               />
-              {savedEstimateId ? (
+              {/* A freshly generated estimate is undelivered, so the
+                  business's Rates tax is the authority on this screen. */}
+              {!estimateTax ? null : savedEstimateId ? (
                 <EditableEstimateBody
                   key={savedEstimateId ?? "default"}
                   summary={estimate}
                   estimateId={savedEstimateId}
                   currency={estimateCurrency}
+                  taxAuthority={{ kind: "rates", tax: estimateTax }}
                 />
               ) : (
                 // Before the estimate is saved (still streaming, no ID yet),
@@ -322,7 +330,7 @@ function EstimateView({
                 // formatEstimateForDisplay strips the H1 line itself and
                 // never throws on a mid-stream, partially-written string.
                 <EstimateMarkdown
-                  content={formatEstimateForDisplay(estimate, estimateCurrency)}
+                  content={formatEstimateForDisplay(estimate, estimateCurrency, { kind: "rates", tax: estimateTax })}
                 />
               )}
               {saved && !generating && !error && (
@@ -930,6 +938,7 @@ function NewPageInner() {
   // Set from the generate response header, which carries the exact value
   // snapshotted onto the row. CAD until then, when no estimate exists yet.
   const [estimateCurrency, setEstimateCurrency] = useState<Currency>(DEFAULT_CURRENCY);
+  const [estimateTax, setEstimateTax] = useState<EstimateTax | null>(null);
   const [showSendSheet, setShowSendSheet] = useState(false);
   const [customerDetailsSaved, setCustomerDetailsSaved] = useState(false);
   const { logoUrl, businessName, showCompanyNameBelowLogo, businessEmail, preparedBy, isPro, aiPhotoEstimatesRemaining, isLoading: profileLoading } = useBusinessProfile();
@@ -1080,6 +1089,14 @@ function NewPageInner() {
       // or malformed header reads as CAD rather than rendering the wrong one.
       setEstimateCurrency(parseCurrency(res.headers.get("X-Estimate-Currency")) ?? DEFAULT_CURRENCY);
 
+      // No fallback tax: the server sends the business's Rates tax with every
+      // estimate, and a price must not render against a guessed one.
+      const responseTax = parseTaxHeaders(res.headers.get(TAX_LABEL_HEADER), res.headers.get(TAX_RATE_HEADER));
+      if (!responseTax) {
+        throw new Error("Could not read your tax settings. Please try again.");
+      }
+      setEstimateTax(responseTax);
+
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -1189,6 +1206,7 @@ function NewPageInner() {
         saved={saved}
         savedEstimateId={savedEstimateId}
         estimateCurrency={estimateCurrency}
+        estimateTax={estimateTax}
         needsProfileSetup={needsProfileSetup}
         logoUrl={logoUrl}
         businessName={businessName}

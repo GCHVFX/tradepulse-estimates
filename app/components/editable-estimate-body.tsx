@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useMemo, useEffect } from 'react';
+import Link from 'next/link';
 import { formatCurrency, type Currency } from '@/lib/currency';
 import {
   newId,
@@ -18,6 +19,7 @@ import {
   computeTotals,
   reconcilePaymentTermsDeposit,
 } from '@/lib/estimate-summary';
+import { resolveEstimateTax, type TaxAuthority } from '@/lib/estimate-tax';
 import type {
   ScopeItem,
   LineItem,
@@ -94,6 +96,7 @@ export function EditableEstimateBody({
   lineItemsReadOnly = false,
   structuredPricing = false,
   currency,
+  taxAuthority,
 }: {
   summary: string;
   estimateId: string;
@@ -107,6 +110,13 @@ export function EditableEstimateBody({
    * pass it, so every USD estimate rendered CA$ on the screen that creates it.
    */
   currency: Currency;
+  /**
+   * Which tax applies. Undelivered estimates use the business's Rates
+   * settings; delivered ones keep the tax row the customer was given
+   * (lib/estimate-tax.ts). Required, so the editor cannot fall back to a
+   * hard-coded rate or to whatever the stored summary text says.
+   */
+  taxAuthority: TaxAuthority;
 }) {
   const parsed = useMemo(() => parseSummary(summary), [summary]);
   // The estimate's own deposit rule (percent + threshold), preserved as-is
@@ -134,8 +144,9 @@ export function EditableEstimateBody({
   const [afterSections, setAfterSections] = useState<Array<{ heading: string; content: string }>>(
     () => parsed.afterPricingSections,
   );
-  const [taxLabel, setTaxLabel] = useState(() => parsed.taxLabel);
-  const [taxRate, setTaxRate] = useState(() => parsed.taxRate);
+  // Read-only during the tax hotfix. Phase 1 makes tax editable per estimate
+  // through a snapshot; until then the editor only shows the authority.
+  const { label: taxLabel, rate: taxRate } = resolveEstimateTax(parsed.storedTax, taxAuthority);
   const [undo, setUndo] = useState<UndoEntry | null>(null);
   const [toastVisible, setToastVisible] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -201,21 +212,20 @@ export function EditableEstimateBody({
     nextBefore: BeforeSection[],
     nextAfter: Array<{ heading: string; content: string }>,
     nextPreamble: string,
-    nextTaxLabel?: string,
-    nextTaxRate?: number,
   ) {
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(async () => {
       timerRef.current = null;
       setToastVisible(false);
       setUndo(null);
-      // Resolved from nextLine/nextTaxRate -- the values actually being
-      // saved -- not the outer depositPercent, which reflects whatever
-      // lineItems/taxRate were current when this render happened. Using the
-      // outer value here would persist a one-edit-stale deposit for exactly
-      // the edit that changes the total, since setLineItems/setTaxRate have
-      // not re-rendered yet at the point this timer is scheduled.
-      const nextTotal = computeTotals(nextLine, nextTaxRate ?? taxRate).total;
+      // Resolved from nextLine -- the line items actually being saved -- not
+      // the outer depositPercent, which reflects whatever lineItems were
+      // current when this render happened. Using the outer value here would
+      // persist a one-edit-stale deposit for exactly the edit that changes
+      // the total, since setLineItems has not re-rendered yet at the point
+      // this timer is scheduled. The tax rate is not component state any
+      // more: it comes from the tax authority and cannot change mid-edit.
+      const nextTotal = computeTotals(nextLine, taxRate).total;
       const nextDepositPercent =
         depositRule !== undefined ? resolveDepositPercent(nextTotal, depositRule) : depositPercent;
       // Payment Terms must never fall behind the Pricing Summary it sits
@@ -240,8 +250,8 @@ export function EditableEstimateBody({
         nextDepositPercent,
         nextBefore,
         reconciledAfter,
-        nextTaxLabel ?? taxLabel,
-        nextTaxRate ?? taxRate,
+        taxLabel,
+        taxRate,
         currency,
         depositRule,
       );
@@ -404,25 +414,6 @@ export function EditableEstimateBody({
     startCommitTimer(scopeItems, lineItems, beforeSections, afterSections, rebuilt);
   }
 
-  function normalizeTaxLabel(raw: string): string {
-    return raw.replace(/[a-zA-Z]+/g, w => w.toUpperCase()).trim() || 'GST';
-  }
-
-  function updateTaxLabel(value: string) {
-    setTaxLabel(value);
-    startCommitTimer(scopeItems, lineItems, beforeSections, afterSections, preambleText, value, undefined);
-  }
-
-  function commitTaxLabel() {
-    const normalized = normalizeTaxLabel(taxLabel);
-    setTaxLabel(normalized);
-    startCommitTimer(scopeItems, lineItems, beforeSections, afterSections, preambleText, normalized, undefined);
-  }
-
-  function updateTaxRate(value: number) {
-    setTaxRate(value);
-    startCommitTimer(scopeItems, lineItems, beforeSections, afterSections, preambleText, undefined, value);
-  }
 
   function handleUndo() {
     if (!undo) return;
@@ -833,24 +824,14 @@ export function EditableEstimateBody({
             </tr>
             <tr>
               <td className="px-3 py-2.5 border-t border-zinc-200 text-zinc-700">
-                <span className="inline-flex items-baseline gap-0">
-                  <span>Tax&nbsp;(</span>
-                  <input
-                    type="text"
-                    value={taxLabel}
-                    onChange={e => updateTaxLabel(e.target.value)}
-                    onBlur={commitTaxLabel}
-                    className="w-20 bg-transparent border border-transparent rounded px-1 py-0.5 text-sm text-zinc-700 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
-                    aria-label="Tax label"
-                  />
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={taxRate ? String(parseFloat(taxRate.toFixed(2))) : ''}
-                    onChange={e => updateTaxRate(parseFloat(e.target.value) || 0)}
-                    className="w-10 bg-transparent border border-transparent rounded px-0.5 py-0.5 text-sm text-zinc-700 text-right focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
-                    aria-label="Tax rate"
-                  /><span>%)</span>
+                {/* Display only during the tax hotfix: tax comes from the
+                    business's Rates settings, and Phase 1 owns making it
+                    editable per estimate. */}
+                <span className="inline-flex flex-wrap items-baseline gap-x-2">
+                  <span>Tax ({taxLabel} {String(parseFloat(taxRate.toFixed(2)))}%)</span>
+                  <Link href="/rates" className="text-xs font-medium text-amber-600 hover:text-amber-500">
+                    Set in Rates
+                  </Link>
                 </span>
               </td>
               <td className="px-3 py-2.5 border-t border-zinc-200 text-right text-zinc-700">{formatDollars(tax, currency, { bare: true })}</td>

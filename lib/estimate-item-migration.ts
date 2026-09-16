@@ -10,7 +10,8 @@
 // way, and never while a customer could already have seen the estimate.
 
 import { supabaseAdmin } from "./supabase-server";
-import { parseSummary, computeTotals } from "./estimate-summary";
+import { parseSummary, computeSubtotal, computeTotals } from "./estimate-summary";
+import { businessTax, resolveEstimateTax, taxAuthorityFor } from "./estimate-tax";
 import { assignGroupLabel } from "./estimate-groups";
 import { estimateCurrencyOf } from "./currency-db";
 import {
@@ -227,7 +228,8 @@ export function buildStructuredItemsSyncPlan(summary: string, estimateId: string
     ...draftToItemRow(draft, { assignGroups: true }),
   }));
 
-  const markdownSubtotal = computeTotals(parsed.lineItems, parsed.taxRate).subtotal;
+  // Subtotal only: it does not depend on tax, so no tax authority is needed.
+  const markdownSubtotal = computeSubtotal(parsed.lineItems);
   const structuredSubtotal = calculateItemsSubtotal(drafts);
 
   return {
@@ -274,7 +276,7 @@ export async function convertEstimateToStructuredItems(
   //    never accepted from the caller.
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("id")
+    .select("id, tax_label, tax_rate")
     .eq("owner_user_id", userId)
     .maybeSingle();
 
@@ -284,7 +286,7 @@ export async function convertEstimateToStructuredItems(
   //    not found rather than leaking its existence.
   const { data: estimate } = await supabaseAdmin
     .from("tpe_estimates")
-    .select("id, business_id, status, sent_at, summary, pricing_source, currency")
+    .select("id, business_id, status, sent_at, copied_at, summary, pricing_source, currency")
     .eq("id", estimateId)
     .eq("business_id", business.id)
     .maybeSingle();
@@ -328,13 +330,15 @@ export async function convertEstimateToStructuredItems(
 
   // 5. Parse, convert, validate. The same functions the invariant suite covers.
   const parsed = parseSummary(summary);
+  const tax = resolveEstimateTax(parsed.storedTax, taxAuthorityFor(estimate, businessTax(business)));
   const validation: ConversionValidation = validateConversionTotals(
     parsed,
-    estimateCurrencyOf(estimate)
+    estimateCurrencyOf(estimate),
+    tax
   );
   const items = parsedToItems(parsed);
 
-  const totals = buildTotals(validation, parsed.taxRate, items);
+  const totals = buildTotals(validation, tax.rate, items);
 
   if (validation.unsupportedStructures.some((s) => s.includes("no priced line items"))) {
     return emptyResult(estimateId, dryRun, "NO_PRICED_ITEMS", previous, validation.warnings);

@@ -12,6 +12,7 @@ import {
   KNOWN_GROUP_LABELS,
 } from "../../lib/estimate-groups";
 import { validFixtures, negativeFixtures } from "../fixtures/estimate-summaries";
+import { GST_5, STORED_GST_5, fixtureTax } from "../fixtures/tax";
 
 /**
  * First visible grouped-pricing slice: structured generation for NEW estimates,
@@ -160,7 +161,7 @@ test("grouped totals equal detailed totals exactly, for every valid fixture", ()
       total: drafts[i].total,
     }));
 
-    const detailed = computeTotals(parsed.lineItems, parsed.taxRate).subtotal;
+    const detailed = computeTotals(parsed.lineItems, fixtureTax(parsed).rate).subtotal;
     const grouped = groupedSubtotal(withGroups);
 
     expect(grouped, `${fixture.name}: grouped subtotal must equal detailed`).toBeCloseTo(
@@ -214,8 +215,8 @@ test("the detailed renderer is untouched by this slice", () => {
   // formatEstimateForDisplay is what the share page and PDF render. Structured
   // generation preserves the markdown summary, so this output cannot move.
   for (const fixture of validFixtures) {
-    const before = formatEstimateForDisplay(fixture.summary, "cad");
-    const after = formatEstimateForDisplay(fixture.summary, "cad");
+    const before = formatEstimateForDisplay(fixture.summary, "cad", STORED_GST_5);
+    const after = formatEstimateForDisplay(fixture.summary, "cad", STORED_GST_5);
     expect(after, `${fixture.name}`).toBe(before);
     expect(before).toContain("## Line Items");
   }
@@ -273,7 +274,7 @@ test("unsupported estimates are refused, so they stay markdown-authoritative", (
     if (fixture.expectBlocking === false) continue;
 
     const parsed = parseSummary(fixture.summary);
-    const validation = validateConversionTotals(parsed, "cad");
+    const validation = validateConversionTotals(parsed, "cad", fixtureTax(parsed));
     const multi = detectsMultiOptionStructure(fixture.summary);
 
     const wouldConvert = validation.ok && !multi;
@@ -286,7 +287,7 @@ test("a negative-amount estimate does convert, and its grouped total still match
   expect(fixture, "the corpus has a non-blocking fixture").toBeTruthy();
 
   const parsed = parseSummary(fixture!.summary);
-  const validation = validateConversionTotals(parsed, "cad");
+  const validation = validateConversionTotals(parsed, "cad", fixtureTax(parsed));
   expect(validation.ok, "non-blocking, so conversion is allowed").toBe(true);
 
   const drafts = parsedToItems(parsed).map((d) => ({
@@ -294,7 +295,7 @@ test("a negative-amount estimate does convert, and its grouped total still match
     groupLabel: assignGroupLabel(d.source.description),
   }));
   expect(groupedSubtotal(drafts)).toBeCloseTo(
-    computeTotals(parsed.lineItems, parsed.taxRate).subtotal,
+    computeTotals(parsed.lineItems, fixtureTax(parsed).rate).subtotal,
     6
   );
 });
@@ -313,12 +314,12 @@ test("a multi-option estimate is refused even at generation time", () => {
   ].join("\n");
 
   expect(detectsMultiOptionStructure(multi)).toBe(true);
-  expect(validateConversionTotals(parseSummary(multi), "cad").ok).toBe(false);
+  expect(validateConversionTotals(parseSummary(multi), "cad", GST_5).ok).toBe(false);
 });
 
 test("a valid new estimate would convert, with totals preserved", () => {
   const parsed = parseSummary(BATHROOM);
-  const validation = validateConversionTotals(parsed, "cad");
+  const validation = validateConversionTotals(parsed, "cad", fixtureTax(parsed));
 
   expect(detectsMultiOptionStructure(BATHROOM)).toBe(false);
   expect(validation.ok, validation.abortReasons.join("; ")).toBe(true);

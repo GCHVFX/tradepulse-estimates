@@ -2,6 +2,7 @@
 // module takes an explicit currency, so the module has no way to fall back to
 // CAD. That is enforced by the compiler, not by convention.
 import { formatCurrency, type Currency } from './currency';
+import { normalizeTaxLabel, resolveEstimateTax, type EstimateTax, type TaxAuthority } from './estimate-tax';
 
 // Shared parse/serialize logic for estimate summary markdown.
 // Used by the in-app editable estimate body and by display surfaces
@@ -50,13 +51,12 @@ export interface ParsedSummary {
   scopeItems: ScopeItem[];
   lineItems: LineItem[];
   /**
-   * The percent actually applied right now. For an estimate that carries a
-   * deposit-rule marker (see DepositRule below), this is always freshly
-   * resolved from the current total, not read from the visible "Deposit
-   * required (X%)" wording -- that wording is cosmetic output only. For an
-   * estimate predating the deposit-rule marker (depositRule undefined
-   * below), this is the legacy value recovered from that same wording, kept
-   * exactly as before so an old estimate's rendering does not change.
+   * The percent recovered from the visible "Deposit required (X%)" wording.
+   * Authoritative only for an estimate predating the deposit-rule marker
+   * (depositRule undefined below). An estimate that carries a marker resolves
+   * its percent against its current total with effectiveDepositPercent(),
+   * because that total depends on which tax applies (lib/estimate-tax.ts),
+   * which cannot be decided from the text at parse time.
    */
   depositPercent: number;
   /**
@@ -68,8 +68,12 @@ export interface ParsedSummary {
    * of something resolved from this field.
    */
   depositRule: DepositRule | null | undefined;
-  taxLabel: string;
-  taxRate: number;
+  /**
+   * The tax row written into the stored Pricing Summary, or null when the
+   * summary has none. Stored text, not an authority: the tax that actually
+   * applies comes from resolveEstimateTax() in lib/estimate-tax.ts.
+   */
+  storedTax: EstimateTax | null;
   beforePricingSections: BeforeSection[];
   afterPricingSections: AfterSection[];
 }
@@ -154,12 +158,18 @@ export function lineItemDisplayLabel(item: LineItem, currency: Currency): string
   return `${item.label} (${detail})`;
 }
 
-export function computeTotals(lineItems: LineItem[], taxRate = 5): {
+export function computeSubtotal(lineItems: LineItem[]): number {
+  return lineItems.reduce((sum, i) => sum + lineItemCost(i), 0);
+}
+
+// taxRate is required. It used to default to 5: a second, hidden tax default
+// that could silently disagree with the business's Rates settings.
+export function computeTotals(lineItems: LineItem[], taxRate: number): {
   subtotal: number;
   tax: number;
   total: number;
 } {
-  const subtotal = lineItems.reduce((sum, i) => sum + lineItemCost(i), 0);
+  const subtotal = computeSubtotal(lineItems);
   const tax = Math.round(subtotal * (taxRate / 100));
   return { subtotal, tax, total: subtotal + tax };
 }
@@ -198,9 +208,9 @@ export function parseSummary(rawSummary: string): ParsedSummary {
   let lineItems: LineItem[] = [];
   let depositPercent = 0;
   let depositRule: DepositRule | null | undefined = undefined;
-  let sawDepositRuleMarker = false;
-  let taxLabel = 'GST';
-  let taxRate = 5;
+  // No default. A summary without a tax row has no stored tax, and the
+  // caller's tax authority decides what applies (lib/estimate-tax.ts).
+  let storedTax: EstimateTax | null = null;
   const beforePricingSections: BeforeSection[] = [];
   const afterPricingSections: AfterSection[] = [];
   let seenPricing = false;
@@ -265,25 +275,19 @@ export function parseSummary(rawSummary: string): ParsedSummary {
         if (dm) depositPercent = parseInt(dm[1]);
         const tm = line.match(/Tax\s*\(([^)]*?)\s+(\d+(?:\.\d+)?)%\)/i);
         if (tm) {
-          taxLabel = tm[1].replace(/[a-zA-Z]+/g, w => w.toUpperCase()).trim();
-          taxRate = parseFloat(tm[2]);
+          storedTax = { label: normalizeTaxLabel(tm[1]), rate: parseFloat(tm[2]) };
         }
         const ruleMatch = parseDepositRuleMarker(line);
         if (ruleMatch !== undefined) {
-          sawDepositRuleMarker = true;
           depositRule = ruleMatch;
         }
       }
       // An estimate carrying a deposit-rule marker never trusts the visible
       // "Deposit required (X%)" / "No deposit required" wording above for
-      // the decision or the percentage -- that wording is regenerated from
-      // this same resolution every time the estimate is displayed or saved,
-      // so it can never be stale, whether or not the total has changed since
-      // the marker was written (e.g. a line-item edit after generation).
-      if (sawDepositRuleMarker) {
-        const { total } = computeTotals(lineItems, taxRate);
-        depositPercent = resolveDepositPercent(total, depositRule);
-      }
+      // the decision or the percentage. That resolution happens in
+      // effectiveDepositPercent(), not here: it needs the estimate's total,
+      // and the total needs the tax that applies, which only the caller's
+      // tax authority can decide.
     } else {
       if (seenPricing) {
         afterPricingSections.push({ heading: h, content: sec.lines.join('\n').trim() });
@@ -309,7 +313,7 @@ export function parseSummary(rawSummary: string): ParsedSummary {
     }
   }
 
-  return { preamble, scopeItems, lineItems, depositPercent, depositRule, taxLabel, taxRate, beforePricingSections, afterPricingSections };
+  return { preamble, scopeItems, lineItems, depositPercent, depositRule, storedTax, beforePricingSections, afterPricingSections };
 }
 
 // ── Section builders ──────────────────────────────────────────────────────────
@@ -429,6 +433,17 @@ export function resolveDepositPercent(total: number, rule: DepositRule | null | 
 }
 
 /**
+ * The deposit percent that applies to a parsed estimate for the given priced
+ * rows and tax rate. An estimate with a deposit-rule marker re-resolves it
+ * against that total; one predating the marker keeps its legacy stored
+ * percent, so an old estimate's rendering does not change.
+ */
+export function effectiveDepositPercent(parsed: ParsedSummary, lineItems: LineItem[], taxRate: number): number {
+  if (parsed.depositRule === undefined) return parsed.depositPercent;
+  return resolveDepositPercent(computeTotals(lineItems, taxRate).total, parsed.depositRule);
+}
+
+/**
  * Deposit and balance for a given total and (already-decided) percent,
  * rounded to the cent rather than the whole dollar: 25% of $2,990 is
  * $747.50, not $748. `total * depositPercent` is already in cents (the
@@ -502,10 +517,14 @@ export function reconcilePaymentTermsDeposit(
 export function applyDeterministicDeposit(
   rawSummary: string,
   currency: Currency,
-  rule: DepositRule | null | undefined
+  rule: DepositRule | null | undefined,
+  // The business's Rates tax. Generation only ever creates an undelivered
+  // estimate, so Rates is the authority: any tax row the model wrote is
+  // ignored and replaced here.
+  tax: EstimateTax
 ): string {
   const parsed = parseSummary(rawSummary);
-  const { total } = computeTotals(parsed.lineItems, parsed.taxRate);
+  const { total } = computeTotals(parsed.lineItems, tax.rate);
   const depositPercent = resolveDepositPercent(total, rule);
   const { deposit } = computeDepositAndBalance(total, depositPercent);
 
@@ -523,8 +542,8 @@ export function applyDeterministicDeposit(
     depositPercent,
     parsed.beforePricingSections,
     afterPricingSections,
-    parsed.taxLabel,
-    parsed.taxRate,
+    tax.label,
+    tax.rate,
     currency,
     rule
   );
@@ -575,8 +594,8 @@ export function serializeSummary(
   depositPercent: number,
   beforePricingSections: BeforeSection[],
   afterPricingSections: AfterSection[],
-  taxLabel = 'GST',
-  taxRate = 5,
+  taxLabel: string,
+  taxRate: number,
   currency: Currency,
   depositRule?: DepositRule | null,
 ): string {
@@ -592,9 +611,9 @@ export function serializeSummary(
 
 // ── Total calculator ──────────────────────────────────────────────────────────
 
-export function calculateEstimateTotal(summary: string): number {
+export function calculateEstimateTotal(summary: string, taxAuthority: TaxAuthority): number {
   const p = parseSummary(summary);
-  return Math.round(computeTotals(p.lineItems, p.taxRate).total);
+  return Math.round(computeTotals(p.lineItems, resolveEstimateTax(p.storedTax, taxAuthority).rate).total);
 }
 
 // ── Display formatter ─────────────────────────────────────────────────────────
@@ -609,9 +628,12 @@ export function calculateEstimateTotal(summary: string): number {
 // to CAD whenever a caller forgot to pass the snapshot. Every caller here has
 // an estimate in hand, so every caller can supply its currency, and the
 // compiler now says so.
-export function formatEstimateForDisplay(summary: string, currency: Currency): string {
+// `taxAuthority` is required for the same reason: which tax applies depends on
+// whether the estimate has been delivered (lib/estimate-tax.ts), and only the
+// caller holds the estimate and its business.
+export function formatEstimateForDisplay(summary: string, currency: Currency, taxAuthority: TaxAuthority): string {
   const p = parseSummary(summary);
-  return formatParsedEstimateForDisplay(p, p.lineItems, currency);
+  return formatParsedEstimateForDisplay(p, p.lineItems, currency, resolveEstimateTax(p.storedTax, taxAuthority));
 }
 
 /**
@@ -625,12 +647,15 @@ export function formatEstimateForDisplayWithPricing(
   summary: string,
   lineItems: LineItem[],
   currency: Currency,
+  taxAuthority: TaxAuthority,
   lineItemsDisplayBlock?: string
 ): string {
+  const p = parseSummary(summary);
   return formatParsedEstimateForDisplay(
-    parseSummary(summary),
+    p,
     lineItems,
     currency,
+    resolveEstimateTax(p.storedTax, taxAuthority),
     lineItemsDisplayBlock
   );
 }
@@ -642,17 +667,20 @@ function formatParsedEstimateForDisplay(
   p: ParsedSummary,
   lineItems: LineItem[],
   currency: Currency,
+  tax: EstimateTax,
   lineItemsDisplayBlock?: string
 ): string {
   const parts: string[] = [];
-  if (p.preamble) parts.push(syncPreambleTotal(p.preamble, lineItems, p.taxRate, currency));
+  if (p.preamble) parts.push(syncPreambleTotal(p.preamble, lineItems, tax.rate, currency));
   parts.push(scopeBlock(p.scopeItems));
   parts.push(lineItemsDisplayBlock ?? displayLineItemsBlock(lineItems, currency));
   for (const s of p.beforePricingSections) parts.push(beforeBlock(s));
   // p.depositRule, not a fresh lookup: this re-render must not let a later
   // change to the business's Rates settings retroactively alter an estimate
   // that was already generated (same snapshot rule as currency and tax).
-  parts.push(pricingBlock(lineItems, p.depositPercent, p.taxLabel, p.taxRate, currency, p.depositRule));
+  parts.push(
+    pricingBlock(lineItems, effectiveDepositPercent(p, lineItems, tax.rate), tax.label, tax.rate, currency, p.depositRule)
+  );
   for (const s of p.afterPricingSections) parts.push(`## ${s.heading}\n${s.content}`);
   return parts.join('\n\n');
 }

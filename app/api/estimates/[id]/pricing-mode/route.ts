@@ -9,6 +9,7 @@ import {
   toEstimatePricingRecord,
 } from "@/lib/estimate-pricing-server";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
+import { businessTax } from "@/lib/estimate-tax";
 
 export async function PATCH(
   request: NextRequest,
@@ -51,7 +52,15 @@ export async function PATCH(
         .eq("business_id", businessId)
         .maybeSingle();
       if (error) throw new Error(error.message);
-      return data ? toEstimatePricingRecord(data) : null;
+      if (!data) return null;
+      const { data: business, error: businessError } = await supabaseAdmin
+        .from("tpe_businesses")
+        .select("tax_label, tax_rate")
+        .eq("id", businessId)
+        .maybeSingle();
+      if (businessError) throw new Error(businessError.message);
+      if (!business) throw new Error("Business not found");
+      return toEstimatePricingRecord(data, businessTax(business));
     },
     loadStructuredItems: loadStructuredPricingItems,
     persistMode: async ({ estimateId, businessId, mode }) => {

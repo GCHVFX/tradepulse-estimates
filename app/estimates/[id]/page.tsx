@@ -7,6 +7,7 @@ import { EstimatePricingEditor } from "@/app/components/estimate-pricing-editor"
 import { EstimatePhotos } from "@/app/components/estimate-photos";
 import { BottomNav } from "@/app/components/bottom-nav";
 import { loadCustomerPricingView } from "@/lib/estimate-pricing-server";
+import { businessTax, taxAuthorityFor } from "@/lib/estimate-tax";
 import { readEstimateCurrency } from "@/lib/currency-db";
 import { supabaseAdmin, createSupabaseServerClient } from "@/lib/supabase-server";
 import { normalizePhoneE164 } from "@/lib/sms-suppression";
@@ -29,7 +30,7 @@ export default async function EstimatePage({
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("id, logo_url, name, show_company_name_below_logo, email, phone, plan, google_review_link, payment_link")
+    .select("id, logo_url, name, show_company_name_below_logo, email, phone, plan, google_review_link, payment_link, tax_label, tax_rate")
     .eq("owner_user_id", user.id)
     .maybeSingle();
 
@@ -50,8 +51,11 @@ export default async function EstimatePage({
 
   // Pricing rows and photo records are independent once the estimate is
   // owned, so load them together rather than adding another server waterfall.
+  // The business's Rates tax. Undelivered estimates use it; delivered ones
+  // keep the tax row the customer was given (lib/estimate-tax.ts).
+  const rates = businessTax(business);
   const [pricing, { data: photoRecords }, estimateCurrency] = await Promise.all([
-    loadCustomerPricingView(estimate),
+    loadCustomerPricingView(estimate, rates),
     supabaseAdmin
       .from("tpe_estimate_photos")
       .select("storage_path")
@@ -243,6 +247,7 @@ export default async function EstimatePage({
                 groupedSummary={pricing.groupedSummary}
                 initialMode={pricing.selected.renderedMode}
                 structuredPricing={estimate.pricing_source === "structured"}
+                taxAuthority={taxAuthorityFor(estimate, rates)}
                 canEditMode={pricing.canEditMode}
                 pricingError={!pricing.selected.ok}
               />

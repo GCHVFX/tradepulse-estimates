@@ -49,6 +49,8 @@ export default defineConfig({
     "pro-payments-entitlement.spec.ts",
     "campaign-attribution.spec.ts",
     "outreach-click-tracking.spec.ts",
+    "share-delivered-renders-without-business.spec.ts",
+    "tax-rate-from-rates-not-ai.spec.ts",
     "unit-suite-completeness.spec.ts",
   ],
   fullyParallel: false,

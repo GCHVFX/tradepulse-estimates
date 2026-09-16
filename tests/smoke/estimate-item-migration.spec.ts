@@ -31,6 +31,7 @@ import {
   negativeFixtures,
   productionNegativeFixtures,
 } from "../fixtures/estimate-summaries";
+import { GST_5 } from "../fixtures/tax";
 
 /**
  * Lazy per-estimate conversion service: pure unit coverage.
@@ -276,7 +277,7 @@ function structuredEstimateSummary(): string {
   // Runs the same generation-time normalization Finding 1 added, so this
   // fixture carries a real deposit-rule marker like a production estimate
   // would -- needed for the deposit-interaction test below.
-  return applyDeterministicDeposit(raw, "cad", DEPOSIT_RULE_500_25);
+  return applyDeterministicDeposit(raw, "cad", DEPOSIT_RULE_500_25, GST_5);
 }
 
 /** Mirrors editable-estimate-body.tsx's startCommitTimer: parse, mutate the
@@ -285,7 +286,7 @@ function structuredEstimateSummary(): string {
 function editLineItems(summary: string, mutate: (items: LineItem[]) => LineItem[]): string {
   const parsed = parseSummary(summary);
   const nextLine = mutate(parsed.lineItems);
-  const nextTotal = computeTotals(nextLine, parsed.taxRate).total;
+  const nextTotal = computeTotals(nextLine, GST_5.rate).total;
   const nextDepositPercent =
     parsed.depositRule !== undefined ? resolveDepositPercent(nextTotal, parsed.depositRule) : parsed.depositPercent;
   const reconciledAfter =
@@ -305,8 +306,8 @@ function editLineItems(summary: string, mutate: (items: LineItem[]) => LineItem[
     nextDepositPercent,
     parsed.beforePricingSections,
     reconciledAfter,
-    parsed.taxLabel,
-    parsed.taxRate,
+    GST_5.label,
+    GST_5.rate,
     "cad",
     parsed.depositRule
   );
@@ -340,6 +341,7 @@ function structuredRecord(summary: string): EstimatePricingRecord {
     reviewRequestedAt: null,
     summary,
     currency: "cad",
+    businessTax: GST_5,
   };
 }
 
