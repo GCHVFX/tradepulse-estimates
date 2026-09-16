@@ -19,8 +19,12 @@
  * - a digit followed by "dollar" or "dollars"
  * - the word "deposit" in any form, because the deposit is calculated from
  *   the contractor's snapshots and the model has no way to know it
+ * - a generic pricing hedge such as "pricing may change" or "additional
+ *   charges may apply", which carries no figure but still puts the model
+ *   between the contractor and their own price
  */
-const PRICE_LEAK = /\$|\d\s*dollars?\b|\bdeposit/i;
+const PRICE_LEAK =
+  /\$|\d\s*dollars?\b|\bdeposit|\bpric(?:e|es|ing)\s+(?:may|can|could|might)\s+chang|\badditional\s+(?:charges|fees|costs)\s+(?:may\s+)?appl/i;
 
 /** `#` through `######`, allowing the three leading spaces markdown permits. */
 const HEADING_LINE = /^ {0,3}#{1,6}\s/;

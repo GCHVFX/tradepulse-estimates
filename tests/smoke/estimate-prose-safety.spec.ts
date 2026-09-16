@@ -51,6 +51,45 @@ test("CA$, US$, spelled-out dollars and deposits are all leakage", () => {
   }
 });
 
+test("a generic pricing hedge is leakage even with no dollar amount in it", () => {
+  // Observed live: the model wrote "pricing may change" into Assumptions.
+  // No figure, but it still puts the model between the contractor and their
+  // own price, and the contractor is the one who says that if it needs
+  // saying.
+  const hedges = [
+    "Final pricing may change once the wall is opened up.",
+    "The price may change if the fitting is seized.",
+    "Prices could change depending on access.",
+    "Additional charges may apply for after-hours work.",
+    "Additional fees apply if a permit is required.",
+    "Additional costs may apply for disposal.",
+  ];
+
+  for (const sentence of hedges) {
+    const result = sanitizeGeneratedProse(`## Assumptions and Exclusions\nAccess is through the crawlspace. ${sentence}`);
+    expect(result.prose, sentence).toContain("Access is through the crawlspace.");
+    expect(result.prose, sentence).not.toContain(sentence);
+    expect(result.removedSentences, sentence).toBe(1);
+  }
+});
+
+test("the hedge pattern does not eat ordinary prose about scope changing", () => {
+  // Narrow on purpose. A sentence about the work changing is the contractor's
+  // own scope language and must survive; only the pricing hedge goes.
+  const kept = [
+    "The scope may change once the wall is opened up.",
+    "We will confirm the fitting size on site before ordering.",
+    "Access may change if the tenant moves the shelving.",
+    "Any change to the work is confirmed with you first.",
+  ];
+
+  for (const sentence of kept) {
+    const result = sanitizeGeneratedProse(`## Notes\n${sentence}`);
+    expect(result.prose, sentence).toContain(sentence);
+    expect(result.removedSentences, sentence).toBe(0);
+  }
+});
+
 test("prose with nothing to remove comes back byte for byte", () => {
   const clean = [
     "# Panel Upgrade",

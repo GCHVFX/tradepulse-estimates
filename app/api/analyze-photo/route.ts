@@ -144,7 +144,16 @@ export async function POST(request: NextRequest) {
     }
     content.push({
       type: "text",
-      text: `Analyse all ${validatedPhotos.length} photo(s) above and produce one consolidated plain-English job description covering all visible work. Write it the way a contractor would describe it to get a quote -- specific, direct, no fluff. Include what needs to be fixed or installed, visible damage or scope, approximate size or quantity where visible. Incorporate any contractor notes as additional context. Flag anything unclear that should be verified in person. Keep it under 250 words. Do not generate prices. Do not write an estimate. Just describe the work. Canadian English spelling.`,
+      text: `Analyse all ${validatedPhotos.length} photo(s) above and produce one consolidated plain-English job description covering all visible work. Write it the way a contractor would describe it to get a quote -- specific, direct, no fluff. Include approximate size or quantity where visible. Incorporate any contractor notes as additional context. Keep it under 250 words.
+
+Report what you can see, and keep it separate from what should be done about it:
+- Describe visible conditions plainly: an active leak, corrosion, staining, restricted access, the type of material or component in view.
+- Do not state an uncertain diagnosis as fact. Write "dark staining, possible moisture-related deterioration" rather than "mould". Only name a condition outright when the photos or the contractor notes clearly establish it.
+- Do not call for replacement or remediation just because something is visible. Write inspect, verify, or replace if damaged.
+- Do not assume an adjacent part has failed without evidence of it in the photos or the notes.
+- Flag anything unclear that should be verified in person.
+
+Do not generate prices. Do not write an estimate. Just describe the work. Canadian English spelling.`,
     });
 
     const response = await client.messages.create({

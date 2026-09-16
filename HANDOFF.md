@@ -93,6 +93,22 @@ the client re-uploading photos it already attached. No product change was made. 
 were added to `tests/smoke/generation-contractor-pricing.spec.ts` covering the photo path and the fact
 that the generation route never reads, writes or deletes a photo record.
 
+**Slice 4 correction (2026-09-16 PT): scope restraint.** The live photo run proved photos reach the
+model and then proved the model overreaches on what they establish. It called dark staining "mould
+growth", prescribed replacing the braided supply line and the cabinet base with no evidence either had
+failed, and wrote "pricing may change" into Assumptions. Instructions only, no logic change:
+`app/api/analyze-photo/route.ts` and the generation prompt both now say to keep an observation separate
+from the action it calls for, never to state an uncertain diagnosis as fact ("dark staining, possible
+moisture-related deterioration" rather than "mould"), never to call for replacement or remediation just
+because something is visible (inspect, verify, or replace if damaged), and never to assume an adjacent
+component has failed without evidence. The generation prompt also forbids generic pricing hedges.
+
+Because "must not contain" cannot be guaranteed by a prompt, `PRICE_LEAK` in `lib/estimate-prose.ts`
+was extended to catch a hedge with no figure in it: price/prices/pricing plus may/can/could/might plus
+change, and additional charges/fees/costs (may) apply. Deliberately narrow: "The scope may change once
+the wall is opened up" survives, and there is a test for that. This is the one place a Slice 4.2
+behaviour change exists; everything else in this correction is prompt text.
+
 **Reported, not fixed: the website-quote intake still injects pricing into prose.**
 `handleCreateEstimate` in `app/components/estimate-actions.tsx` fetches the price book and calls
 `buildDraftSummary(...)` in `lib/quote-templates.ts`, which writes price-book prices and a Pricing

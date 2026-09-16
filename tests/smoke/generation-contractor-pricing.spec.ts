@@ -7,6 +7,7 @@ import {
   regeneratedEstimateUpdate,
 } from "../../lib/generated-estimate";
 import { calculateContractorPricing } from "../../lib/contractor-pricing";
+import { sanitizeGeneratedProse } from "../../lib/estimate-prose";
 
 /**
  * Phase 1 slice 4: generation and the new-estimate flow
@@ -377,4 +378,81 @@ test("regenerate leaves the estimate's stored photos alone", () => {
   // would otherwise attach a second copy of every photo on every regenerate.
   const newPage = code("app/new/page.tsx");
   expect(newPage).toContain("if (isPro && !regenerateId && createdEstimateId && photos.length > 0) {");
+});
+
+// Scope restraint --------------------------------------------------------
+//
+// A live photo run proved photos reach the model, and then proved the model
+// overreaches on what they establish: it called dark staining "mould growth",
+// prescribed replacing a braided supply line and the cabinet base with no
+// evidence either had failed, and wrote "pricing may change" into
+// Assumptions. Both instructions were tightened. These pin the tightening,
+// because a prompt is the only place this rule can live and a prompt is easy
+// to quietly lose.
+
+test("the photo analysis separates what is visible from what to do about it", () => {
+  const analyse = code("app/api/analyze-photo/route.ts");
+
+  expect(analyse).toContain("Report what you can see, and keep it separate from what should be done about it");
+  expect(analyse).toContain("an active leak, corrosion, staining, restricted access");
+  expect(analyse).toContain("Do not state an uncertain diagnosis as fact.");
+  expect(analyse).toContain('rather than "mould"');
+  expect(analyse).toContain("Do not call for replacement or remediation just because something is visible.");
+  expect(analyse).toContain("Write inspect, verify, or replace if damaged.");
+  expect(analyse).toContain("Do not assume an adjacent part has failed without evidence");
+  expect(analyse).toContain("Flag anything unclear that should be verified in person.");
+
+  // Unchanged by the tightening: it still describes work and still refuses to
+  // price it.
+  expect(analyse).toContain("Do not generate prices.");
+  expect(analyse).toContain("Do not write an estimate.");
+});
+
+test("the generation prompt holds the same restraint when it writes the scope", () => {
+  const generate = code("app/api/generate-estimate/route.ts");
+
+  expect(generate).toContain("keep an observation separate from the action it calls for");
+  expect(generate).toContain("Never state an uncertain diagnosis as fact.");
+  expect(generate).toContain("Never call for replacement or remediation of something just because it is visible or mentioned.");
+  expect(generate).toContain("Never assume an adjacent component has failed without evidence");
+
+  // Still the Phase 1 rule underneath it all.
+  expect(generate).toContain("Never write currency amounts, prices, rates, or percentages of cost.");
+  expect(generate).toContain("Never mention a deposit");
+});
+
+test("the generation prompt forbids a pricing hedge with no figure in it", () => {
+  const generate = code("app/api/generate-estimate/route.ts");
+
+  expect(generate).toContain('Never write generic pricing language such as "pricing may change"');
+  expect(generate).toContain("even with no dollar amount in the sentence");
+});
+
+test("an Assumptions section that is nothing but pricing hedges loses its heading", () => {
+  const result = sanitizeGeneratedProse(
+    [
+      "# Under-Sink Repair",
+      "",
+      "## Scope of Work",
+      "- Inspect the cabinet base and confirm the extent of the damage",
+      "",
+      "## Assumptions and Exclusions",
+      "Final pricing may change once the cabinet is opened up.",
+      "Additional charges may apply if the supply line has to be replaced.",
+      "",
+      "## Payment Terms",
+      "This estimate is valid for 30 days from the date above.",
+    ].join("\n")
+  );
+
+  expect(result.prose).not.toContain("Assumptions and Exclusions");
+  expect(result.prose).not.toContain("pricing may change");
+  expect(result.prose).not.toContain("Additional charges may apply");
+  expect(result.removedHeadings).toBe(1);
+  expect(result.removedSentences).toBe(2);
+
+  // The scope the photo genuinely supported is untouched, including its
+  // inspect-first wording.
+  expect(result.prose).toContain("- Inspect the cabinet base and confirm the extent of the damage");
+  expect(result.prose).toContain("## Payment Terms");
 });
