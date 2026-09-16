@@ -65,6 +65,11 @@ Ordered rules, evaluated top down. Fail-safe: anything unrecognised is legacy.
 Do not classify on `pricing_source` alone, on `source` alone, or on `sent_at`. Do not enumerate historical
 source values; rule 3 catches anything unanticipated.
 
+Three existing sites branch on the literal `'structured'` and must be moved onto this classification or
+they will mis-handle a `contractor_pricing` estimate: the `structuredPricing` prop in
+`app/estimates/[id]/page.tsx`, the sync-plan branch in `app/api/estimates/route.ts`, and the
+`.eq("pricing_source", "structured")` guard in `app/api/estimates/[id]/pricing-mode/route.ts`.
+
 The database default for `pricing_source` stays `markdown`. Clearwater inserts without a `pricing_source`,
 and an inbound quote has no contractor-authored price, so it must never default into `contractor_pricing`.
 
@@ -83,6 +88,12 @@ alter table tpe_estimates
 ```
 
 The live constraint is named `tpe_estimates_pricing_source_valid`, not `..._check`.
+
+Every estimate this app creates sets `pricing_source = 'contractor_pricing'` explicitly in the insert, and
+sets `source` and `status` explicitly rather than relying on the column defaults (`source` defaults to
+`'website_quote'` and `status` to `'needs_review'`). The generation insert at
+`app/api/generate-estimate/route.ts` currently sets neither `pricing_source` nor the snapshots; without
+this it defaults to `'markdown'` and every new estimate classifies as legacy under section 2 rule 3.
 
 Still to add, nullable, populated from `tpe_businesses` at estimate creation (or at first pricing save for
 inbound quotes, see section 15):
@@ -115,6 +126,11 @@ Every pricing input is a row in `tpe_estimate_items`. The AI never writes to thi
 Hourly versus fixed labour is determined by `unit = 'hr'`. State this rule in code comments at both the
 write and the read site.
 
+`description` is NOT NULL and carries a not-blank CHECK (`tpe_estimate_items_description_not_blank`), so
+every row needs one. Labour rows are written as `Labour` and material rows as `Materials`, both fixed
+strings. A charge row takes the contractor's own text, which is required: a blank charge description is
+rejected, never defaulted.
+
 `quantity`, `unit_price` and `line_total` are NOT NULL, which gives the blank/zero encoding for free:
 
 - **No row** = unknown. Blocks delivery.
@@ -143,7 +159,8 @@ Rate behaviour:
 
 - Hourly labour always shows its rate, pre-filled from the business rate when that is greater than zero.
 - **Business rate is 0:** the rate field is empty and blocking. It must accept a value greater than zero.
-  The first valid rate is written to both `tpe_businesses.labour_rate` and this estimate.
+  The first valid rate is written to both `tpe_businesses.labour_rate` and this estimate, by the pricing
+  save route in section 12 and never by `PATCH /api/price-book` (see section 11).
 - **Business rate already set:** the contractor may override it on this estimate. That override applies to
   this estimate only and does not change the business default. Changing the default stays a Rates action.
 - A genuinely free labour line is expressed as **fixed labour = $0**, which remains valid.
@@ -222,7 +239,10 @@ limitation: a contractor who wants a deposit on every job cannot express that in
 For a `contractor_pricing` estimate, a **null tax snapshot is an incomplete pricing state**, not 0%. An
 inbound `website_quote` may hold null snapshots until the contractor starts pricing it.
 
-**Rounding, in one place only:** contractor-entered money converts to integer cents on input; hourly
+**Rounding, in one place only.** Integer cents are the calculation module's internal representation only.
+`tpe_estimate_items.quantity`, `unit_price` and `line_total` are `numeric` with no fixed scale and store
+dollars, exactly as the existing rows do; convert at the module boundary and never persist cents. Then:
+contractor-entered money converts to integer cents on input; hourly
 labour rounds to cents; marked-up materials round to cents; optional charges are already cents; subtotal is
 the sum of those rounded components; tax, deposit and balance round to cents. No surface implements its own
 rounding. The deposit threshold is stored in dollars, so convert it to cents before comparing it with a
@@ -293,6 +313,23 @@ ships a wrong tax line and never sees where it came from. Unlike labour rate and
 to **both** this estimate's snapshot and the business default: tax is a jurisdiction setting, not a per-job
 decision. The snapshot still prevents a later change from altering this estimate.
 
+**The estimate editor never calls `PATCH /api/price-book`.** The pricing save route in section 12 owns
+every business-default write that estimate editing needs, in the same transaction as the pricing rows:
+
+- Business `labour_rate` is 0 and the contractor supplies the first valid hourly rate: update
+  `tpe_businesses.labour_rate`.
+- The contractor changes the tax label or rate: update this estimate's tax snapshots **and**
+  `tpe_businesses.tax_label` / `tax_rate`.
+- A per-estimate labour-rate override when a business rate already exists changes this estimate only.
+- A per-estimate markup change changes this estimate only.
+
+`PATCH /api/price-book` stays the Rates form's endpoint and is not repurposed for estimate editing.
+
+> **IMPLEMENTATION NOTE:** `PATCH /api/price-book` is unsafe for partial callers because omitted
+> `labour_rate`, `markup_percent`, `deposit_percent` and `deposit_threshold` values are currently coerced
+> to 0. Do not reuse it for estimate-side partial updates or other new partial-write flows unless that
+> route is explicitly changed to preserve omitted fields.
+
 Phase 1 replaces the tax hotfix's display-only treatment (plain text plus a "Set in Rates" link) with this
 editable control.
 
@@ -319,6 +356,33 @@ No edit-history detection, no merging, no versioning. Delivered estimates cannot
 (`lib/estimate-delivery.ts`): `sent_at IS NOT NULL OR copied_at IS NOT NULL OR status IN ('sent','done')`.
 SMS, email and copy link are all ways of putting the estimate in front of a customer. Phase 1 uses that same
 predicate; it must not grow a second definition.
+
+**The authoritative pricing write path is `PUT /api/estimates/[id]/pricing`.** It does not exist yet: the
+only current writer of `tpe_estimate_items` is the markdown-driven sync plan in
+`app/api/estimates/route.ts`, which this change deletes. One route owns contractor pricing input. Its
+payload is semantic, not rows:
+
+- `labour`: absent or null; hourly (hours plus rate); or fixed (amount)
+- `materials`: absent or null; or cost plus `markup_percent`
+- `charges`: zero or more description plus amount rows
+- `tax`: the current label and rate, when changed
+
+The route converts that payload into the canonical `tpe_estimate_items` rows defined in section 4, using
+the fixed `Labour` and `Materials` descriptions and rejecting a blank charge description.
+
+Rules:
+
+- An incomplete `contractor_pricing` draft can be saved. The route derives and returns completeness, but
+  incompleteness never rejects a save. Completeness rejects delivery only (section 13).
+- It rejects every pricing write once `isDelivered()` is true.
+- On the first pricing save for `website_quote` intake, the same transaction copies the tax and deposit
+  snapshots from the business, sets `pricing_source='contractor_pricing'`, moves `status` from
+  `needs_review` to `draft`, and writes the pricing rows.
+- The row replacement, any promotion, the snapshot copies and the business-default writes from section 11
+  are atomic. A partially replaced pricing state must not be possible.
+
+The editor calls only this route for pricing. Prose edits continue through `PATCH /api/estimates` and
+carry no pricing.
 
 Locked once delivered, enforced **server-side at every mutation route that can change them**, including the
 pricing-row write path:
@@ -388,7 +452,10 @@ Requirements on that path:
 - No legacy value may feed any new pricing calculation.
 - Quantity-row collapsing and customer-facing formatting stay exactly as they are today.
 
-No backfill. No conversion. No repricing. Legacy drafts open and show:
+No backfill. No conversion. No repricing. This is permanent for the nine drafts that exist at cutover: six
+`markdown` and three `structured`, all undelivered. Once Phase 1 lands they can be read and deleted but
+never priced or sent, and the contractor recreates any of them that still matter rather than converting
+them. Legacy drafts open and show:
 
 > This estimate was created with the previous pricing system and is read-only. Create a new estimate to
 > change or send it.
@@ -415,6 +482,10 @@ In this repo:
   the tax and deposit snapshots from the business, set `pricing_source='contractor_pricing'`, and move
   `status` from `needs_review` to `draft`. This happens even if only one of the two required inputs has been
   entered. An incomplete `contractor_pricing` draft is valid internally and simply cannot be delivered.
+- **"Create Estimate" must stop flipping the status on its own.** `handleCreateEstimate` in
+  `app/components/estimate-actions.tsx` currently PATCHes `status: "draft"` while `pricing_source` is still
+  `markdown`, which matches neither rule 1 nor rule 2 and strands the quote as legacy before it can be
+  priced. The status move belongs only to the promotion step above.
 
 There are currently zero `website_quote` rows in production.
 
@@ -483,6 +554,13 @@ Each is one assertion on one previously broken behaviour.
   as the delivery action wherever a test needs a delivered estimate.
 - During implementation, run focused tests for the files changed. Run broader verification at the final
   checkpoint only.
+- Every new spec file must be registered, or `unit-suite-completeness.spec.ts` fails: add it to
+  `playwright.unit.config.ts`'s `testMatch` if it is unit-safe, or to that spec's
+  `CANNOT_RUN_IN_UNIT_CONFIG` map with a stated reason longer than 40 characters. All 11 tests below need
+  live accounts and a browser, so all 11 need exclusion entries.
+- `tests/smoke/helpers.ts` has no estimate-creating helper, only `signUpFreshAccount`, `loginAs`,
+  `cleanupTestAccount`, `expireTrial` and `resetSignupRateLimit`. Estimates and their pricing rows have to
+  be seeded with direct service-role inserts.
 
 ```ts
 // tests/smoke/pricing-ai-authors-no-numbers.spec.ts
@@ -518,6 +596,34 @@ test("a legacy estimate renders its original collapsed quantity rows and offers 
 // tests/smoke/pricing-new-delivered-estimate-keeps-pricing-block.spec.ts
 test("a delivered contractor_pricing estimate still renders its calculated pricing block", async ({ page }) => {});
 ```
+
+---
+
+## Implementation notes
+
+Carried from the 2026-09-15 grill pass against the code at `3073774`. Facts about the current codebase a
+build agent needs, not new architecture.
+
+1. **Photo routes have no delivery check.** `POST` and `DELETE` in
+   `app/api/estimates/[id]/photos/route.ts` check Pro and ownership only, and `include_photos` is a plain
+   PATCH from `app/components/estimate-photos.tsx`. All three need the section 12 lock.
+2. **Send routes bypass `PATCH /api/estimates`.** `app/api/send-sms/route.ts` and
+   `app/api/send-email/route.ts` set `status` and `sent_at` with their own `supabaseAdmin.update`, so
+   section 13's 409 must live in those routes. The PATCH guard alone catches only copy link.
+3. **Section 12's currency lock is a no-op.** No route mutates `tpe_estimates.currency`;
+   `estimateCurrencyPatch` in `lib/currency-db.ts` is insert-only. Nothing to build.
+4. **The completeness hook's data source disappears.** `isZeroTotal` in
+   `app/components/estimate-actions.tsx` is fed by an `estimate-total-change` window event dispatched from
+   `app/components/editable-estimate-body.tsx`, which Phase 1 replaces. The replacement editor either keeps
+   emitting that event or the hook is re-sourced.
+5. **The legacy path still needs Appendix A's tax resolution.** Section 14 removes the delivered carve-out,
+   but legacy estimates have no snapshots, so `resolveEstimateTax` with a stored authority must survive for
+   them. Do not delete `lib/estimate-tax.ts` when deleting the markdown money paths.
+6. **No test helper creates an estimate.** See the acceptance-test notes above.
+7. **Schema facts that already hold**, verified against the live database: the `item_type` CHECK permits
+   all four encodings; `quantity`, `unit_price` and `line_total` are NOT NULL; the `estimate_id` foreign key
+   cascades on delete; `markup_percent` is nullable with a 0 to 1000 range; the `pricing_source` constraint
+   already allows `contractor_pricing`.
 
 ---
 
