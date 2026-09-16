@@ -1,11 +1,15 @@
 # TradePulse handoff
 
-Updated: 2026-09-15 19:32 PT (Tax hotfix, spec Appendix A: the business's Rates settings are now the tax authority for every undelivered estimate, and delivered estimates render byte-identically to before. Implemented and verified locally; not committed, not pushed, not deployed.)
+Updated: 2026-09-15 (Tax hotfix, spec Appendix A: the business's Rates settings are now the tax authority for every undelivered estimate, and delivered estimates render byte-identically to before. Committed, pushed, deployed, and production-verified. Production is currently serving `6f411e3`. Phase 1 has not started; run a Phase 1 grill pass against `specs/contractor-owned-pricing.md` before any implementation.)
 
-## Tax hotfix (Appendix A): Rates is the tax authority for undelivered estimates (2026-09-15 19:32 PT)
+## Tax hotfix (Appendix A): Rates is the tax authority for undelivered estimates (2026-09-15 PT)
 
-**Status:** implemented and verified locally on branch `main` at HEAD `4dae358`. **Not committed, not
-pushed, not deployed.** Phase 1 was not started and nothing from it was implemented.
+**Status:** committed, pushed, deployed, and verified in production. Commit
+`2a16f278114fb83568fa33f82321614db01fc49b` ("Make Rates the tax authority for undelivered estimates").
+A follow-up repo-alignment migration, `6f411e37d0d01920d4d600d2298e335f9dd84783` ("Add the
+contractor_pricing constraint as a migration"), landed after it and is the commit production is
+currently serving. All four delivered-estimate baselines (see Verification below) remained unchanged
+after deploy. Phase 1 was not started and nothing from it was implemented.
 
 **The problem it fixes.** The generation prompt told the model to write a `Tax (LABEL N%)` row, and
 `parseSummary` read the rate back out of that text, falling back to a hard-coded 5% when the row was
@@ -105,9 +109,20 @@ rendered at display time and never parsed back. Delivered estimates lock. Legacy
 a frozen read-only path. Phase 2 is saved contractor standards and Phase 3 is past-job reuse; those two
 are the retention work and are explicitly out of Phase 1.
 
-**Exact next step:** review this diff. If it is approved, commit it, then deploy and confirm the four
-production share pages still match `build/tax-hotfix-baselines/production-reference/`, the 2026-09-11
-estimate first. Phase 1 starts only after the hotfix is verified in production.
+**Exact next step:** run a Phase 1 grill pass against `specs/contractor-owned-pricing.md` (the
+authoritative Phase 1 spec) before any implementation. The hotfix is already deployed and
+production-verified, so Phase 1 is clear to start once that grill pass is done.
+
+## Known open
+
+- **Drafts from before the tax hotfix freeze to their AI-written tax if delivered later.** Nine drafts
+  existed at freeze time. No current effect, since every production business is GST 5% today. Phase 1's
+  per-estimate tax snapshots remove the case entirely. Do not send those nine existing drafts before
+  Phase 1 lands.
+- **Pre-existing at HEAD, not introduced by this work:**
+  - the `unit-suite-completeness` guard fails, naming three unrelated specs (`nav-wordmark-no-crowding`,
+    `trade-tabs-mobile-overflow`, `trade-tabs-scroll-affordance`).
+  - one eslint error on an `<a href="/estimates">`.
 
 ## Estimate pricing: bare $ for intermediate amounts, CA$/US$ only at the Total (2026-09-14 07:54 PT)
 
