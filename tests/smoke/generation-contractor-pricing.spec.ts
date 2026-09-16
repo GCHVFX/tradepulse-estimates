@@ -249,17 +249,19 @@ test("the server hands back the saved prose and /new renders that, not its own b
 
 // 8. Legacy classification is unchanged ---------------------------------
 
-test("legacy and inbound-quote classification still read exactly as they did", () => {
+test("legacy and inbound-quote classification still follow the same ordered rules", () => {
+  // Slice 5A moved the three rules into lib/estimate-classification.ts so the
+  // detail page and the share page cannot disagree. The rules themselves are
+  // unchanged; tests/smoke/customer-pricing.spec.ts covers them directly.
   const page = code("app/estimates/[id]/page.tsx");
+  expect(page).toContain("const pricingClass = classifyEstimate(estimate);");
+  expect(page).toContain('const isQuoteRequest = pricingClass === "website_quote_intake";');
+  expect(page).toContain('const isContractorPricing = pricingClass === "contractor_pricing";');
 
-  expect(page).toContain(
-    'const isQuoteRequest = estimate.status === "needs_review" && estimate.source === "website_quote";'
-  );
-  expect(page).toContain('const isContractorPricing = estimate.pricing_source === "contractor_pricing";');
-  // Everything that is not contractor_pricing keeps the editor it has today,
-  // including the old AI-priced 'structured' estimates.
-  expect(page).toContain('structuredPricing={estimate.pricing_source === "structured"}');
-  expect(page).toContain("<EstimatePricingEditor");
+  const rules = code("lib/estimate-classification.ts");
+  expect(rules).toContain('if (estimate.pricing_source === "contractor_pricing") return "contractor_pricing";');
+  expect(rules).toContain('if (estimate.source === "website_quote" && estimate.status === "needs_review") {');
+  expect(rules).toContain('return "legacy";');
 });
 
 test("nothing in this slice changes the pricing_source default a website quote relies on", () => {

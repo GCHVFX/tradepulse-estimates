@@ -365,9 +365,13 @@ test("1 and 2: contractor_pricing selects the new editor, everything else does n
   const page = readFileSync("app/estimates/[id]/page.tsx", "utf8");
 
   expect(page).toContain("ContractorPricingEditor");
-  expect(page).toContain('estimate.pricing_source === "contractor_pricing"');
-  // The legacy path is still there, unchanged, for everything else.
-  expect(page).toContain("EstimatePricingEditor");
+  // Classification is the shared ordered rule, not an inline pricing_source
+  // check (Phase 1 slice 5A).
+  expect(page).toContain("const pricingClass = classifyEstimate(estimate);");
+  expect(page).toContain('const isContractorPricing = pricingClass === "contractor_pricing";');
+  // Everything else is legacy and read-only since slice 5A: the old markdown
+  // editor is no longer mounted on this page at all.
+  expect(page).not.toContain("EstimatePricingEditor");
 });
 
 test("22 and 25: the editor displays backend totals and never parses markdown", () => {

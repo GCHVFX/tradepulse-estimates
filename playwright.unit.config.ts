@@ -56,6 +56,7 @@ export default defineConfig({
     "share-delivered-renders-without-business.spec.ts",
     "estimate-prose-safety.spec.ts",
     "generation-contractor-pricing.spec.ts",
+    "customer-pricing.spec.ts",
     "tax-rate-from-rates-not-ai.spec.ts",
     "unit-suite-completeness.spec.ts",
   ],

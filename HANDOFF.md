@@ -1,6 +1,122 @@
 # TradePulse handoff
 
-Updated: 2026-09-16 (Phase 1 slice 4 complete and manually approved after a live photo-generation smoke test. Slices 1-4 application code is local only, unpushed, not deployed. Slice 5, customer output and delivery locking, is next.)
+Updated: 2026-09-16 (Phase 1 slice 5A committed locally and awaiting review: classification, the customer-safe contractor pricing projection, the share page and the PDF. 5B and 5C not started. Slices 1-4 and 5A are local only, unpushed, not deployed. Next: review 5A before beginning 5B.)
+
+## Phase 1 slice 5A: classification, customer-safe pricing, share and PDF (2026-09-16 PT)
+
+**Status: implemented and committed locally, awaiting review.** Slice 5 is **not** complete: 5B and 5C
+have not started. Nothing pushed, nothing deployed, no production data touched.
+
+**Starting point:** branch `phase1-contractor-pricing` at `37619a3` ("Make the docs say what generation
+actually does now"). The 5A commit SHA is the commit that carries this section; `git log -1` on the
+branch gives it.
+
+**What 5A does.**
+
+- `lib/estimate-classification.ts` (new): `classifyEstimate()`, the three ordered Phase 1 rules and
+  nothing else. `contractor_pricing`, then `website_quote` + `needs_review` intake, then legacy. Fails
+  closed: `structured`, null and unrecognised values are all legacy.
+- `lib/customer-pricing.ts` (new): the customer-safe projection. `toCustomerPricing()` returns selling
+  amounts only (Labour, Materials, each charge's description and amount, subtotal, tax label and
+  amount, total, deposit, balance), or `{ ready: false, missing }` with nothing priced when the
+  estimate is incomplete. `buildCustomerDocument()` turns that into the markdown both surfaces render,
+  with the pricing block placed after Assumptions and Exclusions and before Notes, which is the order
+  `lib/generate-pdf.ts` sorts into. `contractorCustomerDocument()` is the one call from stored rows +
+  snapshots + currency to `{ ready: true, document, totalCents }`. It imports no legacy parser or
+  formatter.
+- `lib/contractor-pricing.ts`: one additive field, `chargeLineCents`, each charge's own amount in row
+  order. `chargesCents` is unchanged and is their sum. This lets the customer document list charges
+  one by one without converting a row to cents outside the calculation module.
+- `app/share/[id]/page.tsx`: classifies first. Contractor pricing loads its rows on the server and
+  renders `contractorCustomerDocument()`; incomplete pricing and unpriced website-quote intake render
+  "This estimate isn't ready yet." with no prose, pricing, photos or PDF button. Legacy is unchanged and
+  still goes through `loadCustomerPricingView`. One `customerDocument` string feeds both
+  `EstimateMarkdown` and `DownloadPdfButton`, so share and PDF cannot disagree.
+- `app/estimates/[id]/page.tsx`: classifies first. Contractor pricing never calls
+  `loadCustomerPricingView`, so its prose is never parsed as if it held prices. `estimateTotal` (invoice
+  prefill, zero-total check) and the `summary` handed to `EstimateActions` come from
+  `contractorCustomerDocument()` for contractor pricing, not from `pricing.selected`. **Legacy estimates
+  no longer mount any editor**: they render the frozen customer representation read-only, and an
+  undelivered one shows the spec section 14 notice.
+
+**Judgement calls a reviewer should check.**
+
+- Deposit and balance rows appear only when a deposit applies. With no deposit the table ends at Total.
+- "Deposit required" carries no percentage, following the spec section 11 example (legacy showed one).
+- Every contractor amount is shown to the cent; legacy rounded subtotal, tax and total to the dollar.
+- The not-ready page shows nothing of the estimate at all, rather than prose without pricing.
+- A website quote still in intake now renders not-ready on `/share/[id]`. Before this it rendered the
+  legacy view, which for an intake quote includes price-book prices. Zero such rows exist in production.
+- A `|` in a charge description becomes `/`, because the PDF renderer splits table cells naively.
+
+**Now unmounted, not deleted.** `EstimatePricingEditor` and `EditableEstimateBody` have no remaining
+caller in `app/`, and `/api/estimates/[id]/pricing-mode` has no UI caller. They belong to the spec's
+"delete, do not harden" list and were left for a separate cleanup rather than widening 5A.
+
+**Still open, deliberately, for 5B/5C:** legacy customer details and photos are still editable in the
+UI, and no mutation route enforces delivery or legacy read-only yet. For an incomplete contractor
+estimate the send bar still shows the old zero-total message.
+
+**Tests.** `tests/smoke/customer-pricing.spec.ts` (new, 16 cases, registered in
+`playwright.unit.config.ts`) covers all eleven required behaviours plus classification ordering,
+snapshot authority, section placement and the pipe edge case. Three existing source-level tests that
+pinned the exact wiring 5A replaces were updated to pin the new wiring:
+`contractor-pricing-form.spec.ts` ("1 and 2"), `estimate-pricing-mode.spec.ts` ("contractor, share,
+and PDF are wired to one server-built customer summary") and `generation-contractor-pricing.spec.ts`
+(legacy classification).
+
+**Verification actually run.**
+
+- `npx playwright test --config playwright.unit.config.ts customer-pricing.spec.ts`: 16 passed.
+- `npx playwright test --config playwright.unit.config.ts` (the whole unit config, no browser): 654
+  passed, 2 failed. Both failures are the same two present before Slice 4:
+  `password-reset-canonical-host` (passes alone, fails in the full run) and `unit-suite-completeness`
+  (still naming only the three pre-existing marketing specs; the new spec is registered).
+- `npx tsc --noEmit`: clean.
+- `npx eslint` on every changed file: one error, the pre-existing `<a>` to `/estimates` on the detail
+  page. Nothing new.
+- `git diff --check`: clean.
+
+**Not verified.**
+
+- **No browser check of a share page.** `.env.local` points at the production Supabase project, and
+  there is no Supabase CLI or Docker for a local stack, so rendering a real share page would have read
+  production. Share-page wiring is proven at source level only.
+- **The generated PDF itself was not produced.** The tests prove the PDF receives the identical string
+  the share page renders and that `lib/generate-pdf.ts` imports and calls no pricing code. They do not
+  execute jsPDF.
+- No live browser spec was run and no account was created.
+- The legacy baselines in `build/tax-hotfix-baselines/` were not re-captured, because that needs the
+  local dev server against production. Legacy stability is locked by a byte-for-byte unit test of the
+  legacy customer view, including the collapsed "(6 hrs @ $125.00/hr)" row.
+
+**5A payload verification (2026-09-16 PT): no contractor-only data in the real share-page response.**
+This closes the first "Not verified" bullet above. A disposable ownerless business
+(`e71f7a5a-b85d-40e7-a180-f5122d57d870`) and estimate (`3233fcdb-5d95-4d7d-bf34-f49a93265e94`) were seeded
+in production through `tpe_save_contractor_pricing`, with hourly labour 6.5 h at $91, materials cost $910
+at 15% markup, a $237 charge, GST 5% and a 30% deposit over $1,000. The raw HTML (30,742 bytes, 7 inline
+flight chunks) and the RSC response (16,564 bytes) of `/share/[id]` were fetched from the local dev server at
+`e84a297` and searched. Strict hits for the hours, rate, cost and markup in every serialized form: 0. Internal
+field names (`quantity`, `unit_price`, `markup_percent`, `item_type`, `tpe_estimate_items`, calculator
+fields): 0. Only two client components receive estimate data: `EstimateMarkdown` gets `content` and
+`DownloadPdfButton` gets `summary` (plus title, branding, empty `photoUrls`, currency), and both strings are
+byte-identical to `contractorCustomerDocument()`. Each selling amount appears once in the rendered markup and
+once in each of those two props, never as integer cents or anywhere else. The page was not painted in a
+browser, because PostHog initializes with the production key on localhost; the server-rendered HTML was used
+as the visible surface. Cleanup deleted exactly 3 item rows, 1 estimate and 1 business under count guards, and
+full-table md5 fingerprints of `tpe_businesses`, `tpe_estimates` and `tpe_estimate_items` match their
+pre-seed values exactly.
+
+**Production already holds 3 `contractor_pricing` estimates**, created 00:03, 00:10 and 00:20 PT on
+2026-09-16 as unpriced drafts under one business, matching the live Slice 4 smoke tests. They were not touched.
+They show that a deployment of this branch (most likely a Vercel preview) writes to the production database.
+
+**Pre-existing PDF quirk, unchanged.** `orderPdfSections` sorts any heading it does not recognise to the
+end, so a model-written `## Job Summary` heading would appear last in the PDF but first on the share
+page. Real production summaries write the job summary as unheaded preamble, so it does not arise in
+practice, and changing it would alter legacy PDFs.
+
+**Exact next step: review 5A before beginning 5B.** Do not start 5B until 5A is approved.
 
 ## Phase 1 slice 4: generation and the new-estimate flow (2026-09-15 PT, approved 2026-09-16)
 

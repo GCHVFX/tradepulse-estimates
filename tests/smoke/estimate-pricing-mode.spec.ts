@@ -311,11 +311,16 @@ test("contractor, share, and PDF are wired to one server-built customer summary"
   const sharePage = readFileSync("app/share/[id]/page.tsx", "utf8");
   const pdf = readFileSync("lib/generate-pdf.ts", "utf8");
 
-  expect(contractorPage).toContain("loadCustomerPricingView(estimate, rates)");
-  expect(contractorPage).toContain("summary={pricing.selected.summary}");
+  // Slice 5A: one server-built customer document per page, still shared by
+  // the page and the PDF. The legacy view builds it for legacy estimates only;
+  // a contractor_pricing estimate builds it from its own rows and snapshots.
+  expect(contractorPage).toContain(
+    "isContractorPricing ? Promise.resolve(null) : loadCustomerPricingView(estimate, businessTax(business))"
+  );
+  expect(contractorPage).toContain("summary={customerSummary}");
   expect(sharePage).toContain("loadCustomerPricingView(estimate, business ? businessTax(business) : null)");
-  expect(sharePage).toContain("<EstimateMarkdown content={pricing.selected.summary}");
-  expect(sharePage).toContain("summary={pricing.selected.summary}");
+  expect(sharePage).toContain("<EstimateMarkdown content={customerDocument} />");
+  expect(sharePage).toContain("summary={customerDocument}");
   expect(pdf).not.toContain("groupItemsForDisplay");
   expect(pdf).not.toContain("renderGroupedLineItemsBlock");
   expect(pdf).not.toContain("formatEstimateForDisplay");

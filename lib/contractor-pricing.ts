@@ -52,6 +52,12 @@ export interface ContractorPricing {
   labourCents: number;
   materialsCents: number;
   chargesCents: number;
+  /**
+   * Each optional charge's own amount, in the order the charge rows were
+   * given. `chargesCents` is their sum. Exposed so a customer document can
+   * list charges one by one without converting a row to cents itself.
+   */
+  chargeLineCents: number[];
   subtotalCents: number;
   taxCents: number;
   totalCents: number;
@@ -96,7 +102,8 @@ export function calculateContractorPricing(
 
   const labourCents = labourRows.reduce((sum, row) => sum + labourRowCents(row), 0);
   const materialsCents = materialRows.reduce((sum, row) => sum + materialRowCents(row), 0);
-  const chargesCents = chargeRows.reduce((sum, row) => sum + toCents(row.unit_price), 0);
+  const chargeLineCents = chargeRows.map((row) => toCents(row.unit_price));
+  const chargesCents = chargeLineCents.reduce((sum, cents) => sum + cents, 0);
 
   const subtotalCents = labourCents + materialsCents + chargesCents;
 
@@ -124,6 +131,7 @@ export function calculateContractorPricing(
     labourCents,
     materialsCents,
     chargesCents,
+    chargeLineCents,
     subtotalCents,
     taxCents,
     totalCents,

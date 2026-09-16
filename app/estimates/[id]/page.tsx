@@ -3,15 +3,17 @@ import { CompanyEstimateHeader } from "@/app/components/company-estimate-header"
 import { EstimateActions } from "@/app/components/estimate-actions";
 import { DeleteEstimateLink } from "@/app/components/delete-estimate-link";
 import { CustomerDetailsBlock } from "@/app/components/customer-details-block";
-import { EstimatePricingEditor } from "@/app/components/estimate-pricing-editor";
 import { EstimatePhotos } from "@/app/components/estimate-photos";
 import { BottomNav } from "@/app/components/bottom-nav";
 import { loadContractorPricingRows, loadCustomerPricingView } from "@/lib/estimate-pricing-server";
-import { businessTax, taxAuthorityFor } from "@/lib/estimate-tax";
+import { businessTax } from "@/lib/estimate-tax";
 import { ContractorPricingEditor } from "@/app/components/contractor-pricing-editor";
 import { EstimateMarkdown } from "@/app/components/estimate-markdown";
 import { stripTitleHeading } from "@/lib/estimate-prose";
 import { calculateContractorPricing } from "@/lib/contractor-pricing";
+import { classifyEstimate } from "@/lib/estimate-classification";
+import { isDelivered } from "@/lib/estimate-delivery";
+import { contractorCustomerDocument } from "@/lib/customer-pricing";
 import { readEstimateCurrency } from "@/lib/currency-db";
 import { supabaseAdmin, createSupabaseServerClient } from "@/lib/supabase-server";
 import { normalizePhoneE164 } from "@/lib/sms-suppression";
@@ -53,13 +55,20 @@ export default async function EstimatePage({
     redirect("/estimates");
   }
 
+  // Phase 1 classification comes first (specs/contractor-owned-pricing.md
+  // section 2): it decides which pricing path this page may use at all.
+  const pricingClass = classifyEstimate(estimate);
+  const isContractorPricing = pricingClass === "contractor_pricing";
+
   // Pricing rows and photo records are independent once the estimate is
   // owned, so load them together rather than adding another server waterfall.
-  // The business's Rates tax. Undelivered estimates use it; delivered ones
-  // keep the tax row the customer was given (lib/estimate-tax.ts).
-  const rates = businessTax(business);
-  const [pricing, { data: photoRecords }, estimateCurrency] = await Promise.all([
-    loadCustomerPricingView(estimate, rates),
+  // A contractor_pricing estimate never goes through the legacy customer view
+  // (it would parse the prose as if it held prices); everything else keeps
+  // the frozen legacy path, which uses the business's Rates tax for an
+  // undelivered estimate and the stored tax row for a delivered one.
+  const [legacyPricing, contractorRows, { data: photoRecords }, estimateCurrency] = await Promise.all([
+    isContractorPricing ? Promise.resolve(null) : loadCustomerPricingView(estimate, businessTax(business)),
+    isContractorPricing ? loadContractorPricingRows(estimate.id) : Promise.resolve([]),
     supabaseAdmin
       .from("tpe_estimate_photos")
       .select("storage_path")
@@ -96,15 +105,8 @@ export default async function EstimatePage({
   const businessPhone = business?.phone ?? "";
   const isPro = business?.plan === "pro";
   const googleReviewLink = business?.google_review_link ?? null;
-  const isQuoteRequest = estimate.status === "needs_review" && estimate.source === "website_quote";
-  const estimateTotal = pricing.selected.total;
+  const isQuoteRequest = pricingClass === "website_quote_intake";
 
-  // Phase 1 classification (specs/contractor-owned-pricing.md section 2).
-  // Only a contractor_pricing estimate uses the new editor; everything else
-  // keeps the path it has today, including pricing_source='structured', which
-  // is the old AI-priced model and not this one.
-  const isContractorPricing = estimate.pricing_source === "contractor_pricing";
-  const contractorRows = isContractorPricing ? await loadContractorPricingRows(estimate.id) : [];
   const contractorPricing = isContractorPricing
     ? calculateContractorPricing(
         contractorRows.map((row) => ({
@@ -121,6 +123,25 @@ export default async function EstimatePage({
         }
       )
     : null;
+
+  // The customer document and the total every downstream consumer reads. For
+  // contractor pricing both come from the persisted rows and snapshots
+  // through calculateContractorPricing, never from pricing.selected, which is
+  // the legacy markdown parse. An incomplete contractor estimate has no
+  // customer document and a total of 0 until the contractor prices it.
+  const contractorDocument = isContractorPricing
+    ? contractorCustomerDocument(estimate, contractorRows, estimateCurrency)
+    : null;
+  const customerSummary = contractorDocument
+    ? contractorDocument.ready
+      ? contractorDocument.document
+      : ""
+    : legacyPricing?.selected.summary ?? "";
+  const estimateTotal = contractorDocument
+    ? contractorDocument.ready
+      ? contractorDocument.totalCents / 100
+      : 0
+    : legacyPricing?.selected.total ?? 0;
 
   // Only unpaid invoiced estimates need this check -- opting out doesn't
   // matter for an estimate that was never invoiced or is already paid, and
@@ -290,19 +311,22 @@ export default async function EstimatePage({
                   />
                 </>
               ) : (
-                <EstimatePricingEditor
-                  currency={estimateCurrency}
-                  key={estimate.id}
-                  estimateId={estimate.id}
-                  summary={estimate.summary ?? ""}
-                  detailedSummary={pricing.detailedSummary}
-                  groupedSummary={pricing.groupedSummary}
-                  initialMode={pricing.selected.renderedMode}
-                  structuredPricing={estimate.pricing_source === "structured"}
-                  taxAuthority={taxAuthorityFor(estimate, rates)}
-                  canEditMode={pricing.canEditMode}
-                  pricingError={!pricing.selected.ok}
-                />
+                // Legacy, read-only (specs/contractor-owned-pricing.md section
+                // 14). The frozen customer representation, exactly as the
+                // share page renders it, with no editor of any kind. That
+                // includes pricing_source='structured': old structured rows do
+                // not make an estimate editable under either pricing path.
+                <>
+                  {!isDelivered(estimate) && (
+                    <div className="mb-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3">
+                      <p className="text-sm text-zinc-700">
+                        This estimate was created with the previous pricing system and is read-only.
+                        Create a new estimate to change or send it.
+                      </p>
+                    </div>
+                  )}
+                  <EstimateMarkdown content={customerSummary} />
+                </>
               )}
 
               <EstimatePhotos
@@ -320,7 +344,7 @@ export default async function EstimatePage({
       <EstimateActions
         estimateId={estimate.id}
         title={estimate.title ?? ""}
-        summary={pricing.selected.summary}
+        summary={customerSummary}
         currency={estimateCurrency}
         status={estimate.status}
         source={estimate.source ?? null}

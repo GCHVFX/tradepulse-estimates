@@ -2,8 +2,10 @@ import { EstimateMarkdown } from "@/app/components/estimate-markdown";
 import { RowLockup } from "@/app/components/wordmark";
 import { DownloadPdfButton } from "@/app/components/download-pdf-button";
 import { CompanyEstimateHeader } from "@/app/components/company-estimate-header";
-import { loadCustomerPricingView } from "@/lib/estimate-pricing-server";
+import { loadContractorPricingRows, loadCustomerPricingView } from "@/lib/estimate-pricing-server";
 import { businessTax } from "@/lib/estimate-tax";
+import { classifyEstimate } from "@/lib/estimate-classification";
+import { contractorCustomerDocument } from "@/lib/customer-pricing";
 import { isDelivered } from "@/lib/estimate-delivery";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { allAmountsInLabel } from "@/lib/currency";
@@ -22,7 +24,7 @@ export default async function ShareEstimatePage({
   const { data: estimate } = await supabaseAdmin
     .from("tpe_estimates")
     .select(
-      "id, title, summary, customer_name, customer_phone, customer_email, job_address, prepared_by, created_at, business_id, include_photos, pricing_source, customer_pricing_mode, status, sent_at, copied_at, completed_at, payment_status, invoice_amount, review_requested_at, currency"
+      "id, title, summary, customer_name, customer_phone, customer_email, job_address, prepared_by, created_at, business_id, include_photos, pricing_source, customer_pricing_mode, source, status, sent_at, copied_at, completed_at, payment_status, invoice_amount, review_requested_at, currency, tax_label_snapshot, tax_rate_snapshot, deposit_percent_snapshot, deposit_threshold_snapshot"
     )
     .eq("id", id)
     .maybeSingle();
@@ -63,9 +65,34 @@ export default async function ShareEstimatePage({
     });
   }
 
-  const pricing = await loadCustomerPricingView(estimate, business ? businessTax(business) : null);
-
   const estimateCurrency = await readEstimateCurrency(supabaseAdmin, id);
+
+  // Classification first, before any completeness check or rendering
+  // decision (specs/contractor-owned-pricing.md section 13). A legacy estimate
+  // has no contractor pricing rows, so checking completeness first would
+  // refuse every legacy customer document.
+  //
+  // customerDocument is the exact markdown the customer sees, and the exact
+  // string the PDF renders, so the two cannot disagree. null means there is no
+  // document a customer may see yet.
+  const pricingClass = classifyEstimate(estimate);
+  let customerDocument: string | null;
+
+  if (pricingClass === "contractor_pricing") {
+    // Persisted rows, the estimate's own snapshots and its currency, through
+    // calculateContractorPricing. The rows never leave the server: only the
+    // finished document does, and it carries selling amounts only.
+    const rows = await loadContractorPricingRows(estimate.id);
+    const result = contractorCustomerDocument(estimate, rows, estimateCurrency);
+    customerDocument = result.ready ? result.document : null;
+  } else if (pricingClass === "website_quote_intake") {
+    // Unpriced inbound intake has no customer document to show.
+    customerDocument = null;
+  } else {
+    // Legacy: the frozen historical representation, unchanged.
+    const pricing = await loadCustomerPricingView(estimate, business ? businessTax(business) : null);
+    customerDocument = pricing.selected.summary;
+  }
   const businessName = business?.name ?? "";
   const logoUrl = business?.logo_url ?? null;
   const showCompanyNameBelowLogo = business?.show_company_name_below_logo ?? true;
@@ -81,6 +108,20 @@ export default async function ShareEstimatePage({
         photoUrls.push(signedUrlData.signedUrl);
       }
     }
+  }
+
+  if (customerDocument === null) {
+    // Not ready: no prose, no partial pricing, no photos, no PDF. Nothing
+    // about an unfinished estimate reaches the customer or the page payload.
+    return (
+      <div className="min-h-dvh bg-[#F3E8D0] flex flex-col items-center justify-center gap-4 px-5 text-center">
+        <RowLockup variant="light" iconSize={44} textSize={36} />
+        <p className="text-[#26211B] text-lg font-semibold mt-6">This estimate isn&apos;t ready yet.</p>
+        <p className="text-[#5C4A2E] text-base">
+          {businessName ? `${businessName} is still finishing it.` : "Your contractor is still finishing it."}
+        </p>
+      </div>
+    );
   }
 
   return (
@@ -133,7 +174,7 @@ export default async function ShareEstimatePage({
             </span>
           </div>
 
-          <EstimateMarkdown content={pricing.selected.summary} />
+          <EstimateMarkdown content={customerDocument} />
 
           {/* Outside the pricing table on purpose: a currency code inside an
               amount cell would break parseCost() on a later edit. */}
@@ -160,7 +201,7 @@ export default async function ShareEstimatePage({
         <div className="mt-4">
           <DownloadPdfButton
             title={estimate.title ?? ""}
-            summary={pricing.selected.summary}
+            summary={customerDocument}
             businessName={businessName}
             logoUrl={logoUrl}
             showCompanyNameBelowLogo={showCompanyNameBelowLogo}
