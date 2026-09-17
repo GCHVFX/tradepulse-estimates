@@ -57,6 +57,7 @@ export default defineConfig({
     "estimate-prose-safety.spec.ts",
     "generation-contractor-pricing.spec.ts",
     "customer-pricing.spec.ts",
+    "contractor-pricing-delivery-lock.spec.ts",
     "estimate-deletion.spec.ts",
     "tax-rate-from-rates-not-ai.spec.ts",
     "unit-suite-completeness.spec.ts",

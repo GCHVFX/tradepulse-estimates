@@ -2,6 +2,28 @@ import { NextRequest, NextResponse } from "next/server";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
 import { buildStructuredItemsSyncPlan } from "@/lib/estimate-item-migration";
 import { deleteOwnedEstimate } from "@/lib/estimate-deletion";
+import { classifyEstimate } from "@/lib/estimate-classification";
+import { isDelivered, wouldNewlyDeliver, wouldNewlyUndeliver, type EstimateDeliveryPatch } from "@/lib/estimate-delivery";
+import { contractorPricingCompleteness } from "@/lib/estimate-pricing-server";
+
+/**
+ * Customer-visible fields this route can write. Once a contractor_pricing
+ * estimate is delivered they are locked (specs/contractor-owned-pricing.md
+ * section 12): the customer already holds a document built from these, and a
+ * later edit here would silently rewrite it without the customer ever
+ * knowing. `status`, `completed_at`, `deposit_amount` and `copied_at` are
+ * deliberately absent -- operational progression, and re-copying an already
+ * delivered link, stay allowed.
+ */
+const LOCKED_CUSTOMER_FIELDS = [
+  "title",
+  "summary",
+  "customer_name",
+  "customer_phone",
+  "customer_email",
+  "job_address",
+  "include_photos",
+] as const;
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const { supabase, applyTo } = createApiClient(request);
@@ -67,6 +89,23 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   // below) that reads body.id.
   const estimateId = body.id;
 
+  // Loaded once, up front, for every PATCH: classification and delivery
+  // gating both need it before a single field is written
+  // (specs/contractor-owned-pricing.md sections 12 and 13).
+  const { data: existing, error: lookupError } = await supabaseAdmin
+    .from("tpe_estimates")
+    .select(
+      "id, pricing_source, source, status, sent_at, copied_at, tax_rate_snapshot, deposit_percent_snapshot, deposit_threshold_snapshot"
+    )
+    .eq("id", estimateId)
+    .eq("business_id", business.id)
+    .maybeSingle();
+
+  if (lookupError) return applyTo(NextResponse.json({ error: lookupError.message }, { status: 500 }));
+  if (!existing) {
+    return applyTo(NextResponse.json({ error: "Estimate not found or access denied" }, { status: 404 }));
+  }
+
   // Only include fields present in the body — never overwrite with defaults
   const updateFields: Record<string, unknown> = {};
 
@@ -108,6 +147,84 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     return applyTo(NextResponse.json({ error: "No fields to update" }, { status: 400 }));
   }
 
+  // Classification first, before completeness or lock decisions
+  // (specs/contractor-owned-pricing.md section 2). Legacy and unpriced
+  // inbound intake never run contractor-pricing completeness or lock logic.
+  const pricingClass = classifyEstimate(existing);
+
+  if (pricingClass === "contractor_pricing") {
+    // copied_at only ever moves from null to a timestamp. Accepting a null
+    // here would let a caller clear the one field that, on a draft with no
+    // sent_at, is the entire delivered signal -- a real un-deliver path, not
+    // just an unused one.
+    if ("copied_at" in updateFields && updateFields.copied_at === null) {
+      return applyTo(NextResponse.json({ error: "copied_at cannot be cleared" }, { status: 400 }));
+    }
+
+    // Built once and shared by both branches below: the only two
+    // delivery-relevant fields this route can ever write. sent_at cannot be
+    // patched through this route at all -- there is no `if ("sent_at" in
+    // body)` handling anywhere above -- so it is never part of this patch
+    // and always keeps its existing value.
+    const deliveryPatch: EstimateDeliveryPatch = {};
+    if ("status" in updateFields) deliveryPatch.status = updateFields.status as string;
+    if ("copied_at" in updateFields) deliveryPatch.copied_at = updateFields.copied_at as string | null;
+
+    if (isDelivered(existing)) {
+      // Locked once delivered: the customer already holds a document built
+      // from these fields, and this route must never quietly rewrite it.
+      const lockedFieldsTouched = LOCKED_CUSTOMER_FIELDS.filter((field) => field in updateFields);
+      if (lockedFieldsTouched.length > 0) {
+        return applyTo(
+          NextResponse.json(
+            { error: "This estimate has already gone to the customer and its details cannot be changed" },
+            { status: 409 }
+          )
+        );
+      }
+
+      // A delivered estimate must never become undelivered through this
+      // route. status is deliberately not in LOCKED_CUSTOMER_FIELDS above
+      // (sent -> done has to stay possible), but that same freedom would let
+      // a PATCH move status away from "sent"/"done" entirely while sent_at
+      // and copied_at stay null -- flipping isDelivered() back to false and
+      // silently reopening the pricing route, the photo routes and
+      // regenerate, all of which gate on that same predicate for this
+      // estimate. wouldNewlyUndeliver() checks this with the shared
+      // predicate, not an enumeration of which status values still count as
+      // delivered.
+      if (wouldNewlyUndeliver(existing, deliveryPatch)) {
+        return applyTo(
+          NextResponse.json(
+            { error: "This estimate has already gone to the customer and cannot be marked undelivered" },
+            { status: 409 }
+          )
+        );
+      }
+    } else {
+      // A first-delivery transition through this route: anything that would
+      // flip isDelivered() from false to true -- status: "sent", status:
+      // "done" taken directly, or copied_at being written for the first
+      // time -- must pass the same completeness gate as SMS and email
+      // (specs/contractor-owned-pricing.md section 13). wouldNewlyDeliver()
+      // re-runs the one shared isDelivered() predicate against the patched
+      // fields rather than enumerating specific values, so a direct
+      // draft -> status: "done" PATCH cannot skip this check the way a
+      // status === "sent" comparison alone would.
+      if (wouldNewlyDeliver(existing, deliveryPatch)) {
+        const pricing = await contractorPricingCompleteness(estimateId, existing);
+        if (!pricing.complete) {
+          return applyTo(
+            NextResponse.json(
+              { error: "This estimate is missing pricing information and cannot be sent yet" },
+              { status: 409 }
+            )
+          );
+        }
+      }
+    }
+  }
+
   // A summary update on a structured estimate must keep tpe_estimate_items in
   // sync with the exact same edit, as part of the same save. It used to be
   // synced by a client-computed, partial per-row UPDATE matched by
@@ -121,18 +238,6 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   const isSummaryUpdate = typeof updateFields.summary === "string";
 
   if (isSummaryUpdate) {
-    const { data: existing, error: lookupError } = await supabaseAdmin
-      .from("tpe_estimates")
-      .select("id, pricing_source")
-      .eq("id", estimateId)
-      .eq("business_id", business.id)
-      .maybeSingle();
-
-    if (lookupError) return applyTo(NextResponse.json({ error: lookupError.message }, { status: 500 }));
-    if (!existing) {
-      return applyTo(NextResponse.json({ error: "Estimate not found or access denied" }, { status: 404 }));
-    }
-
     if (existing.pricing_source === "structured") {
       const plan = buildStructuredItemsSyncPlan(updateFields.summary as string, estimateId);
 
