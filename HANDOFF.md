@@ -1,14 +1,162 @@
 # TradePulse handoff
 
-Updated: 2026-09-17 (Phase 1 -- all of slices 1 through 5C -- is implemented, real-phone verified, and
-committed locally on `phase1-contractor-pricing`. The seeded phone pass found and fixed two further mobile
-layout defects beyond the state-sync fix (a dead-space gap above BottomNav on an incomplete estimate, and
-the Save-pricing button squeezing under a long delivery-lock rejection message); both were verified on the
-same real phone and are included in this commit. Both disposable production estimates used for the pass
-were deleted by Greg through the normal TradePulse UI and independently confirmed gone via read-only
-production checks -- no cleanup defect. The temporary `allowedDevOrigins` LAN entry has been removed from
-`next.config.ts`. Nothing has been pushed, deployed, or merged. Next step is the Phase 1 merge/deploy plan,
-prepared but not executed, at the end of this entry.)
+Updated: 2026-09-17 (Phase 1 -- all of slices 1 through 5C -- is merged, deployed to production, and
+smoke-verified. Production is on commit `2990e4d`, the `/new` hotfix on top of the Phase 1 merge `c99b1cf`.
+The stale-tab UI-only gap the hotfix fixed had no customer-facing exposure: every delivery route already
+blocked an incomplete `contractor_pricing` estimate server-side. Two non-blocking UI issues were found
+during the hotfix smoke and are logged as open follow-up, not Phase 1 blockers. Full detail is in "Phase 1
+production merge, hotfix, and smoke" below, which supersedes the "Nothing has been pushed, deployed, or
+merged" note this banner used to carry and the "not executed" framing on the merge/deploy plan further down
+this file.)
+
+## Phase 1 production merge, hotfix, and smoke (2026-09-17 PT)
+
+**Status: merged, deployed, hotfixed, deployed again, smoke-verified. Disposable production data fully
+cleaned up.** This entry documents what actually happened after the "Phase 1 seeded phone pass" entry and
+the merge/deploy plan below, both of which stopped at "prepared, not executed." The merge and the first
+production deployment were not recorded here or via AI Control Centre at the time they happened (see
+"AICC/durable history gap" below); this entry reconstructs them from git history and a follow-up read-only
+investigation, alongside the `/new` hotfix that followed.
+
+**1. Phase 1 merge.** Merge commit `c99b1cfdb0021932a3de7f3de6a9f2b3b90ca52d`, parents `4ef93a6` (the B3
+production hotfix, `origin/main` at merge time) and `739fb16` (the Phase 1 branch tip, this file's own
+phone-pass entry). One real conflict, in `app/api/estimates/route.ts`: both sides had independently added
+the same `deleteOwnedEstimate` import at the same anchor point (Phase 1's `49ad0ee` had re-implemented B3 as
+its own commit rather than merging `main` in), resolved to the Phase 1 version, which is a strict superset
+containing the identical B3 fix. `playwright.unit.config.ts` auto-merged with `estimate-deletion.spec.ts`
+registered twice; resolved to the Phase 1 version so it is registered once. The resulting tree was verified
+identical to `739fb16` (`git diff --stat 739fb16 c99b1cf` is empty). Correction to this file's own prior
+framing: `phase1-contractor-pricing` was pushed before this merge, and had ordinary Vercel **preview**
+deployments the whole time it was an active branch, same as any pushed branch on this project -- "nothing
+has been pushed" was never accurate for the branch itself. What had not happened before this merge was a
+**production** deployment: production stayed on `main` (`4ef93a6`) until this merge commit was pushed to
+`main`.
+
+**2. Production merge deployment.** Deployment `dpl_5Rkz2XwDWUndZXgWaGBhujQyyqDB`, commit `c99b1cf`. This
+became the known-good rollback target referenced throughout the `/new` hotfix below.
+
+**3. Production smoke failure found after the merge.** A newly generated, still-incomplete
+`contractor_pricing` estimate (`eb968b89-3333-44a7-bd89-4513768f81e0`) showed a sticky `Send Estimate`
+action on `/new`. The same estimate correctly hid Send on `/estimates/[id]`. Read-only investigation
+confirmed every actual delivery boundary already blocked it server-side: SMS, email, and the Copy Link PATCH
+all refuse an incomplete `contractor_pricing` estimate before writing delivery state or copying the URL, and
+`/share/[id]` independently refuses to render one. This was a `/new` UI-only gap, not a delivery-security
+exposure. Rollback to `4ef93a6` was deliberately not used: no customer exposure existed to roll back from,
+rolling back would have restored the pre-Phase-1 AI-authored pricing behaviour, and B1/B2 (the database-level
+RLS/Storage grant fixes from slice 5B) are DB state, not application code, so a code-level rollback would not
+have reopened them.
+
+**4. `/new` hotfix.** Commit `2990e4dffe75e187ce19cb99a8f5fc3e593ae6e3`, parent `c99b1cf` exactly (verified
+via `git diff --stat c99b1cf 2990e4d` before push: 2 files, 82 insertions, 33 deletions, no whole-file
+rewrite; `git ls-files --eol` showed both files indexed `i/lf`). Files: `app/new/page.tsx`,
+`tests/smoke/generation-contractor-pricing.spec.ts` (4 new focused regression tests). Behaviour: removed the
+`Send Estimate` button and `SendEstimateSheet` from `/new` entirely; the sticky primary-action slot now
+links to `/estimates/${savedEstimateId}` as `Add Pricing` once a save has produced an id, and renders a
+disabled, non-navigable button (no `href`) before that -- so `/estimates/undefined` or an empty estimate URL
+can never be produced. No completeness calculation was added to `/new`; the existing inline `Add Pricing`
+link inside the scrolled estimate card was left as-is. Pushed directly to `main` (`git push origin
+2990e4d:refs/heads/main`, fast-forward from `c99b1cf`, no force flags, `origin/main` re-verified unmoved
+immediately before push).
+
+**Production deployment:** `dpl_EJ6MZJ8Wm2D19eWVchYsR1BbAVTa`, state **READY**, commit `2990e4d`.
+
+**5. Hotfix production smoke.** The first post-deploy check used an already-open browser tab and still
+showed the old Send UI; a completely fresh `/new` load showed the deployed hotfix correctly, so the first
+result was a stale client bundle in that tab, not a failed deployment.
+
+Three disposable estimates were involved:
+- `eb968b89-3333-44a7-bd89-4513768f81e0` -- the original incomplete smoke estimate from item 3 above.
+- `f4de3d5e-b3ef-4cea-b35a-c855be30ad9f` -- generated during the stale-tab check, left incomplete, never
+  delivered (`sent_at` and `copied_at` both null in the pre-delete inventory).
+- `aa1ee7bb-5e07-4d36-93c0-5a8bb1424f39` -- fresh hotfix smoke estimate, used for the full Phase 1 delivery
+  walkthrough.
+
+**Verified on `aa1ee7bb`:** a fresh `/new` load showed `Add Pricing`, not `Send Estimate`; the generated
+prose contained no prices, totals, or payment terms; `Add Pricing` navigated to the saved estimate;
+the incomplete detail page hid Send with guidance reading "Add labour" and "Add materials, or enter 0".
+Pricing entered: fixed labour 100, materials cost 20 at 25% markup, GST 5%. Stored/customer-facing values:
+labour 100.00, materials 25.00, subtotal 125.00, tax 6.25, total 131.25 CAD, deposit 13.13, balance 118.12.
+Send appeared only after the complete pricing save. Copy Link succeeded; the customer share page opened
+signed out and showed the correct customer document and pricing. Repricing after delivery was rejected,
+stored pricing was unchanged, the rejection message rendered cleanly below the full-width Save pricing
+button (the Issue 2 phone-pass fix holding under a live delivered estimate), and Resend Estimate remained
+available.
+
+**6. Cleanup.** Read-only pre-delete inventory (estimate rows / item rows / photo rows / change rows /
+reminder rows / Storage objects):
+- `eb968b89`: 1 / 0 / 0 / 0 / 0 / 0.
+- `f4de3d5e`: 1 / 0 / 0 / 0 / 0 / 0.
+- `aa1ee7bb`: 1 / 2 / 0 / 0 / 0 / 0, `status='sent'`, `copied_at` set.
+
+Greg deleted all three through the normal TradePulse UI. Final read-only verification: all three now show
+zero rows across every one of those six counts, including Storage. No manual SQL cleanup was used for any of
+the three.
+
+**7. Non-blocking UI issues found during the smoke, logged as open follow-up (not Phase 1 blockers):**
+
+**A. Contractor pricing editor live preview (higher priority).** While entering labour 100, materials cost
+20, markup 25%, the form displayed "Customer sees $0.00 at 25% markup" and $0.00 summary values until Save
+pricing ran; the authoritative values were correct immediately after save. Follow-up: the slice 3 phone
+review approved the markup/totals arithmetic -- check whether the live preview worked at that time. If it
+did, this is a regression, not a newly discovered omission, and should be triaged as one. Higher priority
+than B because it directly undermines contractor confidence while entering pricing, before anything is
+wrong with the saved data.
+
+**B. Contractor editor total formatting.** The contractor editor displayed `CA$131` for an authoritative
+total of `CA$131.25`; the customer share view correctly displayed `CA$131.25`. Follow-up: check commit
+`4f2b25c` ("Simplify estimate currency display") before treating this as an accidental bug -- the
+whole-dollar contractor display may be deliberate. Even if deliberate, assess it against this project's own
+"prices specific and labelled, never vague" writing rule and the general product requirement that estimate
+pricing be exact. Lower priority than A.
+
+Neither issue was fixed as part of this documentation update or the hotfix commit it describes.
+
+**8. CRLF test fragility.** `tests/smoke/estimate-actions-send-state-sync.spec.ts` contains an exact
+multi-line string assertion (checking the `contractorDocument` ternary in `app/estimates/[id]/page.tsx`)
+that fails whenever the checked-out source file has CRLF line endings instead of the LF the string literal
+was written against. The committed git blobs are LF-only and no phone-pass code is missing -- confirmed by
+`git diff --stat 739fb16 c99b1cf` (empty) and by reproducing the exact same failure directly against
+`739fb16` itself. The failure surfaced in the new Windows integration worktree
+(`C:\Work\tools\tradepulse-integration`) because this machine's global `core.autocrlf=true` converted the
+file's LF blob content to CRLF on that fresh `git worktree add` checkout; the original worktree's copy of
+the same file is LF and the test passes there. Follow-up: add a `.gitattributes` enforcing LF, for example
+`* text=auto eol=lf`, as the root fix for the line-ending fragility found this session. Not added here.
+
+**9. Migration bookkeeping, still open and unresolved.** Repo migration filename
+`20260916000000_add_contractor_pricing_snapshots_and_save_fn.sql` vs. production's recorded version
+`20260916041903`. Not investigated or changed during the hotfix; no reconciliation attempted here either.
+
+**10. AICC/durable history gap.** The `c99b1cf` Phase 1 merge and its production deployment were not
+recorded in this file or via the AI Control Centre helper at the time they happened. AICC recording was
+deliberately skipped during that merge because the helper writes to `.ai-control-centre/activity.jsonl` and
+`.ai-control-centre/current-session.json`, both of which already carried unrelated unstaged changes in the
+original worktree (`C:\Work\tools\tradepulse-estimates`) that this and every task since have been instructed
+to preserve exactly. Those files were not touched to write this entry either.
+
+**11. Final production state (as of this entry).** Commit `2990e4d`. Deployment
+`dpl_EJ6MZJ8Wm2D19eWVchYsR1BbAVTa`. Runtime check after the smoke: no Vercel runtime errors in the last 30
+minutes. Phase 1 production smoke: **PASS**. Disposable production data: fully removed and independently
+re-verified. Original dirty worktree: untouched throughout.
+
+**12. Repo state and next steps.**
+- **Original worktree** (`C:\Work\tools\tradepulse-estimates`): still on `phase1-contractor-pricing` at
+  `739fb16`, with the same unrelated unstaged changes carried since before this merge. Its own `HANDOFF.md`
+  is this file as it stood before this entry -- stale relative to `main`. Do not start new work there until
+  it is moved onto current `main` without losing those unstaged changes.
+- **Local `main`:** stale at `cfeb851`, unrelated to and predating this merge.
+- **`origin/phase1-contractor-pricing`:** stale; fully contained in `main` as of `c99b1cf`.
+- **Integration worktree** (`C:\Work\tools\tradepulse-integration`): currently on `hotfix/new-page-send`,
+  which holds production commit `2990e4d` and will receive this HANDOFF-only commit locally.
+- **This HANDOFF commit:** local only. Not pushed as part of this task. Pushing it to `main` later triggers
+  a docs-only production deployment.
+
+**Next steps, in order, none performed as part of this entry:**
+1. Greg decides whether to push this HANDOFF commit to `main`.
+2. Fast-forward local `main` to current `origin/main`.
+3. Reconcile the original dirty worktree onto `main` while preserving all of its unrelated unstaged changes.
+4. Remove the integration worktree only after that reconciliation is complete.
+5. Start a separate small UI slice for the two non-blocking issues above: (A) live pricing preview, (B)
+   contractor total cents.
 
 ## Phase 1 seeded phone pass: two further mobile fixes, cleanup verified (2026-09-17 PT)
 
@@ -100,6 +248,12 @@ deployed, nothing merged.
 below, prepared but not executed -- awaiting Greg's explicit instruction to proceed.
 
 ## Phase 1 merge/deploy plan (prepared, not executed)
+
+**Superseded: this plan was subsequently executed.** See "Phase 1 production merge, hotfix, and smoke"
+above for what actually happened -- the merge did not go through a reviewed PR as planned below (no PR
+record exists for it), and its own pre-merge/post-deploy verification was not written to this file or to AI
+Control Centre at the time. The plan text below is left as originally written, as the historical record of
+what was prepared.
 
 **Pre-merge checks, on `phase1-contractor-pricing` before opening a PR:**
 1. `git log --oneline main..phase1-contractor-pricing` -- review every commit going in; confirm B3
