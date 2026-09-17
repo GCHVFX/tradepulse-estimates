@@ -483,3 +483,69 @@ test("the prompt asks for four sections and no business terms at all", () => {
     'For example, "If additional deterioration is found, we will discuss the added scope with you before proceeding."'
   );
 });
+
+// Production fix: /new's sticky action bar offered Send Estimate even though
+// the estimate had no pricing yet. Every customer-delivery boundary (SMS,
+// email, the copy-link PATCH, /share/[id]) already blocked an incomplete
+// contractor_pricing estimate server-side, so this was a UI-only gap: the
+// fixed bar's own Send button, separate from the scrolled-content "Add
+// Pricing" link that already existed just above it. The fix removes the
+// sticky Send action and SendEstimateSheet from /new entirely and reuses the
+// fixed slot for a link to the pricing editor instead.
+
+test("the sticky action bar on /new never renders a Send Estimate button", () => {
+  const newPage = code("app/new/page.tsx");
+
+  expect(newPage).not.toContain("Send Estimate");
+  expect(newPage).not.toContain("SendEstimateSheet");
+  expect(newPage).not.toContain("showSendSheet");
+  expect(newPage).not.toContain("setShowSendSheet");
+});
+
+test("the sticky bar's primary action is Add Pricing, linking to the estimate it just saved", () => {
+  const newPage = code("app/new/page.tsx");
+
+  // The fixed bottom bar, not the scrolled-content "Add Pricing" link that
+  // already existed inside the white estimate card -- scoped to the block
+  // that starts at the fixed positioning wrapper and ends where BottomNav is
+  // rendered for this view, so this cannot pass by matching the older link.
+  const fixedBarStart = newPage.indexOf('<div className="fixed bottom-0 left-0 right-0">');
+  const fixedBarEnd = newPage.indexOf("<BottomNav onNewClick={onNewEstimate} />", fixedBarStart);
+  expect(fixedBarStart).toBeGreaterThan(-1);
+  expect(fixedBarEnd).toBeGreaterThan(fixedBarStart);
+  const fixedBar = newPage.slice(fixedBarStart, fixedBarEnd);
+
+  expect(fixedBar).toContain("{saved && savedEstimateId ? (");
+  expect(fixedBar).toContain("href={`/estimates/${savedEstimateId}`}");
+  expect(fixedBar).toContain("Add Pricing");
+});
+
+test("Add Pricing in the sticky bar is not actionable before a savedEstimateId exists", () => {
+  const newPage = code("app/new/page.tsx");
+
+  const fixedBarStart = newPage.indexOf('<div className="fixed bottom-0 left-0 right-0">');
+  const fixedBarEnd = newPage.indexOf("<BottomNav onNewClick={onNewEstimate} />", fixedBarStart);
+  const fixedBar = newPage.slice(fixedBarStart, fixedBarEnd);
+
+  // The false branch of the saved && savedEstimateId check is a disabled
+  // button with no href at all, not a Link with a possibly-empty id -- this
+  // is what rules out /estimates/undefined, /estimates/ or any other empty
+  // identifier, rather than a client-side guard that could be skipped.
+  const falseBranch = fixedBar.slice(fixedBar.indexOf(") : ("));
+  expect(falseBranch).toContain("<button");
+  expect(falseBranch).toContain("disabled");
+  expect(falseBranch).not.toContain("href");
+  expect(falseBranch).not.toContain("Link");
+});
+
+test("EstimateViewProps carries no Send-sheet wiring for /new to accidentally reintroduce", () => {
+  const newPage = code("app/new/page.tsx");
+
+  const propsStart = newPage.indexOf("interface EstimateViewProps {");
+  const propsEnd = newPage.indexOf("}", propsStart);
+  const props = newPage.slice(propsStart, propsEnd);
+
+  expect(props).not.toContain("showSendSheet");
+  expect(props).not.toContain("setShowSendSheet");
+  expect(props).not.toContain("onSent");
+});

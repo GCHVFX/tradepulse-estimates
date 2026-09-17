@@ -10,7 +10,6 @@ import { STARTER_MONTHLY_PHOTO_LIMIT } from "@/lib/rate-limit";
 import { formatPhoneInput } from "@/lib/format-phone";
 import { Logo } from "@/app/components/logo";
 import { BottomNav } from "@/app/components/bottom-nav";
-import { SendEstimateSheet } from "@/app/components/send-estimate-sheet";
 import { PhotoSourceSheet } from "@/app/components/photo-source-sheet";
 import { CustomerDetailsBlock } from "@/app/components/customer-details-block";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
@@ -152,11 +151,8 @@ interface EstimateViewProps {
   customerEmail: string;
   jobAddress: string;
   jobTitle: string;
-  showSendSheet: boolean;
-  setShowSendSheet: (v: boolean) => void;
   onBack: () => void;
   onNewEstimate: () => void;
-  onSent: () => void;
 }
 
 interface FormViewProps {
@@ -207,11 +203,8 @@ function EstimateView({
   customerEmail,
   jobAddress,
   jobTitle,
-  showSendSheet,
-  setShowSendSheet,
   onBack,
   onNewEstimate,
-  onSent,
 }: EstimateViewProps) {
   const estimateScrollRef = useRef<HTMLElement | null>(null);
 
@@ -368,31 +361,25 @@ function EstimateView({
               Back to Description
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => setShowSendSheet(true)}
-            disabled={generating || !saved}
-            className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
-          >
-            Send Estimate
-          </button>
+          {saved && savedEstimateId ? (
+            <Link
+              href={`/estimates/${savedEstimateId}`}
+              className="w-full flex items-center justify-center bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+            >
+              Add Pricing
+            </Link>
+          ) : (
+            <button
+              type="button"
+              disabled
+              className="w-full bg-amber-500 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+            >
+              Add Pricing
+            </button>
+          )}
         </div>
         <BottomNav onNewClick={onNewEstimate} />
       </div>
-
-      <SendEstimateSheet
-        isOpen={showSendSheet}
-        onClose={() => setShowSendSheet(false)}
-        onSent={onSent}
-        estimateId={savedEstimateId ?? undefined}
-        customerPhone={customerPhone}
-        customerEmail={customerEmail}
-        title={jobTitle || undefined}
-        summary={estimate || undefined}
-        businessName={businessName || undefined}
-        logoUrl={logoUrl}
-      />
-
     </div>
   );
 }
@@ -957,7 +944,6 @@ function NewPageInner() {
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [savedEstimateId, setSavedEstimateId] = useState<string | null>(null);
-  const [showSendSheet, setShowSendSheet] = useState(false);
   const [customerDetailsSaved, setCustomerDetailsSaved] = useState(false);
   const { logoUrl, businessName, showCompanyNameBelowLogo, businessEmail, preparedBy, isPro, aiPhotoEstimatesRemaining, isLoading: profileLoading } = useBusinessProfile();
   const [jobTitle, setJobTitle] = useState("");
@@ -1253,11 +1239,8 @@ function NewPageInner() {
         customerEmail={customerEmail}
         jobAddress={jobAddress}
         jobTitle={jobTitle}
-        showSendSheet={showSendSheet}
-        setShowSendSheet={setShowSendSheet}
         onBack={handleBack}
         onNewEstimate={handleNewEstimate}
-        onSent={clearPhotos}
       />
     );
   }
