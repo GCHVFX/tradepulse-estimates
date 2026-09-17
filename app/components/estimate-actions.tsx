@@ -34,6 +34,13 @@ interface EstimateActionsProps {
   paymentStatus?: string | null;
   invoiceAmount?: number | null;
   estimateTotal?: number;
+  /** The authoritative send-readiness signal at page load: for contractor
+   * pricing, calculateContractorPricing's own `complete` (never a client
+   * guess from the total); for legacy, the same total-is-nonzero check this
+   * component has always used for it. Kept live after a pricing save by the
+   * `estimate-total-change` event ContractorPricingEditor dispatches with
+   * the server's own response -- see the effect below. */
+  estimateComplete?: boolean;
   businessHasPaymentLink?: boolean;
   justSent?: boolean;
   hasPhotos?: boolean;
@@ -42,6 +49,23 @@ interface EstimateActionsProps {
    * whether automated SMS reminders keep going out (enforced server-side
    * in app/api/cron/payment-reminders/route.ts, not here). */
   smsOptedOut?: boolean;
+}
+
+/** The event ContractorPricingEditor dispatches after a successful pricing
+ * save, and this component listens for. One name, shared by both files. */
+export const PRICING_CHANGE_EVENT = "estimate-total-change";
+
+/**
+ * Pulls the authoritative `complete` flag out of a dispatched
+ * estimate-total-change event. Deliberately hook-free and exported so its
+ * exact runtime behaviour -- not just its presence in the source -- can be
+ * exercised against a real EventTarget/CustomEvent dispatch in
+ * tests/smoke/estimate-actions-send-state-sync.spec.ts, without a DOM or a
+ * React renderer. It reads nothing but `.complete`: a total on the same
+ * detail object, present or not, never changes what this returns.
+ */
+export function readPricingComplete(event: Event): boolean {
+  return (event as CustomEvent<{ complete: boolean }>).detail.complete;
 }
 
 export function EstimateActions({
@@ -64,6 +88,7 @@ export function EstimateActions({
   paymentStatus,
   invoiceAmount,
   estimateTotal,
+  estimateComplete,
   businessHasPaymentLink,
   justSent,
   hasPhotos,
@@ -73,18 +98,27 @@ export function EstimateActions({
   const isQuoteRequest = status === "needs_review" && source === "website_quote";
   const [isConverting, setIsConverting] = useState(false);
   const [convertError, setConvertError] = useState("");
-  const [liveTotal, setLiveTotal] = useState(estimateTotal ?? 0);
+  const [liveComplete, setLiveComplete] = useState(estimateComplete ?? false);
   const [sendSheetInitialPanel, setSendSheetInitialPanel] = useState<"menu" | "email">("menu");
 
+  // ContractorPricingEditor dispatches this after every successful pricing
+  // save, carrying the server's own calculated state -- the same PUT
+  // /api/estimates/[id]/pricing response body it just received. Nothing here
+  // recomputes completeness from a total; `complete` is forwarded exactly as
+  // the server returned it, so this component and the server can never
+  // disagree about whether the estimate is ready to send. estimateTotal
+  // itself (used below for the invoice prefill) needs no live counterpart:
+  // it is a prop, not mirrored into state, so it already refreshes with the
+  // rest of this page's server data on the editor's router.refresh().
   useEffect(() => {
-    function handleTotalChange(e: Event) {
-      setLiveTotal((e as CustomEvent<number>).detail);
+    function handlePricingChange(e: Event) {
+      setLiveComplete(readPricingComplete(e));
     }
-    window.addEventListener('estimate-total-change', handleTotalChange);
-    return () => window.removeEventListener('estimate-total-change', handleTotalChange);
+    window.addEventListener(PRICING_CHANGE_EVENT, handlePricingChange);
+    return () => window.removeEventListener(PRICING_CHANGE_EVENT, handlePricingChange);
   }, []);
 
-  const isZeroTotal = !liveTotal || liveTotal <= 0;
+  const sendBlocked = !liveComplete;
 
   // This fixed bar's content is genuinely variable height: it can be one
   // 56px button or several stacked blocks (Job Done card, review-request
@@ -420,15 +454,15 @@ export function EstimateActions({
           </>
         ) : (
           <>
-            {isZeroTotal && (
+            {sendBlocked && (
               <p className="text-amber-400 text-xs text-center">Add pricing to your line items before sending.</p>
             )}
             <button
               type="button"
-              disabled={isZeroTotal}
+              disabled={sendBlocked}
               onClick={handleSendClick}
               className={`w-full font-bold text-base rounded-xl py-4 transition-colors min-h-[56px] ${
-                isZeroTotal
+                sendBlocked
                   ? "bg-zinc-800 text-zinc-500 cursor-not-allowed"
                   : "bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950"
               }`}

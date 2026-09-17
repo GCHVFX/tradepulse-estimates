@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatCurrency, type Currency } from "@/lib/currency";
 import type { ContractorPricing } from "@/lib/contractor-pricing";
+import { PRICING_CHANGE_EVENT } from "@/app/components/estimate-actions";
 import {
   addCharge,
   centsToDollars,
@@ -84,6 +85,19 @@ export function ContractorPricingEditor({
       setPricing(data.pricing);
       setForm((current) => ({ ...current, taxEdited: false }));
       setStatus("saved");
+
+      // EstimateActions lives as a sibling on this same page, not a parent,
+      // so its Send button learns about a save through this event rather
+      // than a prop -- and only ever this event: router.refresh() below
+      // re-renders the server components with fresh data, but a mounted
+      // client component's own state does not reinitialize from a changed
+      // prop without remounting, so EstimateActions would otherwise keep
+      // showing the send-gating state from before this save. `complete`
+      // here is the server's own field from this exact response, not a
+      // value recomputed from the total.
+      window.dispatchEvent(
+        new CustomEvent(PRICING_CHANGE_EVENT, { detail: { complete: data.pricing.complete } })
+      );
       router.refresh();
     } catch (error) {
       // Nothing is marked saved here: the contractor keeps their typed values

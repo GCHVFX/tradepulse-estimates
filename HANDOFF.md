@@ -1,14 +1,145 @@
 # TradePulse handoff
 
-Updated: 2026-09-17 (Phase 1 slice 5B is closed and committed on `phase1-contractor-pricing` as "Complete
+Updated: 2026-09-17 (Phase 1 slice 5C implemented, uncommitted: fixed the isZeroTotal/estimate-total-change
+staleness so the Send button reflects the PUT /pricing response immediately after a save, with no page
+reload; no mobile/field-use layout defect was found beyond that staleness, so no CSS or layout was touched.
+This is the last slice of Phase 1 -- once committed, reviewed and pushed, Phase 1 (contractor-owned pricing)
+is done. See "Phase 1 slice 5C" below for detail, and its own open-work note for one pre-existing, harmless,
+out-of-scope inconsistency found along the way.)
+
+## Phase 1 slice 5C: send-gating state-sync, and a mobile/field-use pass (2026-09-17 PT)
+
+**Status: implemented, verified with a genuine behavioural test plus targeted source checks, not
+committed.** Starting point: `24e959b` (slice 5B, closed and committed). No conflict found between
+HANDOFF.md and specs/contractor-owned-pricing.md on 5C's scope: both point at the same known issue
+(implementation note 4, and this file's own 2026-09-17 slice 5B entry) -- the isZeroTotal/estimate-total-
+change staleness -- as the one concrete item, plus general mobile/field-use polish with no other specific
+defect named anywhere. A follow-up review pass verified two things the first pass had only asserted from
+naming, and upgraded the test from pure source assertions to one that actually dispatches an event and
+observes the value change; both are recorded below.
+
+**The bug.** `ContractorPricingEditor` and `EstimateActions` are siblings on
+`app/estimates/[id]/page.tsx`, not parent/child. The only channel between them was a window
+`estimate-total-change` event, originally dispatched by `editable-estimate-body.tsx` (the legacy markdown
+editor). That component has had no caller since slice 5A unmounted it, so nothing fired the event for a
+`contractor_pricing` estimate at all: after a successful pricing save, `EstimateActions`'s Send button kept
+showing whatever send-readiness state the page had at load, until a full reload.
+
+**Proved, not assumed: `contractorDocument.ready` and `data.pricing.complete` are the same signal.**
+`contractorCustomerDocument()` (`lib/customer-pricing.ts`) returns `toCustomerPricing(rows, snapshots,
+taxLabel).ready`, and `toCustomerPricing` is `{ ready: false, ... }` whenever `!pricing.complete ||
+taxRatePercent === null`, `{ ready: true, ... }` otherwise, where `pricing =
+calculateContractorPricing(...)`. Since `calculateContractorPricing` already pushes `"tax-snapshot-missing"`
+onto `missing` (making `complete` false) whenever `taxRatePercent === null`, that OR clause never adds a
+case `pricing.complete` doesn't already cover -- `ready` is exactly `pricing.complete` for the rows and
+snapshots it was given. The PUT `/api/estimates/[id]/pricing` route computes `pricing =
+calculateContractorPricing(pricingRows, snapshots)` from the rows and snapshots the save transaction just
+wrote, and returns `pricing.complete` directly. Both call sites run the identical pure function against what
+should be the identical stored state for the same estimate (one read at page load, one read as the RPC's own
+return value immediately after the write) -- not two definitions that merely share a name.
+
+**Proved, not assumed: the `estimateTotal > 0` fallback cannot fire for a contractor_pricing estimate.**
+`const contractorDocument = isContractorPricing ? contractorCustomerDocument(...) : null;` -- `null` only
+when `!isContractorPricing`. `contractorCustomerDocument()`'s return type,
+`{ ready: true; document; totalCents } | { ready: false; missing }`, has no `null` arm, so it always hands
+back a real (truthy) object. So `contractorDocument` is truthy for every `contractor_pricing` estimate
+regardless of completeness, and `contractorDocument ? contractorDocument.ready : estimateTotal > 0` always
+takes the `.ready` branch for one -- the total-based fallback is legacy-only by construction, not by
+convention. Left as-is (changing working, provably-correct code would be scope creep here), with one
+comment-only addition at the definition site spelling out exactly this proof for the next reader, and a
+dedicated test (`tests/smoke/estimate-actions-send-state-sync.spec.ts`) pinning both halves of it
+(`ContractorCustomerDocument`'s type has no `null` arm; the `contractorDocument` assignment is exactly the
+`isContractorPricing ? ... : null` shown above).
+
+**The fix, in three files:**
+- `app/estimates/[id]/page.tsx`: added `estimateComplete`, computed as `contractorDocument ?
+  contractorDocument.ready : estimateTotal > 0` (proved above to always take the `.ready` branch for
+  contractor pricing, and to be exactly the pre-existing behaviour for legacy). Passed to `EstimateActions`
+  as a new prop.
+- `app/components/estimate-actions.tsx`: exports `PRICING_CHANGE_EVENT` (the event name, now defined once)
+  and `readPricingComplete(event)` (a small, deliberately hook-free function that pulls `.complete` out of
+  the event and nothing else) so the exact runtime value-extraction logic can be exercised directly in a
+  test without a DOM. `liveComplete` state, seeded from `estimateComplete`, updated only by
+  `readPricingComplete()`'s result -- forwarded exactly as received, never recomputed. `sendBlocked =
+  !liveComplete` replaces the old `isZeroTotal = !liveTotal || liveTotal <= 0`. The now-dead
+  `liveTotal`/`setLiveTotal` state (it fed nothing but `isZeroTotal`; the invoice-prefill further down
+  already reads the `estimateTotal` prop directly, which stays live across `router.refresh()` without
+  needing a state mirror) was removed rather than left unused.
+- `app/components/contractor-pricing-editor.tsx`: `save()` now dispatches
+  `new CustomEvent(PRICING_CHANGE_EVENT, { detail: { complete: data.pricing.complete } })` on the success
+  path, straight from the PUT response it just received, using the shared constant instead of a second
+  string literal.
+
+**Mobile/field-use polish.** Inspected `ContractorPricingEditor` and the fixed `EstimateActions` bar. Every
+input already carries `min-h-[48px]`/`min-h-[44px]` (above the 44px tap-target rule), `inputMode="decimal"`
+is already set on every numeric field, and the fixed bar's height-publishing effect
+(`--tp-estimate-action-bar-height`, `app/components/estimate-actions.tsx`) already makes `<main>`'s bottom
+padding track the bar's real height so it cannot cover editor content -- this predates 5C and was not
+touched. No layout or className changed in any of the three files this slice touched (confirmed by diff: the
+only `className`-adjacent lines are the `isZeroTotal` -> `sendBlocked` rename, not a value change). No
+concrete mobile defect beyond the state-sync bug was found, so nothing further was changed, per this slice's
+own instruction not to redesign the application without one.
+
+**Not verified: a live authenticated browser/mobile check.** `.env.local`'s `NEXT_PUBLIC_SUPABASE_URL` points
+at this project's production Supabase instance, and reaching `/estimates/[id]` requires a signed-in session
+against a real estimate. Creating one by hand would violate this project's own critical rule (`.env.local`
+runs a live Stripe key; only `signUpFreshAccount()` may create an account, and this task's own instructions
+said not to touch production data), and the task's instruction to verify in-browser was conditioned on the
+existing setup allowing it cheaply, which it does not here.
+
+**Verified instead by a genuine behavioural test plus targeted source checks.** The bug is a runtime
+state-sync claim, which a pure source-text assertion cannot actually prove -- so
+`tests/smoke/estimate-actions-send-state-sync.spec.ts`'s first test imports `PRICING_CHANGE_EVENT` and
+`readPricingComplete` for real from `app/components/estimate-actions.tsx` (not re-typed as a string pattern)
+and dispatches real `CustomEvent`s against a real `EventTarget` -- both native to this Node runtime, no
+jsdom, no new dependency -- observing the extracted value actually flip in both directions and confirming a
+stray `total` field on the same event detail changes nothing. `readPricingComplete` is deliberately
+hook-free specifically so it can run outside React's render context without an "invalid hook call"; the
+surrounding `useState`/`useEffect` wiring, which does need React, stays a source-level check, the same
+convention this file's tests have used throughout. Five further source-level tests cover: the dispatch
+wiring in `contractor-pricing-editor.tsx`; the wiring from the proven handler to `sendBlocked` and the JSX
+disabled attribute in `estimate-actions.tsx`; `estimateComplete`'s definition in `page.tsx`; the
+unreachability proof for the `estimateTotal > 0` fallback described above; and that legacy's own gating is
+byte-for-byte unchanged. `npx tsc --noEmit` clean; targeted `eslint` clean (one pre-existing, unrelated
+`<a>`-vs-`Link` error at `app/estimates/[id]/page.tsx:174`, confirmed present in `git show HEAD` before this
+slice, not fixed -- outside this slice's scope); the new suite (6 cases) plus every existing test referencing
+the four changed files -- 170 passed, the same pre-existing 3-file `unit-suite-completeness` failure noted
+throughout this branch's history, unrelated; `git diff --check` clean.
+
+**One pre-existing inconsistency noticed, not fixed -- genuinely outside 5C, recorded here as Phase-1-wide
+open work:** `app/components/editable-estimate-body.tsx` (unmounted since slice 5A) still dispatches the old
+`estimate-total-change` shape, a bare number
+(`window.dispatchEvent(new CustomEvent('estimate-total-change', { detail: total }))`), which no longer
+matches the `{ complete: boolean }` shape (now the exported `PRICING_CHANGE_EVENT` constant and
+`readPricingComplete()` helper in `app/components/estimate-actions.tsx`) `EstimateActions` expects.
+Reconfirmed dead in a follow-up pass: `EstimatePricingEditor` is the only other file that still references
+`EditableEstimateBody`, and `EstimatePricingEditor` itself has zero callers anywhere in `app/` (`grep -rl
+"EstimatePricingEditor" app` outside its own file returns nothing) -- the whole chain is unreachable from
+the live estimate detail route, which renders `ContractorPricingEditor` for contractor pricing and a
+read-only `EstimateMarkdown` for legacy, never either retired editor. Not touched, on the reviewing task's
+own instruction not to modify dead code to match a new event shape when doing so would need a client-side
+completeness inference it has no way to make honestly (it would have to guess `complete` from its own
+markdown-parsed total, exactly the second definition this slice removed). Harmless today because the file
+has zero callers; would silently misbehave if it were ever reintroduced without also updating this line.
+`EstimatePricingEditor` and the pricing-mode route are similarly unmounted and were already flagged for a
+separate cleanup in the slice 5A entry above; this is the same category of leftover, not new. Phase 1 has no
+further slice after 5C, so this is recorded as general Phase 1 cleanup debt rather than carried forward as a
+"next slice."
+
+**Not committed.** Exact next step: review this diff, commit, and decide when to push
+`phase1-contractor-pricing` and merge -- Phase 1 (slices 1 through 5C) is otherwise complete.
+
+## Phase 1 slice 5B: closed and committed (2026-09-17 PT)
+
+Slice 5B is closed and committed on `phase1-contractor-pricing` as commit `24e959b`, "Complete
 contractor-pricing delivery lock". Two review passes found and fixed three real defects before commit: a
 draft->done PATCH could skip the completeness gate; send-sms/send-email could backfill a customer contact
 field onto an already-delivered document; and PATCH could flip an already-delivered estimate's status back
 to something outside (sent, done) while sent_at/copied_at stayed null, undelivering it and reopening the
 pricing/photo/regenerate routes' own delivery locks. All three fixed, all with behavioural tests, not just
-source assertions. Not pushed. Separately: the signed-in production B2/B3 smoke on `main` has now been run
-and passed in full -- owned delete, cross-tenant delete refusal, the full photo path, and clean teardown --
-superseding the "not yet run" note below.)
+source assertions. Not pushed. Separately, the signed-in production B2/B3 smoke on `main` has been run and
+passed in full -- owned delete, cross-tenant delete refusal, the full photo path, and clean teardown --
+superseding the "not yet run" note in the detailed entries below.
 
 ## Slice 5B commit gate: un-delivery defect found and fixed, then committed (2026-09-17 PT)
 

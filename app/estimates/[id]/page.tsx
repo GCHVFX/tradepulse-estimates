@@ -142,6 +142,20 @@ export default async function EstimatePage({
       ? contractorDocument.totalCents / 100
       : 0
     : legacyPricing?.selected.total ?? 0;
+  // The authoritative send-readiness signal EstimateActions seeds its state
+  // from. For contractor pricing this is contractorDocument.ready itself
+  // (calculateContractorPricing's own `complete`, not a total-is-nonzero
+  // guess -- an explicit $0 fixed-labour job is complete and sendable).
+  // Legacy has no completeness concept of its own, so it keeps the same
+  // total-based check EstimateActions has always used for it. The
+  // `estimateTotal > 0` branch is unreachable for a contractor_pricing
+  // estimate: contractorDocument above is set to `null` exactly when
+  // `!isContractorPricing`, and contractorCustomerDocument() never returns
+  // null itself (its type is `{ ready: true, ... } | { ready: false, ... }`),
+  // so `contractorDocument` is truthy for every contractor_pricing estimate
+  // regardless of completeness, and this ternary always takes the `.ready`
+  // branch for one.
+  const estimateComplete = contractorDocument ? contractorDocument.ready : estimateTotal > 0;
 
   // Only unpaid invoiced estimates need this check -- opting out doesn't
   // matter for an estimate that was never invoiced or is already paid, and
@@ -361,6 +375,7 @@ export default async function EstimatePage({
         paymentStatus={estimate.payment_status ?? null}
         invoiceAmount={estimate.invoice_amount ?? null}
         estimateTotal={estimateTotal}
+        estimateComplete={estimateComplete}
         justSent={sent === "1"}
         businessHasPaymentLink={Boolean(business?.payment_link?.trim())}
         hasPhotos={photoUrls.length > 0}
