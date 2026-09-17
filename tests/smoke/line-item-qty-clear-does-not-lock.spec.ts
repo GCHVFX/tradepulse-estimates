@@ -25,6 +25,22 @@ import { signUpFreshAccount, cleanupTestAccount } from "./helpers";
  * field mid-edit can't flip it, and an AI row that's genuinely incomplete
  * keeps its own stated cost instead of being recomputed to zero.
  */
+/**
+ * BROWSER HALF PARKED (Phase 1 slice 4). Both cases below drive the markdown
+ * line-item editor through /new, and /new no longer has one: a generated
+ * estimate is contractor_pricing prose with no line items, and the markdown
+ * editor survives only as the legacy read path on /estimates/[id]. Re-homing
+ * these on a service-role-seeded legacy estimate belongs with the legacy
+ * display slice, not with generation.
+ *
+ * The parse-level half of bug 2 is locked without a browser in
+ * tests/smoke/estimate-line-item-editing.spec.ts ("an AI row with qty and
+ * unit but no rate is never treated as quantity-based"). What is parked here
+ * is the UI behaviour: the edit panel staying mounted through a blank field,
+ * and the collapsed summary re-rendering afterwards.
+ */
+test.skip();
+
 const RAW = `# Test Job
 
 Job summary.

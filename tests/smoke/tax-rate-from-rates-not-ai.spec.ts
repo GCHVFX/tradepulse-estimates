@@ -168,10 +168,20 @@ test("the generation prompt no longer asks the model for tax", () => {
   expect(route).not.toContain("Calculate tax as");
   expect(route).not.toContain("TAX_LABEL");
   expect(route).not.toContain("TAX_RATE");
-  expect(route).toContain("7. Pricing Summary (subtotal, total, deposit, balance)");
   expect(route).toContain("const tax = businessTax(business);");
-  expect(route).toContain("applyDeterministicDeposit(fullText, estimateCurrency, depositRule, tax)");
-  expect(route).toContain("...taxHeaders(tax)");
+
+  // Phase 1 slice 4: the prompt asks for no pricing of any kind, so the
+  // Pricing Summary section and the deterministic deposit step that had to
+  // correct it are both gone. Rates is still the only tax authority, and it
+  // now reaches the estimate as a snapshot on the row rather than as a
+  // response header for the editor on /new to price against.
+  expect(route).not.toContain("Pricing Summary");
+  expect(route).not.toContain("applyDeterministicDeposit");
+  expect(route).toContain("newGeneratedEstimateInsert({");
+
+  const record = readFileSync("lib/generated-estimate.ts", "utf8");
+  expect(record).toContain("tax_label_snapshot: input.tax.label,");
+  expect(record).toContain("tax_rate_snapshot: input.tax.rate,");
 });
 
 test("no hidden 5% or GST default remains in the tax path", () => {

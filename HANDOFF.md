@@ -1,6 +1,1380 @@
 # TradePulse handoff
 
-Updated: 2026-09-15 (Tax hotfix, spec Appendix A: the business's Rates settings are now the tax authority for every undelivered estimate, and delivered estimates render byte-identically to before. Committed, pushed, deployed, and production-verified. Production is currently serving `6f411e3`. Phase 1 has not started; run a Phase 1 grill pass against `specs/contractor-owned-pricing.md` before any implementation.)
+Updated: 2026-09-17 (Phase 1 -- all of slices 1 through 5C -- is implemented, real-phone verified, and
+committed locally on `phase1-contractor-pricing`. The seeded phone pass found and fixed two further mobile
+layout defects beyond the state-sync fix (a dead-space gap above BottomNav on an incomplete estimate, and
+the Save-pricing button squeezing under a long delivery-lock rejection message); both were verified on the
+same real phone and are included in this commit. Both disposable production estimates used for the pass
+were deleted by Greg through the normal TradePulse UI and independently confirmed gone via read-only
+production checks -- no cleanup defect. The temporary `allowedDevOrigins` LAN entry has been removed from
+`next.config.ts`. Nothing has been pushed, deployed, or merged. Next step is the Phase 1 merge/deploy plan,
+prepared but not executed, at the end of this entry.)
+
+## Phase 1 seeded phone pass: two further mobile fixes, cleanup verified (2026-09-17 PT)
+
+**Status: real-phone verified, committed.** Starting point: `dadad73` (slice 5C state-sync, closed and
+committed). Greg ran the branch locally against production Supabase over LAN (the same method as the Slice
+3 phone review: `next.config.ts`'s `allowedDevOrigins` temporarily carrying his machine's LAN IP,
+`192.168.68.55`, removed again below).
+
+**Phone pass confirmed, on the original Slice 5C fixes:** incomplete pricing showed no fixed disabled Send
+overlay; missing-input guidance was readable; labour/material pricing could be entered; Send became
+available immediately after a valid save with no reload; Copy Link delivered successfully; the delivered
+estimate showed "Resend Estimate"; attempting to reprice after delivery was correctly rejected with "This
+estimate has already gone to the customer and cannot be repriced"; the customer-facing link rendered
+correctly.
+
+**Two further defects found on the same pass, both fixed and re-verified on the same phone:**
+
+**Issue 1 -- a large empty gap above BottomNav on an incomplete estimate.** Not `flex-1`/`min-h-dvh`
+forcing viewport fill (checked and ruled out by direct flexbox reasoning: the wrapper's `min-h-dvh`
+guarantees the same total page height either way, so moving `flex-1` off `<main>` would only relocate where
+in the DOM that leftover space nominally lives, not shrink it -- same colour, same size, no visible
+difference; this was correctly diagnosed as a dead end before anything was touched). The actual cause:
+`EstimateActions`' action-bar height is published through a **callback ref**, which React only invokes on
+an actual DOM mount or unmount. An estimate that loads *directly* into the state the sticky bar is hidden
+for (a fresh incomplete `contractor_pricing` draft -- the common case) never mounts the bar's `<div>` even
+once, so the callback ref is never invoked at all, `--tp-estimate-action-bar-height` stays permanently
+unset for the whole session, and `page.tsx`'s `200px` placeholder (meant only to bridge the gap before that
+ref's first paint, for a bar that *will* render) applies indefinitely -- reserving clearance for a bar that
+was never even attempted. Fixed with a `useEffect` in `app/components/estimate-actions.tsx` keyed on the
+already-computed `showStickyActionBar` boolean, which force-sets the property to `"0px"` whenever the bar is
+hidden, independent of whether the callback ref has ever fired.
+
+**Issue 2 -- Save pricing button squeezed by a long rejection message.** The button and its status/error
+message shared one `<div className="flex items-center gap-3">` (horizontal row, no `shrink-0` on the
+button, no wrap). The delivery-lock rejection text ("This estimate has already gone to the customer and
+cannot be repriced") is long enough that flexbox's default shrink behaviour squeezed the button into a
+narrow, wrapped-text shape on a phone. Fixed in `app/components/contractor-pricing-editor.tsx`: the
+container is now `flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3` (column on mobile, the same row
+layout as before at `sm:` and up, so desktop is unchanged), and the button itself gained `shrink-0
+whitespace-nowrap` as a defensive second guard.
+
+**Files changed by this phone pass, in total (state-sync fix plus these two layout fixes):**
+`app/components/bottom-nav.tsx`, `app/components/contractor-pricing-editor.tsx`,
+`app/components/estimate-actions.tsx`, `app/estimates/[id]/page.tsx`, `playwright.unit.config.ts`,
+`tests/smoke/contractor-pricing-form.spec.ts`, `tests/smoke/estimate-actions-send-state-sync.spec.ts`,
+`tests/smoke/estimate-action-bar-safe-area-spacing.spec.ts` (new).
+
+**Disposable production data used, and its cleanup.** One business (Greg's own, pre-existing:
+`dc5438e2-cd68-4ba9-890a-17a54f219cd4`), two disposable estimates created under it for this pass, both
+deleted afterward through the normal authenticated **Delete estimate** UI action -- never by SQL, admin
+tooling, or a script:
+
+- `d1084b6d-42b6-4f18-bede-7ab53b51bc92` ("Kitchen Outlet Repair") -- used first while incomplete, then
+  completed and delivered via Copy Link (`status='sent'`, `copied_at` set 2026-09-17 04:37:32 UTC,
+  `sent_at` null) for the Issue 2 check. Pre-delete inventory: 1 `tpe_estimates` row, 2 `tpe_estimate_items`
+  rows, 0 `tpe_estimate_photos`, 0 `tpe_payment_reminders`, 0 `tpe_estimate_changes`. No customer
+  name/phone/email/address was ever entered.
+- `f0df605e-9bb5-40ee-a2bc-d2f407af6744` ("Replace Hot Water Tank in Basement") -- created specifically to
+  re-verify Issue 1 after the fix, since the first estimate could not be reverted from delivered back to
+  incomplete (delivery is irreversible by design, per the Slice 5B `wouldNewlyUndeliver` work -- confirmed
+  from source rather than assumed). Pre-delete inventory: 1 `tpe_estimates` row (`status='draft'`,
+  `copied_at`/`sent_at` both null), 1 `tpe_estimate_items` row, 0 photos, 0 reminders, 0 changes rows. Also
+  no customer contact fields entered.
+
+**Post-delete verification (read-only, both UUIDs, after Greg confirmed both UI deletions):** zero rows in
+`tpe_estimates`, `tpe_estimate_items`, `tpe_estimate_photos`, `tpe_payment_reminders` and
+`tpe_estimate_changes` for both estimate ids. Neither estimate ever had a photo row, so there was no Storage
+bucket path to check. **No cleanup defect found; both deletions verified clean.** No other estimate, business,
+or account was inspected, queried, or touched during this pass.
+
+**Temporary LAN configuration removed.** `next.config.ts`'s `allowedDevOrigins: ["192.168.68.55"]` entry
+(and the accompanying drop of the `: NextConfig` type annotation) is gone; `git diff -- next.config.ts` is
+empty against the last commit.
+
+**Verification run:** the phone-pass-relevant focused suites --
+`estimate-action-bar-safe-area-spacing.spec.ts` (4 cases, includes the new Issue 1 regression test),
+`estimate-actions-send-state-sync.spec.ts` (9 cases), `contractor-pricing-form.spec.ts` (24 cases, includes
+the new Issue 2 regression test), `bottom-nav.spec.ts`, `sms-suppression-guard.spec.ts` -- all passed (59
+total), plus `unit-suite-completeness.spec.ts`'s same pre-existing failure noted throughout this branch's
+history (3 unregistered marketing/nav specs, unrelated). `npx tsc --noEmit` clean. `eslint` on every file
+this phone pass touched -- clean except the same pre-existing, unrelated `<a>`-vs-`Link` error at
+`app/estimates/[id]/page.tsx`, confirmed present before this work. `git diff --check` clean.
+
+**Branch and commit state:** `phase1-contractor-pricing`, committed as a new commit on top of `dadad73`
+(slice 5C) and `24e959b` (slice 5B) -- neither of those commits was amended. Nothing pushed, nothing
+deployed, nothing merged.
+
+**Phase 1 (slices 1 through 5C) is now complete and real-phone verified.** Next step: the merge/deploy plan
+below, prepared but not executed -- awaiting Greg's explicit instruction to proceed.
+
+## Phase 1 merge/deploy plan (prepared, not executed)
+
+**Pre-merge checks, on `phase1-contractor-pricing` before opening a PR:**
+1. `git log --oneline main..phase1-contractor-pricing` -- review every commit going in; confirm B3
+   (`24e959b`'s delivery-lock work already carries the identical B3 fix `main` has at `4ef93a6`) is not
+   double-applied or conflicting.
+2. `npx tsc --noEmit` clean (already true as of this entry).
+3. Full unit-safe suite: `npx playwright test --config playwright.unit.config.ts` (not run this session --
+   this session ran only the focused subsets each change touched, per every task's explicit instruction not
+   to run the full suite; run it once, in full, before opening the PR).
+4. `npx eslint .` across the whole repo, not just changed files (same reasoning as above).
+5. Confirm `git diff main...phase1-contractor-pricing -- next.config.ts` is empty (no leftover LAN
+   config) and that no other dev-only or debug change rode along.
+6. Re-read `specs/contractor-owned-pricing.md`'s acceptance-test list against what actually has coverage;
+   file any gap as a fast-follow rather than blocking the merge on it if the gap is test-only, not a
+   behaviour gap.
+7. Confirm no new Supabase migration is pending: all Phase 1 migrations are already applied to production,
+   so this merge should ship application code only.
+
+**Integration into `main`:** open a PR from `phase1-contractor-pricing` into `main` (currently at `4ef93a6`,
+the B3 hotfix). Squash or preserve history per Greg's preference; either way the PR description should name
+every slice (1 through 5C) and link this HANDOFF entry. Do not fast-forward without review given the size
+of this change (Phase 1 touches pricing generation, the estimate detail page, delivery/send routes, and
+photo routes). Merge only after Greg's explicit approval.
+
+**Expected production deployment path:** this repo auto-deploys `main` to production via Vercel (the same
+path the B3 hotfix used). Merging the PR triggers that deploy automatically -- there is no separate manual
+deploy step -- so the PR merge itself is the deploy action and should not happen until Greg is ready for
+production to start serving Phase 1 code.
+
+**Minimum post-deploy smoke checks (account-free first, matching the B3 hotfix's own pattern):**
+1. `/` and a couple of public pages load with no console errors.
+2. `/estimates` and `/new` redirect signed-out to `/login` (proxy.ts unaffected by this change, but cheap to
+   confirm).
+3. An existing legacy delivered share link (the 2026-09-11 estimate referenced throughout Phase 1 planning)
+   still renders byte-for-byte the same as before -- this is the one legacy-preservation guarantee the whole
+   phase was built around.
+4. Signed in as Greg on production (real account, no throwaway signup needed): create one real (non-
+   disposable, or a deliberately-labelled test estimate Greg owns and cleans up himself) `contractor_pricing`
+   estimate, price it, confirm Send is blocked while incomplete and enables immediately on save, deliver it
+   via Copy Link, confirm the customer link renders correctly with no internal numbers, confirm re-pricing
+   after delivery is refused with the same message verified in this phase.
+5. Confirm the mobile layout fixes from this entry (no dead-space gap, no Save-button squeeze) hold on
+   production's actual deployed bundle, not just the local dev server -- production JS/CSS output can differ
+   from dev in ways that occasionally matter for exact spacing.
+
+**Rollback point:** `main` at `4ef93a6` (the current production commit, B3 hotfix). If Phase 1 needs to be
+rolled back after deploy, Vercel's own deployment history can re-promote the `4ef93a6` build directly
+(no `git revert` needed for the fastest path back); a `git revert` of the merge commit is the slower,
+code-level fallback if the Vercel promotion path is unavailable for any reason. No new migration was applied
+by this phase at merge time (all Phase 1 migrations already live in production ahead of this code), so no
+migration rollback is needed alongside a code rollback.
+
+**Not part of this plan, deliberately:** anything from Phase 2 (saved pricing standards), Phase 3
+(historical learning), Pricing Insights, or the general cleanup debt already logged elsewhere in this file
+(`EditableEstimateBody`/`EstimatePricingEditor`/pricing-mode route being unmounted-not-deleted; the dead
+event-shape mismatch in `editable-estimate-body.tsx`). None of that blocks this merge.
+
+## Phase 1 slice 5C: send-gating state-sync, and a mobile/field-use pass (2026-09-17 PT)
+
+**Status: implemented, verified with a genuine behavioural test plus targeted source checks, not
+committed.** Starting point: `24e959b` (slice 5B, closed and committed). No conflict found between
+HANDOFF.md and specs/contractor-owned-pricing.md on 5C's scope: both point at the same known issue
+(implementation note 4, and this file's own 2026-09-17 slice 5B entry) -- the isZeroTotal/estimate-total-
+change staleness -- as the one concrete item, plus general mobile/field-use polish with no other specific
+defect named anywhere. A follow-up review pass verified two things the first pass had only asserted from
+naming, and upgraded the test from pure source assertions to one that actually dispatches an event and
+observes the value change; both are recorded below.
+
+**The bug.** `ContractorPricingEditor` and `EstimateActions` are siblings on
+`app/estimates/[id]/page.tsx`, not parent/child. The only channel between them was a window
+`estimate-total-change` event, originally dispatched by `editable-estimate-body.tsx` (the legacy markdown
+editor). That component has had no caller since slice 5A unmounted it, so nothing fired the event for a
+`contractor_pricing` estimate at all: after a successful pricing save, `EstimateActions`'s Send button kept
+showing whatever send-readiness state the page had at load, until a full reload.
+
+**Proved, not assumed: `contractorDocument.ready` and `data.pricing.complete` are the same signal.**
+`contractorCustomerDocument()` (`lib/customer-pricing.ts`) returns `toCustomerPricing(rows, snapshots,
+taxLabel).ready`, and `toCustomerPricing` is `{ ready: false, ... }` whenever `!pricing.complete ||
+taxRatePercent === null`, `{ ready: true, ... }` otherwise, where `pricing =
+calculateContractorPricing(...)`. Since `calculateContractorPricing` already pushes `"tax-snapshot-missing"`
+onto `missing` (making `complete` false) whenever `taxRatePercent === null`, that OR clause never adds a
+case `pricing.complete` doesn't already cover -- `ready` is exactly `pricing.complete` for the rows and
+snapshots it was given. The PUT `/api/estimates/[id]/pricing` route computes `pricing =
+calculateContractorPricing(pricingRows, snapshots)` from the rows and snapshots the save transaction just
+wrote, and returns `pricing.complete` directly. Both call sites run the identical pure function against what
+should be the identical stored state for the same estimate (one read at page load, one read as the RPC's own
+return value immediately after the write) -- not two definitions that merely share a name.
+
+**Proved, not assumed: the `estimateTotal > 0` fallback cannot fire for a contractor_pricing estimate.**
+`const contractorDocument = isContractorPricing ? contractorCustomerDocument(...) : null;` -- `null` only
+when `!isContractorPricing`. `contractorCustomerDocument()`'s return type,
+`{ ready: true; document; totalCents } | { ready: false; missing }`, has no `null` arm, so it always hands
+back a real (truthy) object. So `contractorDocument` is truthy for every `contractor_pricing` estimate
+regardless of completeness, and `contractorDocument ? contractorDocument.ready : estimateTotal > 0` always
+takes the `.ready` branch for one -- the total-based fallback is legacy-only by construction, not by
+convention. Left as-is (changing working, provably-correct code would be scope creep here), with one
+comment-only addition at the definition site spelling out exactly this proof for the next reader, and a
+dedicated test (`tests/smoke/estimate-actions-send-state-sync.spec.ts`) pinning both halves of it
+(`ContractorCustomerDocument`'s type has no `null` arm; the `contractorDocument` assignment is exactly the
+`isContractorPricing ? ... : null` shown above).
+
+**The fix, in three files:**
+- `app/estimates/[id]/page.tsx`: added `estimateComplete`, computed as `contractorDocument ?
+  contractorDocument.ready : estimateTotal > 0` (proved above to always take the `.ready` branch for
+  contractor pricing, and to be exactly the pre-existing behaviour for legacy). Passed to `EstimateActions`
+  as a new prop.
+- `app/components/estimate-actions.tsx`: exports `PRICING_CHANGE_EVENT` (the event name, now defined once)
+  and `readPricingComplete(event)` (a small, deliberately hook-free function that pulls `.complete` out of
+  the event and nothing else) so the exact runtime value-extraction logic can be exercised directly in a
+  test without a DOM. `liveComplete` state, seeded from `estimateComplete`, updated only by
+  `readPricingComplete()`'s result -- forwarded exactly as received, never recomputed. `sendBlocked =
+  !liveComplete` replaces the old `isZeroTotal = !liveTotal || liveTotal <= 0`. The now-dead
+  `liveTotal`/`setLiveTotal` state (it fed nothing but `isZeroTotal`; the invoice-prefill further down
+  already reads the `estimateTotal` prop directly, which stays live across `router.refresh()` without
+  needing a state mirror) was removed rather than left unused.
+- `app/components/contractor-pricing-editor.tsx`: `save()` now dispatches
+  `new CustomEvent(PRICING_CHANGE_EVENT, { detail: { complete: data.pricing.complete } })` on the success
+  path, straight from the PUT response it just received, using the shared constant instead of a second
+  string literal.
+
+**Mobile/field-use polish.** Inspected `ContractorPricingEditor` and the fixed `EstimateActions` bar. Every
+input already carries `min-h-[48px]`/`min-h-[44px]` (above the 44px tap-target rule), `inputMode="decimal"`
+is already set on every numeric field, and the fixed bar's height-publishing effect
+(`--tp-estimate-action-bar-height`, `app/components/estimate-actions.tsx`) already makes `<main>`'s bottom
+padding track the bar's real height so it cannot cover editor content -- this predates 5C and was not
+touched. No layout or className changed in any of the three files this slice touched (confirmed by diff: the
+only `className`-adjacent lines are the `isZeroTotal` -> `sendBlocked` rename, not a value change). No
+concrete mobile defect beyond the state-sync bug was found, so nothing further was changed, per this slice's
+own instruction not to redesign the application without one.
+
+**Not verified: a live authenticated browser/mobile check.** `.env.local`'s `NEXT_PUBLIC_SUPABASE_URL` points
+at this project's production Supabase instance, and reaching `/estimates/[id]` requires a signed-in session
+against a real estimate. Creating one by hand would violate this project's own critical rule (`.env.local`
+runs a live Stripe key; only `signUpFreshAccount()` may create an account, and this task's own instructions
+said not to touch production data), and the task's instruction to verify in-browser was conditioned on the
+existing setup allowing it cheaply, which it does not here.
+
+**Verified instead by a genuine behavioural test plus targeted source checks.** The bug is a runtime
+state-sync claim, which a pure source-text assertion cannot actually prove -- so
+`tests/smoke/estimate-actions-send-state-sync.spec.ts`'s first test imports `PRICING_CHANGE_EVENT` and
+`readPricingComplete` for real from `app/components/estimate-actions.tsx` (not re-typed as a string pattern)
+and dispatches real `CustomEvent`s against a real `EventTarget` -- both native to this Node runtime, no
+jsdom, no new dependency -- observing the extracted value actually flip in both directions and confirming a
+stray `total` field on the same event detail changes nothing. `readPricingComplete` is deliberately
+hook-free specifically so it can run outside React's render context without an "invalid hook call"; the
+surrounding `useState`/`useEffect` wiring, which does need React, stays a source-level check, the same
+convention this file's tests have used throughout. Five further source-level tests cover: the dispatch
+wiring in `contractor-pricing-editor.tsx`; the wiring from the proven handler to `sendBlocked` and the JSX
+disabled attribute in `estimate-actions.tsx`; `estimateComplete`'s definition in `page.tsx`; the
+unreachability proof for the `estimateTotal > 0` fallback described above; and that legacy's own gating is
+byte-for-byte unchanged. `npx tsc --noEmit` clean; targeted `eslint` clean (one pre-existing, unrelated
+`<a>`-vs-`Link` error at `app/estimates/[id]/page.tsx:174`, confirmed present in `git show HEAD` before this
+slice, not fixed -- outside this slice's scope); the new suite (6 cases) plus every existing test referencing
+the four changed files -- 170 passed, the same pre-existing 3-file `unit-suite-completeness` failure noted
+throughout this branch's history, unrelated; `git diff --check` clean.
+
+**One pre-existing inconsistency noticed, not fixed -- genuinely outside 5C, recorded here as Phase-1-wide
+open work:** `app/components/editable-estimate-body.tsx` (unmounted since slice 5A) still dispatches the old
+`estimate-total-change` shape, a bare number
+(`window.dispatchEvent(new CustomEvent('estimate-total-change', { detail: total }))`), which no longer
+matches the `{ complete: boolean }` shape (now the exported `PRICING_CHANGE_EVENT` constant and
+`readPricingComplete()` helper in `app/components/estimate-actions.tsx`) `EstimateActions` expects.
+Reconfirmed dead in a follow-up pass: `EstimatePricingEditor` is the only other file that still references
+`EditableEstimateBody`, and `EstimatePricingEditor` itself has zero callers anywhere in `app/` (`grep -rl
+"EstimatePricingEditor" app` outside its own file returns nothing) -- the whole chain is unreachable from
+the live estimate detail route, which renders `ContractorPricingEditor` for contractor pricing and a
+read-only `EstimateMarkdown` for legacy, never either retired editor. Not touched, on the reviewing task's
+own instruction not to modify dead code to match a new event shape when doing so would need a client-side
+completeness inference it has no way to make honestly (it would have to guess `complete` from its own
+markdown-parsed total, exactly the second definition this slice removed). Harmless today because the file
+has zero callers; would silently misbehave if it were ever reintroduced without also updating this line.
+`EstimatePricingEditor` and the pricing-mode route are similarly unmounted and were already flagged for a
+separate cleanup in the slice 5A entry above; this is the same category of leftover, not new. Phase 1 has no
+further slice after 5C, so this is recorded as general Phase 1 cleanup debt rather than carried forward as a
+"next slice."
+
+**Not committed.** Exact next step: review this diff, commit, and decide when to push
+`phase1-contractor-pricing` and merge -- Phase 1 (slices 1 through 5C) is otherwise complete.
+
+## Phase 1 slice 5B: closed and committed (2026-09-17 PT)
+
+Slice 5B is closed and committed on `phase1-contractor-pricing` as commit `24e959b`, "Complete
+contractor-pricing delivery lock". Two review passes found and fixed three real defects before commit: a
+draft->done PATCH could skip the completeness gate; send-sms/send-email could backfill a customer contact
+field onto an already-delivered document; and PATCH could flip an already-delivered estimate's status back
+to something outside (sent, done) while sent_at/copied_at stayed null, undelivering it and reopening the
+pricing/photo/regenerate routes' own delivery locks. All three fixed, all with behavioural tests, not just
+source assertions. Not pushed. Separately, the signed-in production B2/B3 smoke on `main` has been run and
+passed in full -- owned delete, cross-tenant delete refusal, the full photo path, and clean teardown --
+superseding the "not yet run" note in the detailed entries below.
+
+## Slice 5B commit gate: un-delivery defect found and fixed, then committed (2026-09-17 PT)
+
+A second, narrower review focused on one question the first review's fixes hadn't yet closed: can PATCH
+/api/estimates ever move an *already delivered* estimate back to undelivered? It found one more real defect.
+
+**Defect 3 -- PATCH could undeliver an estimate by changing `status` alone.** The delivered branch
+(`isDelivered(existing) === true`) checked `LOCKED_CUSTOMER_FIELDS` for customer-visible content, but
+`status` is deliberately not in that list (sent -> done has to stay possible) and nothing else stopped a
+PATCH from writing `status: "draft"` (or any other value outside `sent`/`done`) on an estimate whose
+`sent_at` and `copied_at` were both null. That write would flip `isDelivered()` back to `false`, and every
+other route that gates on the same predicate for this estimate -- the pricing route, the photo routes,
+regenerate -- would then treat it as never having been delivered. A two-call sequence (PATCH to undeliver,
+then reprice or re-add photos through the other route) would have bypassed all of them.
+
+**Fix:** `lib/estimate-delivery.ts` gained `wouldNewlyUndeliver(existing, patch)`, the mirror of
+`wouldNewlyDeliver()`: applies the patch to `status`/`copied_at` and re-runs `isDelivered()`, returning true
+only when the estimate was delivered before and would not be after. Both functions now share one private
+`applyDeliveryPatch()` merge helper instead of duplicating the merge logic. `app/api/estimates/route.ts`
+builds one `deliveryPatch` object per request (shared by both branches of the `isDelivered(existing)` split)
+and, inside the already-delivered branch, rejects with 409 ("...cannot be marked undelivered") whenever
+`wouldNewlyUndeliver(existing, deliveryPatch)` is true -- checked immediately after the locked-fields check,
+before the route ever reaches `.update()`.
+
+**sent_at is not reachable through this route at all** -- confirmed by reading the request body's declared
+type and the field-construction block, neither of which has a `sent_at` branch -- so the only two
+delivery-relevant fields a caller can ever patch are `status` and `copied_at`, both covered by
+`deliveryPatch`. `copied_at` already could not be cleared (the existing 400 guard from the first review pass);
+this closes the remaining `status`-only gap.
+
+**Cross-route proof:** because the PATCH route returns before `.update()` whenever
+`wouldNewlyUndeliver()` is true, the row a subsequent call to another route reads is byte-identical to the
+still-delivered row -- there is no intermediate undelivered state for a second call to exploit. Independently,
+`tpe_save_contractor_pricing`'s own delivered check reads the identical three fields
+(`sent_at is not null or copied_at is not null or status in ('sent','done')`) and was re-run directly against
+a real disposable Postgres (`tests/smoke/contractor-pricing-route.spec.ts`'s "the transaction re-checks
+delivery, so a delivered estimate cannot be repriced") as the focused cross-route confirmation -- it still
+raises `ESTIMATE_DELIVERED` independently of the PATCH route's own guard.
+
+**New tests** in `tests/smoke/contractor-pricing-delivery-lock.spec.ts` (25 total now): `wouldNewlyUndeliver`
+exercised directly for sent->draft, done->draft (the exact review scenarios), sent->done (still allowed), a
+no-op patch, and an already-delivered-by-copied_at-or-sent_at estimate where a status-only patch correctly
+cannot undeliver it; a test proving the rejected row is never written (source-level, since this is a route
+ordering claim); a test proving PATCH has no `sent_at` field-construction path at all; plus the cross-route
+proof described above (paired with running the existing embedded-postgres pricing-route test explicitly).
+
+**Verification run:** `contractor-pricing-delivery-lock.spec.ts` (25 passed) and the single focused
+`contractor-pricing-route.spec.ts` test named above (1 passed, against a real disposable Postgres). `npx tsc
+--noEmit` clean. `eslint` on the two implementation files this fix touched (`lib/estimate-delivery.ts`,
+`app/api/estimates/route.ts`) -- clean, no new issues. `git diff --check` across the full working diff --
+clean (line-ending warnings only).
+
+**Committed as** `Complete contractor-pricing delivery lock`. Staged file set: exactly the Phase 1 slice 5B
+implementation, test and doc files below, verified against `git status` before staging that no unrelated
+pre-existing working-tree change (`.ai-control-centre/*`, `.claude/settings.local.json`, `.gitignore`,
+`AGENTS.md`, the `.bak` files, the PNG assets, `supabase/.temp/`) was included.
+
+**Slice 5B is now closed.**
+
+## Slice 5B review: two defects found and fixed before commit (2026-09-17 PT)
+
+An independent review of the uncommitted slice 5B diff (below) found two real defects, both fixed, neither
+requiring the delivery model itself to change.
+
+**Defect 1 -- PATCH's first-delivery gate missed a direct draft -> status="done" transition.** The original
+gate was `updateFields.status === "sent" || "copied_at" in updateFields`, a hand-picked enumeration of
+"first delivery" rather than a use of the shared `isDelivered()` predicate. A PATCH sending
+`{status: "done"}` directly on a still-incomplete `contractor_pricing` draft matched neither condition, so
+it skipped `contractorPricingCompleteness()` entirely and would have written `status: "done"` on an estimate
+that had never passed the gate. Fixed by adding `wouldNewlyDeliver(existing, patch)` to
+`lib/estimate-delivery.ts`: it applies the proposed `status`/`copied_at` patch to the existing state and
+re-runs `isDelivered()` against the result, so every value that flips delivery from false to true is caught
+by construction, not by enumeration. `app/api/estimates/route.ts` now gates on
+`wouldNewlyDeliver(existing, patch)` instead of the old inline check.
+
+**Defect 2 -- send-sms and send-email could backfill a customer contact field onto an already-delivered
+document.** Both routes write `customer_phone`/`customer_email` onto the estimate row when the field was
+previously empty, regardless of delivery state. `/share/[id]` renders `customer_phone`, `customer_email`,
+`customer_name` and `job_address` when present, so an estimate delivered by copy link with no phone or email
+ever entered, then later sent by SMS or email for the first time, would have had its contact field silently
+added to a document the customer might already hold -- a real violation of the customer-detail lock, not
+merely a delivery-mechanics detail. Fixed by adding a shared `isDeliveredContractorPricing(estimate)` to
+`lib/estimate-delivery.ts` (composes `classifyEstimate()` and `isDelivered()`, the same composition the
+photo routes' `deliveryLockError()` already used inline) and guarding both backfills with it:
+`send-sms`'s `phoneUpdate` and `send-email`'s `customer_email` spread now both skip the write once
+`isDeliveredContractorPricing(estimate)` is true. The photo routes' `deliveryLockError()` was updated to call
+the same shared function instead of its own inline composition, so there is one implementation of "is this a
+delivered contractor_pricing estimate" instead of three.
+
+**Consequence:** `tests/smoke/estimate-resending.spec.ts`'s `phoneUpdate` source-string assertion changed
+with the guarded expression and was updated to match, with a comment pointing at the new spec for the
+behavioural proof.
+
+**New tests, all behavioural (not source assertions) where the review asked for it:**
+`tests/smoke/contractor-pricing-delivery-lock.spec.ts` now imports `wouldNewlyDeliver`,
+`isDeliveredContractorPricing` and `isDelivered` directly from `lib/estimate-delivery.ts` and exercises them
+with plain objects -- draft -> "sent", draft -> "done" (the defect-1 case), an unrelated patch, already-sent
+-> "done", already-delivered-by-`copied_at`-alone -> "done", legacy/inbound-intake never locked -- rather
+than only grepping route source for these cases. Route-wiring claims that aren't reducible to a pure
+function (check ordering relative to a side effect, which fields a route touches at all) remain source
+assertions, consistent with the existing convention in `estimate-resending.spec.ts` and
+`generation-contractor-pricing.spec.ts`.
+
+**Verification run:** the updated `contractor-pricing-delivery-lock.spec.ts` (22 tests) and
+`estimate-resending.spec.ts` together -- all pass. A broader run adding `unit-suite-completeness`,
+`contractor-pricing-calculation`, `contractor-pricing-form`, `contractor-pricing-request`,
+`customer-pricing`, `generation-contractor-pricing`, `estimate-pricing-mode` and `estimate-deletion`
+(the B3 ownership spec, run explicitly per this review's ask) -- 128 passed, 1 pre-existing failure (the
+same three unregistered marketing/nav specs noted earlier in this file, unrelated). `npx tsc --noEmit`
+clean. `eslint` on every changed file -- the same one pre-existing error and five pre-existing warnings
+noted in the prior entry, unchanged by this review. `git diff --check` on every changed file -- clean.
+
+**Verified but not changed (already correct, traced fresh rather than assumed):** the copy-link ordering in
+`send-estimate-sheet.tsx` (PATCH awaited and checked before any clipboard write; a refusal copies nothing;
+a clipboard failure after success does not roll back or re-PATCH); the pricing-mode route (cannot touch a
+`contractor_pricing` row because its `WHERE` clause requires `pricing_source = 'structured'`); the pricing
+route's delivered lock inside `tpe_save_contractor_pricing` (raises `ESTIMATE_DELIVERED` before any row,
+snapshot or business-default write, confirmed by reading the SQL function directly); the regenerate lock in
+`app/api/generate-estimate/route.ts` (`isDelivered(existing)` checked before the title/summary-only update,
+pre-existing from slice 4); the currency snapshot (`estimateCurrencyPatch`, insert-only, one call site);
+provider-failure ordering in both send routes (the `.update()` setting `sent_at` sits after the provider
+call succeeds, inside the same try block, unchanged by this diff).
+
+**Not verified:** no live browser/account exercise of any of this, consistent with the review's instruction
+to run only unit-safe tests plus tsc/lint/diff-check.
+
+**Not committed.** This branch is now believed safe to commit on the strength of this review, but the
+decision to commit was left to Greg.
+
+## Signed-in production smoke for B2 and B3 passed (2026-09-17 PT)
+
+The production smoke described below as "not run" has since been run and passed: 1 test passed in 25.4s.
+Owned estimate delete worked, cross-tenant delete was refused, photo upload worked, the contractor-page and
+anonymous share-page photo renders both worked, photo delete worked, and test teardown completed cleanly
+(the throwaway account and every row, object and business it created were removed). The earlier failed run
+was the test checking for a photo before `include_photos` was enabled on the fixture estimate, not a
+production defect. B3 is now proven in production by a signed-in request, not just by the deployed commit
+and the account-free checks recorded below. No further action needed on this thread; the interruption that
+produced it is closed.
+
+## Phase 1 slice 5B: delivery gating and the customer-document lock (2026-09-17 PT)
+
+**Status:** the route-level enforcement slice 5B's security foundation left open is now implemented and
+locally verified. Not committed, not pushed, not deployed. Starting point: `49ad0ee` (5B security
+foundation) on `phase1-contractor-pricing`, which already carried classification
+(`lib/estimate-classification.ts`), the completeness calculation
+(`calculateContractorPricing`/`.complete`/`.missing` in `lib/contractor-pricing.ts`), the customer document
+builder (`lib/customer-pricing.ts`), the share-page "not ready" gate, the pricing-row delivery lock inside
+`tpe_save_contractor_pricing`, and the regenerate delivery lock in `/api/generate-estimate`. What was still
+open: completeness enforcement on the other delivery paths, the customer-document lock on PATCH and photos,
+and the copy-link ordering bug.
+
+**New shared helper:** `contractorPricingCompleteness(estimateId, snapshots)` in
+`lib/estimate-pricing-server.ts`. Loads the persisted rows and runs them through the same
+`calculateContractorPricing()` the share page and the pricing route already use, so a route can never
+disagree with what the customer document would say. Used by all three delivery routes below.
+
+**`PATCH /api/estimates` (`app/api/estimates/route.ts`):**
+- Now loads classification and delivery fields once, up front, for every PATCH (previously only fetched
+  inside the summary-update branch, so most PATCH calls never classified the estimate at all).
+- `contractor_pricing` and not yet delivered: a PATCH that would set `status: "sent"` or write `copied_at`
+  for the first time is refused with 409 unless `contractorPricingCompleteness()` reports `complete`.
+- `contractor_pricing` and already delivered: refuses to touch `title`, `summary`, `customer_name`,
+  `customer_phone`, `customer_email`, `job_address` or `include_photos` (`LOCKED_CUSTOMER_FIELDS`). `status`,
+  `completed_at`, `copied_at` and `deposit_amount` are deliberately not in that list -- Mark Job Done,
+  invoicing and re-copying an already-delivered link stay unaffected.
+- `copied_at` can never be written as `null` for a `contractor_pricing` estimate, delivered or not: on a
+  draft with no `sent_at`, `copied_at` alone is the entire delivered signal, and no route needs to clear it.
+- Legacy and `website_quote_intake` are classified but never gated: this route's behaviour for them is
+  unchanged.
+
+**`send-sms` and `send-email`:** both now classify the estimate and, for `contractor_pricing`, run the same
+completeness check before `claimDelivery()` -- before any suppression check, provider call or database
+write. An incomplete estimate is refused with 409 and nothing is attempted. Resend of an already-delivered
+estimate is unaffected: pricing can no longer change after delivery, so completeness is already guaranteed
+true and the check is a no-op for that case. Neither route touches `tpe_estimate_items` or recalculates
+pricing; the immutable document a resend reaches is whatever the locked rows and prose already produce.
+
+**Photo routes (`app/api/estimates/[id]/photos/route.ts`):** `POST` and `DELETE` now both call
+`deliveryLockError(estimate)` immediately after the ownership lookup, before any storage or table write. It
+refuses with 409 when the estimate is `contractor_pricing` and delivered; undelivered `contractor_pricing`
+estimates and every legacy/inbound-quote estimate are unaffected. `include_photos` itself is already covered
+by the PATCH lock above.
+
+**Copy link (`app/components/send-estimate-sheet.tsx`):** `handleCopyLink` was writing to the clipboard
+first and firing the PATCH afterwards, unawaited. Reordered to the required sequence: PATCH first, awaited;
+on a non-OK response nothing is copied and the sheet shows the server's error; only after the PATCH succeeds
+does `writeToClipboard()` run. A clipboard failure after a successful PATCH does not retry the PATCH or
+undo delivery -- it surfaces "Estimate delivered, but the link could not be copied. Try again," and a second
+click only retries the clipboard step (a second PATCH is harmless either way, since `copied_at` is not
+locked post-delivery, but the common path no longer needs one). An already-`"done"` estimate, or a sheet with
+no `estimateId`, skips the PATCH entirely, same as before.
+
+**Not touched, verified already safe:** `app/api/estimates/[id]/pricing-mode/route.ts` writes only under
+`.eq("pricing_source", "structured")`, which a `contractor_pricing` estimate can never match, so it cannot
+touch one regardless of delivery state. `lib/currency-db.ts`'s currency snapshot is insert-only, so section
+12's currency lock has nothing to build (already noted in the spec's implementation notes).
+
+**Tests:** `tests/smoke/contractor-pricing-delivery-lock.spec.ts`, 12 cases, all unit-safe (static source
+assertions against the routes above, no browser, no live account, no database) -- the same convention
+already used by `tests/smoke/estimate-resending.spec.ts` and `tests/smoke/generation-contractor-pricing.spec.ts`
+for route wiring a live-account test would otherwise be needed for. Registered in
+`playwright.unit.config.ts`. Covers: PATCH classifies before gating; PATCH refuses to deliver an incomplete
+estimate via `status='sent'` or `copied_at`; PATCH cannot clear `copied_at`; the locked-field list is exactly
+right (and status/completed_at/copied_at/deposit_amount are confirmed absent from it); send-sms and
+send-email check completeness before `claimDelivery`; neither touches `tpe_estimate_items` or recalculates;
+copy link PATCHes and awaits before any clipboard write, and a refusal returns before the clipboard step;
+a clipboard failure never triggers a second PATCH; both photo routes check the lock before any storage or
+table write; legacy/inbound-quote estimates are classified but never gated; B3 ownership deletion is
+untouched.
+
+**Verification run:**
+- `npx playwright test --config playwright.unit.config.ts tests/smoke/contractor-pricing-delivery-lock.spec.ts`
+  -- 12 passed.
+- The same run plus `unit-suite-completeness`, both `contractor-pricing-*` specs, `customer-pricing`,
+  `generation-contractor-pricing`, `estimate-resending` and `estimate-pricing-mode` -- 124 passed, 1 failed.
+  The failure is `unit-suite-completeness`'s pre-existing one (three unregistered marketing/nav specs --
+  `nav-wordmark-no-crowding.spec.ts`, `trade-tabs-mobile-overflow.spec.ts`,
+  `trade-tabs-scroll-affordance.spec.ts` -- already noted in this file's 2026-09-16 B3 hotfix section),
+  unrelated to this change and unaffected by it.
+- `npx tsc --noEmit` -- clean, no errors.
+- `npx eslint` on the 6 changed source files -- 1 pre-existing error (`app/api/send-sms/route.ts:152`,
+  `let formattedPhone` should be `const`, confirmed present in `git show HEAD` before this change) and 5
+  pre-existing unused-prop warnings in `send-estimate-sheet.tsx`, neither introduced by this diff.
+- `git diff --check` on the 7 changed files -- clean (line-ending warnings only, from this repo's own CRLF
+  normalization, not a whitespace error).
+
+**Not verified:** no browser or live-account exercise of the new gating (a real send, a real copy-link
+click, a real photo upload against a delivered estimate) -- consistent with this task's instruction to run
+only the focused unit-safe tests plus tsc/lint/diff-check, not the full Playwright suite or a live smoke.
+
+**Not committed.** Exact next step: review the diff, commit, and decide whether slice 5C (client-side
+completeness UI beyond the existing zero-total Send-button disable, and the `isZeroTotal`/`estimate-total-
+change` staleness noted below) is worth doing before this branch is pushed.
+
+**One pre-existing gap noticed, not fixed (out of scope for this task):** `EstimateActions`'s `isZeroTotal`
+still comes from a `liveTotal` state seeded once from the `estimateTotal` prop and updated only by a window
+`estimate-total-change` event that `ContractorPricingEditor` never dispatches (only the retired
+`editable-estimate-body.tsx` still does, for the legacy read-only view, which no longer renders an editor at
+all). After saving pricing, `ContractorPricingEditor` calls `router.refresh()`, which gives the server
+component a fresh `estimateTotal`, but `EstimateActions`'s own `liveTotal` state does not resync to a
+changed prop without a remount. Net effect: the Send button's disabled state can go stale after a pricing
+edit until the page is reloaded. This is a UI staleness issue only -- every route above enforces completeness
+server-side regardless of what the button shows -- so it was left alone rather than expanding this task into
+slice 5C UI work.
+
+## B3 production hotfix deployed, and migration version bookkeeping (2026-09-16 PT)
+
+**Migration bookkeeping (Phase 1 branch, local only).** The security migration and its rollback were renamed
+from `20260916160000_...` to production's recorded version:
+`supabase/migrations/20260916155102_revoke_browser_writes_on_estimate_tables_and_photos.sql` and
+`supabase/rollbacks/20260916155102_revoke_browser_writes_on_estimate_tables_and_photos.rollback.sql`.
+Before the rename the local file was byte-identical to the statement production recorded (md5 `22a62697...`,
+4,086 bytes). After it, the comment-stripped, whitespace-normalized SQL still matches exactly (md5
+`1d3820d7...`, same 9 statements, same per-statement md5s); the only change in each file is the one comment
+line naming the other file. The security-foundation commit was amended from `6d4728c` to
+`49ad0eeed3a4b91da3f9437e5a1562e074c3d6f1`. No database change was made, and production migration history
+still ends at `20260916155102`.
+
+**B3 hotfix on `main`.** Branch `hotfix/estimate-delete-ownership` from `origin/main` `3073774`, built in a
+separate worktree (since removed) so this branch's working tree was untouched. `app/api/estimates/route.ts`
+on `main` was byte-identical to this branch's pre-fix file, so the fix transferred as an isolated copy with
+no Phase 1 code: `app/api/estimates/route.ts`, `lib/estimate-deletion.ts` (no imports),
+`tests/smoke/estimate-deletion.spec.ts`, and one registration line in `playwright.unit.config.ts`.
+
+- Commit `4ef93a6aa562936bd602d03c1b2658e9cfb9e97d` "Fix estimate delete ownership check", parent `3073774`.
+- Verified on `main` before pushing: estimate-deletion spec 7 passed; `npx tsc --noEmit` clean; `npx eslint`
+  on the 3 changed code files clean; `git diff --check` clean (new files included);
+  `unit-suite-completeness` fails only on its 3 pre-existing unregistered marketing specs, so the new spec is
+  registered.
+- Pushed `hotfix/estimate-delete-ownership`, then fast-forwarded `main` (`3073774..4ef93a6`), the same linear
+  path the tax hotfix used. `main` is exactly one commit, 4 files, on top of its prior state.
+- Vercel auto-deployed from GitHub: production deployment `dpl_2dw9nj1UPqemjDgrnrC6kWAAXAmQ`, **READY**,
+  `githubCommitSha` `4ef93a6`, ref `main`, aliased to `tradepulse-estimates.com` and every alias domain, no
+  alias error. (Pushing the branch also built a preview, `dpl_EeMKchwavH3DNQFdHTJq9Qr7ZmJ9`.)
+
+**Production checks run after deploy (no account needed, no side effects):**
+- `DELETE /api/estimates?id=<random uuid>`, unauthenticated: `401 Unauthorized`.
+- Anonymous `/share/1e8facd4-...` (Circuit & Co test estimate): 200, `<main>` byte-identical to the capture
+  taken before the hotfix.
+- `/estimates` signed out: `307` to `/login?next=/estimates`.
+- B1 and B2 still closed (grants, the three SELECT-only policies, `logos`-only Storage write policies,
+  private photo bucket). No migration since `20260916155102`; estimate counts and md5 fingerprint unchanged.
+
+**Not run: the signed-in production smoke.** Owned delete, non-owned refusal as a signed-in user, the
+estimates list signed in, and the full B2 photo path (upload through the app route, metadata row, Storage
+object, contractor-page render, anonymous share-page render, delete through the app route) all need a
+signed-in account. The only sanctioned way to get one is `signUpFreshAccount()`, which creates a real Auth
+user and a live Stripe Customer and trial Subscription, and which refuses production unless
+`ALLOW_PRODUCTION_SIGNUP_SMOKE` is set. Creating that account was left to Greg. The spec is written and
+compiles (`--list`), at `build/production-smoke/b3-b2-production.spec.ts` with
+`build/production-smoke/production-smoke.config.ts` (git-ignored). It creates one throwaway Pro account,
+uses a synthetic ownerless business for the non-owned estimate, and removes every row, object and the
+account in `finally`. Run from this repository with:
+
+```bash
+ALLOW_PRODUCTION_SIGNUP_SMOKE=1 npx playwright test --config build/production-smoke/production-smoke.config.ts
+```
+
+**B3 is fixed in production** by the deployed commit, which is proven by the deployment metadata, the unit
+tests of the exact deployed code, and the account-free checks. It has not yet been exercised in production
+by a signed-in request. This Phase 1 branch already carries the identical fix (`49ad0ee`), so it keeps B3
+protection when it lands; the route, helper and spec are byte-identical on both.
+
+**Exact next step:** run the production smoke above. Then return to `phase1-contractor-pricing` for the
+remaining Slice 5B work.
+
+## Phase 1 slice 5B security foundation: B1 and B2 closed in production, B3 fixed locally (2026-09-16 PT)
+
+**Status:** security foundation only. B1 and B2 are **closed in production** and verified. B3 is fixed on
+`phase1-contractor-pricing` but **still live in production** until a separate hotfix on `main` is deployed.
+The remaining 5B work (completeness gating, send and copy-link enforcement, delivery locks, photo and
+customer-detail locking, legacy restrictions, UI) has **not** been started. Branch not pushed; no
+application code deployed.
+
+- **Starting commit:** `4a7f447051bfb97a9434b565bff533ec45066880` (final amended 5A).
+- **Deployed production commit audited:** `6f411e3`. (`origin/main` is at `3073774`, a HANDOFF-only commit
+  after it.)
+
+### Pre-apply checks (all passed before anything was applied)
+
+- **Deployed browser-write audit at `6f411e3`:** the browser Supabase client is constructed in
+  `profile-form.tsx`, `subscribe-sign-out.tsx`, `app/new/page.tsx` and `reset-password/page.tsx`. Its uses are
+  `auth.signOut`, `auth.getUser`, `auth.onAuthStateChange`, `auth.updateUser`, and one Storage write:
+  `profile-form.tsx` removing `logos/${userId}/logo`. No browser code writes `tpe_estimates`,
+  `tpe_estimate_items`, `tpe_estimate_photos` or `tpe-estimate-photos`. All 54 deployed accesses to those
+  tables and that bucket, and every deployed `.rpc(`, go through `supabaseAdmin`. Logo upload is server-side
+  (`/api/upload-logo`, service-role key).
+- **Deployed `/share/[id]` and PDF auth context:** the estimate, business, photo rows, pricing
+  (`loadCustomerPricingView`, a `server-only` module), currency and signed photo URLs are all read through
+  `supabaseAdmin`. The PDF is built in the browser by `lib/generate-pdf.ts` from page props; its only network
+  calls fetch the public `logos` URL and signed photo URLs, and neither is subject to RLS or these policies.
+  **No anonymous customer read depends on any grant or policy this migration changes.**
+- **Rollback prepared and proven** by a production round-trip dry run in one transaction, rolled back by a
+  raised exception: forward migration, then rollback, then comparison. `restored_equals_before = true` for
+  all 6 affected policies and all 63 grants, and `postgres` can alter the `storage.objects` policies (that
+  table is owned by `supabase_storage_admin`).
+- **Forward migration reviewed** from that dry run's forward-state output before the real apply.
+
+### Migration
+
+- **Forward:** `supabase/migrations/20260916155102_revoke_browser_writes_on_estimate_tables_and_photos.sql`.
+  Applied to production (`fctequqcwxyhmnjgxixg`) through `apply_migration`, registered as
+  `20260916155102 revoke_browser_writes_on_estimate_tables_and_photos`. The repo filenames use that exact
+  version, so local and production migration history match. They were first committed as
+  `20260916160000_...` and renamed before anything was pushed; production's recorded statement is
+  byte-identical to the file as applied, and the rename changed only the comment line that names
+  the rollback file.
+- **Manual rollback, not a migration:**
+  `supabase/rollbacks/20260916155102_revoke_browser_writes_on_estimate_tables_and_photos.rollback.sql`. It
+  lives outside `supabase/migrations/`, so it can never be applied as a forward migration. It deliberately
+  reopens B1 and B2; run it only to restore service.
+
+**B1 grants, before to after** (`anon` and `authenticated`, on each of `tpe_estimates`, `tpe_estimate_items`,
+`tpe_estimate_photos`): `DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE` to
+`REFERENCES, SELECT, TRIGGER`. `service_role` unchanged (all seven).
+
+**B1 policies, before to after:**
+- `tpe_estimates_owner_access` (PERMISSIVE, `public`, `ALL`, USING and WITH CHECK
+  `business_id IN (SELECT tpe_businesses.id FROM tpe_businesses WHERE tpe_businesses.owner_user_id = (SELECT auth.uid()))`)
+  replaced by `tpe_estimates_owner_select` (PERMISSIVE, `authenticated`, `SELECT`, same USING, no WITH CHECK).
+- `tpe_estimate_items_owner_access` and `tpe_estimate_photos_owner_access` (PERMISSIVE, `public`, `ALL`,
+  `estimate_id IN (SELECT e.id FROM tpe_estimates e JOIN tpe_businesses b ON b.id = e.business_id WHERE b.owner_user_id = (SELECT auth.uid()))`)
+  replaced by `tpe_estimate_items_owner_select` and `tpe_estimate_photos_owner_select` (`authenticated`,
+  `SELECT`, same USING).
+
+**B2 Storage policies, before to after** (`storage.objects`, role `authenticated`):
+- `tpe: owners can upload their own files` (INSERT) WITH CHECK
+  `bucket_id = ANY (ARRAY['logos','tpe-estimate-photos']) AND (storage.foldername(name))[1] = auth.uid()::text`
+  to `bucket_id = 'logos' AND (storage.foldername(name))[1] = auth.uid()::text`.
+- `tpe: owners can delete their own files` (DELETE) USING: the same change.
+- `tpe: owners can view their own files` (SELECT), the Portfolio policies, and both buckets' public/private
+  settings (`tpe-estimate-photos` private, `logos` public): unchanged. Still 11 policies on `storage.objects`.
+
+**Rollback SQL, verbatim:**
+
+```sql
+-- MANUAL ROLLBACK. NOT A MIGRATION. Do not move this file into
+-- supabase/migrations/, and do not apply it unless the forward migration below
+-- has to be undone:
+--
+--   supabase/migrations/20260916155102_revoke_browser_writes_on_estimate_tables_and_photos.sql
+--
+-- It restores the exact pre-change state captured from production on
+-- 2026-09-16 immediately before that migration was applied, and it deliberately
+-- reopens blockers B1 and B2 (browser writes to estimate tables, and browser
+-- delete-then-upload of estimate photos). Run it only to restore service, in
+-- one transaction, from the Supabase SQL editor or an equivalent postgres
+-- session.
+
+begin;
+
+-- ── B1: restore the browser write grants ────────────────────────────────────
+
+grant insert, update, delete, truncate
+  on public.tpe_estimates, public.tpe_estimate_items, public.tpe_estimate_photos
+  to anon, authenticated;
+
+-- ── B1: restore the original FOR ALL owner policies ─────────────────────────
+
+drop policy if exists tpe_estimates_owner_select on public.tpe_estimates;
+create policy tpe_estimates_owner_access
+  on public.tpe_estimates
+  as permissive
+  for all
+  to public
+  using (
+    business_id in (
+      select tpe_businesses.id
+        from public.tpe_businesses
+       where tpe_businesses.owner_user_id = (select auth.uid() as uid)
+    )
+  )
+  with check (
+    business_id in (
+      select tpe_businesses.id
+        from public.tpe_businesses
+       where tpe_businesses.owner_user_id = (select auth.uid() as uid)
+    )
+  );
+
+drop policy if exists tpe_estimate_items_owner_select on public.tpe_estimate_items;
+create policy tpe_estimate_items_owner_access
+  on public.tpe_estimate_items
+  as permissive
+  for all
+  to public
+  using (
+    estimate_id in (
+      select e.id
+        from public.tpe_estimates e
+        join public.tpe_businesses b on b.id = e.business_id
+       where b.owner_user_id = (select auth.uid() as uid)
+    )
+  )
+  with check (
+    estimate_id in (
+      select e.id
+        from public.tpe_estimates e
+        join public.tpe_businesses b on b.id = e.business_id
+       where b.owner_user_id = (select auth.uid() as uid)
+    )
+  );
+
+drop policy if exists tpe_estimate_photos_owner_select on public.tpe_estimate_photos;
+create policy tpe_estimate_photos_owner_access
+  on public.tpe_estimate_photos
+  as permissive
+  for all
+  to public
+  using (
+    estimate_id in (
+      select e.id
+        from public.tpe_estimates e
+        join public.tpe_businesses b on b.id = e.business_id
+       where b.owner_user_id = (select auth.uid() as uid)
+    )
+  )
+  with check (
+    estimate_id in (
+      select e.id
+        from public.tpe_estimates e
+        join public.tpe_businesses b on b.id = e.business_id
+       where b.owner_user_id = (select auth.uid() as uid)
+    )
+  );
+
+-- ── B2: restore both buckets on the owner Storage write policies ────────────
+
+alter policy "tpe: owners can upload their own files"
+  on storage.objects
+  with check (
+    bucket_id = any (array['logos'::text, 'tpe-estimate-photos'::text])
+    and (storage.foldername(name))[1] = (auth.uid())::text
+  );
+
+alter policy "tpe: owners can delete their own files"
+  on storage.objects
+  using (
+    bucket_id = any (array['logos'::text, 'tpe-estimate-photos'::text])
+    and (storage.foldername(name))[1] = (auth.uid())::text
+  );
+
+commit;
+```
+
+### Verification after apply (production)
+
+- **Final state SQL:** grants, policies, bucket flags and the migration registration exactly as above.
+- **B1 probe** (one transaction as `authenticated` with a real owner's uid, synthetic delivered
+  `contractor_pricing` estimate, rolled back by a raised exception):
+  - owner SELECT of its estimate, pricing row and photo row returns 1, 1 and 1;
+  - owner UPDATE, INSERT and DELETE on all three tables each fail with `42501 permission denied`;
+  - another authenticated user: SELECT returns 0/0/0, UPDATE is denied;
+  - `anon`: SELECT returns 0, and UPDATE, INSERT and DELETE are denied;
+  - `service_role`: update estimate 1; insert, update and delete items 1, 2, 2; insert and delete photos 1, 2;
+    delete estimate 1.
+- **B2 probe at the policy layer** (same approach on synthetic `storage.objects` rows, with
+  `storage.allow_delete_query` set exactly as the Storage API sets it):
+  - owner on `tpe-estimate-photos`: delete removes 0 rows, upload is refused with `42501` (RLS), overwrite
+    updates 0 rows, and the synthetic delivered photo is still present and unchanged. **Delete-then-re-upload
+    at an existing path is impossible.**
+  - owner on `logos`: upload allowed, delete removes 1 row; upload into another user's folder refused.
+  - `service_role`: upload allowed, delete removes 1 row.
+- **Live Storage API probe** on one disposable object (`tpe-estimate-photos/zz-security-probe-<uuid>/probe.txt`):
+  service-role upload succeeded; anon upload and anon upsert at the same path were refused by RLS; anon
+  remove returned 0 removed and the object remained; service-role remove removed 1; nothing left in the
+  folder, and 0 `zz-security-probe-%` objects remain in `storage.objects`.
+- **Anonymous delivered legacy share link** (`1e8facd4-00a6-4689-a287-ed39e1bd0896`, a Circuit & Co test
+  estimate, structured legacy, sent, with a logo): curl before and after the migration both returned 200 at
+  33,927 bytes, and the rendered `<main>` is **byte-identical** (10,320 bytes). In the in-app browser, with no
+  auth cookie or stored token: rendered, Pricing Summary and Total present, 20 amounts, Download PDF present,
+  public logo URL fetched `200 image/png`.
+- **Anonymous PDF:** clicking Download PDF generated one `application/pdf` blob of 1,169,944 bytes with no
+  errors. The save was intercepted in-page, so no file was written.
+- **Data unchanged:** probes left 0 rows or objects; `tpe_estimates` and `tpe_estimate_items` md5 fingerprints
+  equal their values from before this work; counts 15 businesses, 18 estimates, 58 items, 0 photo rows.
+- **Supabase security advisor after DDL:** nothing new and nothing about these tables or Storage. Existing
+  findings: INFO `rls_enabled_no_policy` on `tpe_delivery_claims`, `tpe_outreach_clicks`,
+  `tpe_photo_upload_reservations`, `tpe_rate_limits`, `tpe_sms_suppressions` (service-role-only tables, so
+  deny-all is intended); WARN `function_search_path_mutable` on `tpe_save_contractor_pricing` (from Slice 2;
+  worth pinning `search_path` the way the other functions do, as a separate change); WARN leaked password
+  protection disabled (Auth setting).
+
+### B3
+
+`DELETE /api/estimates` now calls `deleteOwnedEstimate()` in the new `lib/estimate-deletion.ts`. It loads the
+estimate by id **and** the caller's business id first, returns `404 Estimate not found or access denied`
+before touching anything if that fails, and only then removes Storage objects (paths read from the authorized
+estimate's own photo rows), photo rows, change log and payment reminders, then the parent. Child-deletion
+failures stay non-fatal, as before. The DELETE handler was byte-identical on `origin/main`, `6f411e3` and this
+branch before the change. `tests/smoke/estimate-deletion.spec.ts` (7 cases, registered in the unit config)
+covers: the owner still deletes everything; a foreign id gets 404 and its estimate, photo rows, Storage
+objects, change rows and reminders all survive; the ownership check is the only call made on refusal; a
+missing id and a failed lookup delete nothing; children use the authorized id; and a source check that the
+route deletes nothing before the helper.
+
+**B3 is still live in production** (`6f411e3`). Next: reproduce the helper, route change and spec on `main` as
+a separate hotfix, verify it there, and deploy only on Greg's instruction.
+
+### Local verification
+
+- `npx playwright test --config playwright.unit.config.ts estimate-deletion.spec.ts`: 7 passed.
+- `npx playwright test --config playwright.unit.config.ts`: 661 passed, 2 failed. Both are the same two
+  failures present before Slice 4 (`password-reset-canonical-host`, `unit-suite-completeness` naming the
+  three old marketing specs).
+- `npx tsc --noEmit`: clean. `npx eslint` on the changed application and test files: clean.
+  `git diff --check`: clean.
+
+### Not verified
+
+- No live Storage API call as a real *authenticated* user: that needs a real session, and creating an auth
+  user in production fires the signup webhook. The authenticated case is proven at the policy layer
+  (role `authenticated` plus JWT claims, the same evaluation PostgREST and the Storage API perform); the live
+  API probe covered `anon` and `service_role`.
+- Photo rendering on a delivered estimate: no estimate in production has a photo row.
+- The generated PDF was not saved to disk or opened; generation was verified by the blob.
+
+**Exact next step:** review this checkpoint. Then, on Greg's instruction, prepare the B3 hotfix on `main`
+(see above). The remaining 5B delivery-lock implementation follows the write-surface inventory below and has
+not started. Do not start 5C.
+
+## Phase 1 slice 5B: BLOCKED at the write-surface enumeration (2026-09-16 PT)
+
+> **Later the same day:** B1 and B2 below were closed in production and B3 fixed on this branch by the security
+> foundation above. B3 remains live in production. This section is kept as the full write-surface inventory
+> for the remaining 5B work.
+
+**Status: BLOCKED. No 5B lock code was written and there is no 5B commit.** 5B stopped at its mandatory
+enumeration because authenticated browser sessions can write customer estimate state directly, around any
+route-level lock. Nothing pushed, nothing deployed. No policy, grant, bucket or function was changed.
+
+- **Final amended 5A commit:** `4a7f447051bfb97a9434b565bff533ec45066880` (the 5A payload-verification note
+  amended into the former `e84a297`; never pushed).
+- **5B starting commit:** `4a7f447`.
+
+### The blockers
+
+**B1. Table RLS lets an owner rewrite, reprice and un-deliver a delivered estimate directly.** Production
+`tpe_estimates`, `tpe_estimate_items` and `tpe_estimate_photos` each have RLS enabled (not forced) and one
+PERMISSIVE policy (`tpe_estimates_owner_access`, `tpe_estimate_items_owner_access`,
+`tpe_estimate_photos_owner_access`) for role `public`, command `ALL`. Its USING and WITH CHECK are ownership
+only: the estimate's business `owner_user_id = auth.uid()`. There is no delivery condition. `anon` and
+`authenticated` hold INSERT, SELECT, UPDATE, DELETE, TRUNCATE, REFERENCES and TRIGGER on all three tables.
+The browser client ships the anon key, so a signed-in contractor can call `.from(...).update/insert/delete`
+from the console.
+
+Demonstrated, not inferred: a single transaction, rolled back by a raised exception, ran as role
+`authenticated` with `auth.uid()` set to a real owner. Against a synthetic delivered `contractor_pricing`
+estimate it updated `summary`, customer name/phone/email/address, `include_photos`, `currency` and the tax and
+deposit snapshots (1 row); updated, inserted and deleted pricing rows (1/1/2); inserted and deleted a photo
+row (1/1); and un-delivered the estimate (`status='draft'`, `sent_at` and `copied_at` cleared, 1 row).
+Controls: another authenticated user updated 0 rows and `anon` updated 0, so RLS was in force. Afterwards 0
+probe rows exist and the full-table md5 fingerprints of `tpe_businesses`, `tpe_estimates` and
+`tpe_estimate_items` are unchanged.
+
+**B2. Storage lets an owner replace a delivered photo's bytes at the same path.** Bucket
+`tpe-estimate-photos` is private. `storage.objects` has, for role `authenticated` on
+`bucket_id IN ('logos','tpe-estimate-photos')` with `(storage.foldername(name))[1] = auth.uid()`:
+`tpe: owners can upload their own files` (INSERT) and `tpe: owners can delete their own files` (DELETE), plus
+a matching SELECT policy. There is no UPDATE policy, so an upsert or move over an existing object is refused,
+but DELETE followed by INSERT at the same name is allowed. In-app photos are stored at
+`${user.id}/${estimateId}/${filename}` (`app/api/estimates/[id]/photos/route.ts`), so the first folder is the
+owner's uid and the path is fully predictable: the owner knows their uid and the estimate id, and can read
+`storage_path` from their own `tpe_estimate_photos` rows. The row stays unchanged, no route runs, and the
+share page (and the detail page) call `createSignedUrl(storage_path, ...)` on every render, so the next
+signed URL serves the replacement bytes. This one is proven from the policy text and the path code, **not
+exercised**: a real Storage write cannot be rolled back. Production currently has 14 orphaned objects in the
+bucket and 0 photo rows, so no live delivered photo is exposed today; every future in-app photo would be.
+
+**B3. `DELETE /api/estimates?id=` deletes another business's estimate children (pre-existing, cross-tenant).**
+Before its business-scoped parent delete, it removes the estimate's Storage objects, `tpe_estimate_photos`
+rows, `tpe_estimate_changes` and `tpe_payment_reminders` through the service role, scoped only by
+`estimate_id`. Any signed-in user who knows an estimate id (every share link carries it) can wipe another
+business's photos and reminders. The parent delete then matches 0 rows and the route still returns
+`success: true`. Found during the enumeration; not fixed, because 5B route changes are on hold.
+
+**No RPC bypass.** Every function that writes these tables is SECURITY INVOKER with EXECUTE granted only to
+`postgres` and `service_role`: `tpe_save_contractor_pricing` (items and estimates; re-checks ownership and
+delivery under a row lock), `tpe_convert_estimate_to_structured` (items and estimates; no application call
+site since Slice 4; not browser-reachable), `tpe_delete_business_account_data` (whole-account wipe, account
+deletion only). `reserve_estimate_photo_upload`, `claim_delivery`, `mark_delivery_sent`,
+`claim_estimate_generation`, `release_*`, `begin_business_deletion` and `take_rate_limit` write only their own
+claim, reservation or rate-limit tables. `PUBLIC`, `anon` and `authenticated` hold EXECUTE on none of them.
+There are no non-internal triggers on the three tables.
+
+### Smallest proposed security fixes (NOT applied; for review)
+
+1. **Tables:** `revoke insert, update, delete, truncate on public.tpe_estimates, public.tpe_estimate_items,
+   public.tpe_estimate_photos from anon, authenticated;` as a committed migration. Every application write
+   already uses `supabaseAdmin` (verified by search: no user-scoped client reads or writes these tables), no
+   first-party browser code writes them, Clearwater uses the service-role key, and every RPC runs as
+   `service_role`, so nothing legitimate depends on those grants. SELECT and the existing policies stay. This
+   also closes the same mutations through `/graphql/v1`, which uses the same roles.
+2. **Storage:** narrow `tpe: owners can upload their own files` and `tpe: owners can delete their own files`
+   to `bucket_id = 'logos'`, dropping `tpe-estimate-photos`. Keep `logos`: `app/components/profile-form.tsx`
+   removes logos directly from the browser. Every estimate-photo upload and removal is server-side
+   (TradePulse photo route, estimate delete, account deletion, Clearwater), all service role.
+3. **B3:** in `DELETE /api/estimates`, load the estimate by `id` and `business_id` first, return 404 when it
+   is not owned, and only then delete children. This is an application fix, and it is inside the 5B write
+   surface.
+
+Once (1) and (2) are applied and verified, route-level locking becomes authoritative and 5B can proceed.
+
+### Application writer inventory (every writer found by search, not by a likely-file list)
+
+All use `supabaseAdmin`. "Visible" means it can change what the customer receives.
+
+| Writer | Tables / fields | Visible | Allowed after delivery | Current guard | 5B must change |
+|---|---|---|---|---|---|
+| `PATCH /api/estimates` | estimates: `title`, `customer_name/phone/email`, `job_address`, `summary`, `include_photos`, `deposit_amount`, `status` (any string), `completed_at`, `copied_at`; on `structured` summary saves, deletes and re-inserts items | yes (title, prose, customer details, include_photos; status/copied_at can un-deliver or deliver) | only operational status progression (`sent` to `done`, `completed_at`) | ownership only; no classification, delivery or completeness | yes: lock the customer document after delivery, gate first delivery on completeness, refuse legacy edits including the structured item rewrite |
+| `DELETE /api/estimates` | photos (Storage + rows), estimate_changes, payment_reminders, estimates | yes | open question: the spec locks edits, not deletion | parent delete only (B3) | yes: ownership before children (B3) |
+| `POST /api/send-sms` | estimates: `status='sent'`, `sent_via`, `sent_at` after provider success; backfills `customer_phone` when empty | yes (delivery; phone backfill) | resend yes; the phone backfill must not alter a delivered document | delivery claims, suppression, ownership | yes: completeness gate on first delivery; no customer-detail backfill after delivery |
+| `POST /api/send-email` | estimates: same, backfills `customer_email` when empty | yes | resend yes; same backfill caveat | delivery claims, ownership | yes: same |
+| `PUT /api/estimates/[id]/pricing` | items (replace), estimate tax snapshots, promotion, business defaults, via `tpe_save_contractor_pricing` | yes | no | `isDelivered()` pre-check plus the same rule re-checked in SQL under a row lock | no (semantics already match `isDelivered()`) |
+| `POST /api/generate-estimate` | estimates insert; regenerate updates `title` + `summary` | yes | no | regenerate refused unless `contractor_pricing` and not `isDelivered()`, re-checked in the update filter | no (verify only) |
+| `POST /api/estimates/[id]/photos` | Storage upload + photo rows | yes | no | Pro + ownership; no delivery check | yes: refuse after delivery |
+| `DELETE /api/estimates/[id]/photos` | Storage remove + photo row | yes | no | Pro + ownership; no delivery check | yes: refuse after delivery |
+| `PATCH /api/estimates/[id]/pricing-mode` | estimates: `customer_pricing_mode` | yes, for legacy structured | no | only undelivered `structured` drafts; no UI caller since 5A | yes: legacy is read-only, refuse |
+| `PATCH /api/estimates/[id]/invoice` | estimates: `invoice_amount`, `due_date`, `payment_status`, `reminder_count`, `last_reminder_sent_at` | no | yes | Pro + ownership | no |
+| `PATCH /api/estimates/[id]/mark-paid` | estimates: `payment_status` | no | yes | ownership | no |
+| `POST /api/estimates/[id]/review-request` | estimates: `review_requested_at` | no | yes | Pro + ownership | no |
+| `POST /api/estimates/[id]/send-reminder` | estimates: `last_reminder_sent_at`, `reminder_count`; inserts payment_reminders | no | yes | ownership + compare-and-swap | no |
+| `GET /api/cron/payment-reminders` | estimates: `last_reminder_sent_at`, `reminder_count`; inserts payment_reminders | no | yes | `CRON_SECRET` | no |
+| `POST /api/account/delete` | all business data via `tpe_delete_business_account_data`, plus Storage | removes the whole account | yes (account deletion) | owner session, deletion claim | no |
+| Copy link (client, `estimate-actions.tsx`) | writes through `PATCH /api/estimates` (`status`, `copied_at`) | yes | re-copy yes | clipboard is written before the PATCH today | yes: confirm, then server check and PATCH, then clipboard |
+
+Read-only, verified no writes: `app/api/estimates/[id]/analyze-photos/route.ts`, `lib/currency-db.ts`,
+`lib/estimate-pricing-server.ts`, `app/share/[id]/page.tsx`, `app/estimates/[id]/page.tsx`,
+`app/estimates/page.tsx`, `app/payments/page.tsx`. No server actions exist. `convertEstimateToStructuredItems`
+has no importer; only `buildStructuredItemsSyncPlan` is still imported, by `PATCH /api/estimates`.
+
+### Known external writer
+
+`GCHVFX/clearwater-plumbing`, `app/api/quote/route.ts` (read, not modified). It uses the service-role key, so
+RLS never applies to it. It inserts `tpe_estimates` with `business_id`, `status='needs_review'`,
+`source='website_quote'`, customer name/phone/email/address, `service_type`, `location`, `urgency` and
+`description`; no `pricing_source` (defaults to `markdown`) and no snapshots. It uploads photos to
+`tpe-estimate-photos` at `${businessId}/${estimateId}/${uuid}_${name}` and inserts `tpe_estimate_photos`
+rows. Business id, not user uid, is the first folder, so the owner Storage policy never matched these
+objects. It is outside this repository and was not changed. Neither proposed fix affects it: it writes as
+`service_role`.
+
+### Verification actually run
+
+Read-only production queries: RLS flags, `pg_policies` for the three tables and `storage.objects`,
+`information_schema.role_table_grants`, `storage.buckets`, the function inventory with
+`has_function_privilege` for `public`, `anon`, `authenticated` and `service_role`, function write targets,
+triggers, and aggregate path/ownership counts for the photo bucket. One rolled-back RLS probe as described
+under B1, followed by a no-trace check. Repository search for every `.from("tpe_estimate*")`,
+`.from("tpe-estimate-photos")`, `.rpc(` and `"use server"`, with each writer's payload read. The Clearwater
+quote route read in the local clone at `631f9e0`. No product code changed, so no tests, `tsc` or lint were
+needed.
+
+**Not verified:** B2 was not exercised against real Storage (no rollback exists for object bytes). Whether a
+signed URL issued *before* a replacement also serves the new bytes is expected, because the token names a
+path rather than an object version, but was not tested; URLs generated *after* a replacement certainly do.
+
+**Exact next step:** review B1, B2 and B3 and the proposed fixes. After approval, apply (1) and (2) as a
+migration, verify them against production, then implement the 5B route-level locks against the inventory
+above. Do not start 5C.
+
+## Phase 1 slice 5A: classification, customer-safe pricing, share and PDF (2026-09-16 PT)
+
+**Status: implemented and committed locally, awaiting review.** Slice 5 is **not** complete: 5B and 5C
+have not started. Nothing pushed, nothing deployed, no production data touched.
+
+**Starting point:** branch `phase1-contractor-pricing` at `37619a3` ("Make the docs say what generation
+actually does now"). The 5A commit SHA is the commit that carries this section; `git log -1` on the
+branch gives it.
+
+**What 5A does.**
+
+- `lib/estimate-classification.ts` (new): `classifyEstimate()`, the three ordered Phase 1 rules and
+  nothing else. `contractor_pricing`, then `website_quote` + `needs_review` intake, then legacy. Fails
+  closed: `structured`, null and unrecognised values are all legacy.
+- `lib/customer-pricing.ts` (new): the customer-safe projection. `toCustomerPricing()` returns selling
+  amounts only (Labour, Materials, each charge's description and amount, subtotal, tax label and
+  amount, total, deposit, balance), or `{ ready: false, missing }` with nothing priced when the
+  estimate is incomplete. `buildCustomerDocument()` turns that into the markdown both surfaces render,
+  with the pricing block placed after Assumptions and Exclusions and before Notes, which is the order
+  `lib/generate-pdf.ts` sorts into. `contractorCustomerDocument()` is the one call from stored rows +
+  snapshots + currency to `{ ready: true, document, totalCents }`. It imports no legacy parser or
+  formatter.
+- `lib/contractor-pricing.ts`: one additive field, `chargeLineCents`, each charge's own amount in row
+  order. `chargesCents` is unchanged and is their sum. This lets the customer document list charges
+  one by one without converting a row to cents outside the calculation module.
+- `app/share/[id]/page.tsx`: classifies first. Contractor pricing loads its rows on the server and
+  renders `contractorCustomerDocument()`; incomplete pricing and unpriced website-quote intake render
+  "This estimate isn't ready yet." with no prose, pricing, photos or PDF button. Legacy is unchanged and
+  still goes through `loadCustomerPricingView`. One `customerDocument` string feeds both
+  `EstimateMarkdown` and `DownloadPdfButton`, so share and PDF cannot disagree.
+- `app/estimates/[id]/page.tsx`: classifies first. Contractor pricing never calls
+  `loadCustomerPricingView`, so its prose is never parsed as if it held prices. `estimateTotal` (invoice
+  prefill, zero-total check) and the `summary` handed to `EstimateActions` come from
+  `contractorCustomerDocument()` for contractor pricing, not from `pricing.selected`. **Legacy estimates
+  no longer mount any editor**: they render the frozen customer representation read-only, and an
+  undelivered one shows the spec section 14 notice.
+
+**Judgement calls a reviewer should check.**
+
+- Deposit and balance rows appear only when a deposit applies. With no deposit the table ends at Total.
+- "Deposit required" carries no percentage, following the spec section 11 example (legacy showed one).
+- Every contractor amount is shown to the cent; legacy rounded subtotal, tax and total to the dollar.
+- The not-ready page shows nothing of the estimate at all, rather than prose without pricing.
+- A website quote still in intake now renders not-ready on `/share/[id]`. Before this it rendered the
+  legacy view, which for an intake quote includes price-book prices. Zero such rows exist in production.
+- A `|` in a charge description becomes `/`, because the PDF renderer splits table cells naively.
+
+**Now unmounted, not deleted.** `EstimatePricingEditor` and `EditableEstimateBody` have no remaining
+caller in `app/`, and `/api/estimates/[id]/pricing-mode` has no UI caller. They belong to the spec's
+"delete, do not harden" list and were left for a separate cleanup rather than widening 5A.
+
+**Still open, deliberately, for 5B/5C:** legacy customer details and photos are still editable in the
+UI, and no mutation route enforces delivery or legacy read-only yet. For an incomplete contractor
+estimate the send bar still shows the old zero-total message.
+
+**Tests.** `tests/smoke/customer-pricing.spec.ts` (new, 16 cases, registered in
+`playwright.unit.config.ts`) covers all eleven required behaviours plus classification ordering,
+snapshot authority, section placement and the pipe edge case. Three existing source-level tests that
+pinned the exact wiring 5A replaces were updated to pin the new wiring:
+`contractor-pricing-form.spec.ts` ("1 and 2"), `estimate-pricing-mode.spec.ts` ("contractor, share,
+and PDF are wired to one server-built customer summary") and `generation-contractor-pricing.spec.ts`
+(legacy classification).
+
+**Verification actually run.**
+
+- `npx playwright test --config playwright.unit.config.ts customer-pricing.spec.ts`: 16 passed.
+- `npx playwright test --config playwright.unit.config.ts` (the whole unit config, no browser): 654
+  passed, 2 failed. Both failures are the same two present before Slice 4:
+  `password-reset-canonical-host` (passes alone, fails in the full run) and `unit-suite-completeness`
+  (still naming only the three pre-existing marketing specs; the new spec is registered).
+- `npx tsc --noEmit`: clean.
+- `npx eslint` on every changed file: one error, the pre-existing `<a>` to `/estimates` on the detail
+  page. Nothing new.
+- `git diff --check`: clean.
+
+**Not verified.**
+
+- **No browser check of a share page.** `.env.local` points at the production Supabase project, and
+  there is no Supabase CLI or Docker for a local stack, so rendering a real share page would have read
+  production. Share-page wiring is proven at source level only.
+- **The generated PDF itself was not produced.** The tests prove the PDF receives the identical string
+  the share page renders and that `lib/generate-pdf.ts` imports and calls no pricing code. They do not
+  execute jsPDF.
+- No live browser spec was run and no account was created.
+- The legacy baselines in `build/tax-hotfix-baselines/` were not re-captured, because that needs the
+  local dev server against production. Legacy stability is locked by a byte-for-byte unit test of the
+  legacy customer view, including the collapsed "(6 hrs @ $125.00/hr)" row.
+
+**5A payload verification (2026-09-16 PT): no contractor-only data in the real share-page response.**
+This closes the first "Not verified" bullet above. A disposable ownerless business
+(`e71f7a5a-b85d-40e7-a180-f5122d57d870`) and estimate (`3233fcdb-5d95-4d7d-bf34-f49a93265e94`) were seeded
+in production through `tpe_save_contractor_pricing`, with hourly labour 6.5 h at $91, materials cost $910
+at 15% markup, a $237 charge, GST 5% and a 30% deposit over $1,000. The raw HTML (30,742 bytes, 7 inline
+flight chunks) and the RSC response (16,564 bytes) of `/share/[id]` were fetched from the local dev server at
+`e84a297` and searched. Strict hits for the hours, rate, cost and markup in every serialized form: 0. Internal
+field names (`quantity`, `unit_price`, `markup_percent`, `item_type`, `tpe_estimate_items`, calculator
+fields): 0. Only two client components receive estimate data: `EstimateMarkdown` gets `content` and
+`DownloadPdfButton` gets `summary` (plus title, branding, empty `photoUrls`, currency), and both strings are
+byte-identical to `contractorCustomerDocument()`. Each selling amount appears once in the rendered markup and
+once in each of those two props, never as integer cents or anywhere else. The page was not painted in a
+browser, because PostHog initializes with the production key on localhost; the server-rendered HTML was used
+as the visible surface. Cleanup deleted exactly 3 item rows, 1 estimate and 1 business under count guards, and
+full-table md5 fingerprints of `tpe_businesses`, `tpe_estimates` and `tpe_estimate_items` match their
+pre-seed values exactly.
+
+**Production already holds 3 `contractor_pricing` estimates**, created 00:03, 00:10 and 00:20 PT on
+2026-09-16 as unpriced drafts under one business, matching the live Slice 4 smoke tests. They were not touched.
+They show that a deployment of this branch (most likely a Vercel preview) writes to the production database.
+
+**Pre-existing PDF quirk, unchanged.** `orderPdfSections` sorts any heading it does not recognise to the
+end, so a model-written `## Job Summary` heading would appear last in the PDF but first on the share
+page. Real production summaries write the job summary as unheaded preamble, so it does not arise in
+practice, and changing it would alter legacy PDFs.
+
+**Exact next step: review 5A before beginning 5B.** Do not start 5B until 5A is approved.
+
+## Phase 1 slice 4: generation and the new-estimate flow (2026-09-15 PT, approved 2026-09-16)
+
+**Status: COMPLETE and manually approved**, after a live photo-generation smoke test. Committed
+locally on `phase1-contractor-pricing`. Nothing pushed, nothing deployed. No production data touched.
+
+What the slice established, in one place:
+
+- The AI writes scope and prose only. It authors no number that changes the selling price, and no
+  contractor business term.
+- A newly generated estimate is `source='ai_generated'`, `status='draft'`,
+  `pricing_source='contractor_pricing'`, all written explicitly rather than inherited from the column
+  defaults, and carries **no AI-authored pricing rows**.
+- The business tax and deposit settings are snapshotted onto the estimate at creation, so a later
+  change to Rates cannot move an estimate that already exists.
+- `/new` renders the saved sanitized prose the server returns in the `__SAVED__` marker, not its own
+  raw stream buffer. That is what closed F1.
+- Regenerate replaces the wording on the same estimate id. Pricing rows, tax and deposit snapshots,
+  customer details and photos all survive.
+- The live photo test proved photo observations reach generation and influence the scope.
+- The photo and generation instructions were then tightened twice, because the model overclaimed
+  uncertain conditions ("mould" from dark staining, prescribed replacements with no evidence) and
+  wrote the contractor's own business terms.
+- Generated pricing language, commercial language and any Payment Terms section are filtered out of
+  saved prose by `lib/estimate-prose.ts`.
+
+The three corrections that followed the first commit are recorded in their own sections below.
+
+**Recorded for later, not built:** a future Pro "Pricing Insights" feature (the contractor's own job
+history, and an anonymous aggregate TradePulse benchmark) is described in
+`TRADEPULSE_ESTIMATES_ROADMAP.md`, with the data-retention principle it depends on in
+`docs/SCALING-NOTES.md`. No benchmark tables, taxonomy, classification columns or analytics pipeline
+are to be built now. The only obligation today is not to destructively overwrite historical estimate
+data where it can be avoided.
+
+**What changed.** The AI now writes the job and nothing else. A generated estimate is a
+`contractor_pricing` draft from the moment it is saved, with zero pricing rows, and the contractor
+prices it in the Slice 3 editor on the saved record.
+
+- `lib/estimate-prose.ts` (new): `sanitizeGeneratedProse()`, the price-safety guardrail from spec
+  section 10, plus `stripTitleHeading()` for the screens that render the title separately. A sentence
+  containing a currency sign, a digit followed by "dollar" or "dollars", or the word "deposit" is
+  deleted; a heading whose section the deletion emptied is deleted with it; a heading that was already
+  empty, or that only introduces a subheading, is left alone. A line with no leakage is returned byte
+  for byte, so ordinary prose is never reflowed. It counts what it removed, never retries, and never
+  blocks a save. Only model output goes through it.
+- `lib/generated-estimate.ts` (new): `buildGenerationUserMessage()`, `newGeneratedEstimateInsert()` and
+  `regeneratedEstimateUpdate()`. The user message has no field for a rate, a markup, a price-book
+  price, a tax rate or a deposit rule, so one cannot reach the model by accident. The insert sets
+  `source='ai_generated'`, `status='draft'` and `pricing_source='contractor_pricing'` explicitly, and
+  copies `tax_label`, `tax_rate`, `deposit_percent` and `deposit_threshold` into the estimate's own
+  snapshot columns. The regenerate update is exactly title plus summary.
+- `app/api/generate-estimate/route.ts`: the prompt asks for Job Title, Job Summary, Scope of Work,
+  Assumptions and Exclusions, Payment Terms and Notes, and explicitly forbids currency amounts, line
+  item tables, pricing summaries, estimated totals, hour counts and deposits. The price-book query, the
+  labour-rate and markup injections, the deposit-rule instruction, `applyDeterministicDeposit` and the
+  `convertEstimateToStructuredItems` call are all gone. The currency and tax response headers are gone
+  too, because nothing renders money on `/new` any more. The route now accepts an optional
+  `estimateId` and, when present, updates that row instead of inserting a new one.
+- `app/new/page.tsx`: the markdown editor (`EditableEstimateBody`) and `formatEstimateForDisplay` are
+  gone from this screen, along with its currency and tax state. The stream emits a `__SAVED__` marker
+  last, carrying the saved sanitized prose, and the client throws away its own buffer the moment that
+  arrives. An "Add Pricing" link takes the contractor to the Slice 3 editor on the saved record.
+  "Regenerate Estimate" now confirms first ("Regenerate replaces the current job wording. Your pricing
+  will stay the same."), sends the existing id, and does not re-upload photos.
+- `app/estimates/[id]/page.tsx`: a `contractor_pricing` estimate now renders its saved prose above the
+  pricing editor. Before this it rendered no job wording at all, which made the editor unusable as a
+  landing place for a freshly generated estimate.
+
+**How F1 was closed.** `/new` no longer holds a document state of its own after the save. The server
+sanitizes, writes the row, then sends the saved text back in the same stream, and the client renders
+that. A sentence the filter removed cannot stay on screen, so it cannot be written back later.
+
+**How regenerate preserves pricing.** The write is two columns on the existing row. Pricing rows, tax
+and deposit snapshots, currency, customer details and photos are never in the statement. The route
+refuses a regenerate that is not an undelivered `contractor_pricing` estimate owned by the caller, both
+before the stream opens and again in the filter on the update itself, so a send that lands
+mid-generation cannot have its wording overwritten underneath it.
+
+**Verification actually run.**
+
+- `npx tsc --noEmit` clean.
+- `npx playwright test --config playwright.unit.config.ts`: 620 passed, 2 failed. Both failures are
+  identical at HEAD before this work, verified by stashing the change and re-running:
+  `password-reset-canonical-host` (passes in isolation, fails in the full run) and
+  `unit-suite-completeness` (the three pre-existing unregistered marketing specs).
+- `npx eslint` on every changed source file: the same one pre-existing error (an `<a>` to `/estimates`)
+  and one pre-existing unused-variable warning. Nothing new.
+- `git diff --check` clean.
+- No browser test and no live-AI test was run, and no account was created.
+
+**New tests.** `tests/smoke/estimate-prose-safety.spec.ts` (10 cases) and
+`tests/smoke/generation-contractor-pricing.spec.ts` (15 cases), both registered in
+`playwright.unit.config.ts`. Together they cover all ten behaviours the slice was asked to prove.
+
+**Existing tests updated, because they asserted behaviour this slice deliberately removed:**
+`currency.spec.ts`, `currency-rendering.spec.ts`, `estimate-deposit.spec.ts` and
+`tax-rate-from-rates-not-ai.spec.ts` (all unit, all passing), plus `generate-estimate.spec.ts` (live AI
+browser test, rewritten into the spec's `pricing-ai-authors-no-numbers` acceptance test; **not run**,
+it needs a fresh live account).
+
+**Parked, and a real coverage loss.** `tests/smoke/line-item-qty-clear-does-not-lock.spec.ts` drove the
+markdown line-item editor through `/new`, which no longer has one. Both cases are now `test.skip()`
+with the reason stated in the file. The parse-level half of what they locked was moved into
+`tests/smoke/estimate-line-item-editing.spec.ts` as two pure cases and passes there. What is still
+parked is the UI half: the edit panel staying mounted through a blank quantity field. Re-homing it on a
+service-role-seeded legacy estimate belongs with the legacy display slice.
+
+**Slice 4.1 verification (2026-09-15 PT): photo-assisted scope survived Slice 4.** Checked because
+removing price-driving values from generation is exactly the kind of change that could have taken the
+photo description with it. It did not. `/api/analyze-photo` was not touched by `ad35c32` at all, and
+its own instruction still says "Do not generate prices. Do not write an estimate. Just describe the
+work." `/new` still calls `analysePhotos()` before generating and sends the result; when the
+contractor types nothing, that text becomes the job description itself, so the photo content reaches
+the model either way. `buildGenerationUserMessage()` still emits it as
+"What the job site photos show: ...", and the route still accepts and caps `photoAnalysis` at 4000
+characters. The only photo-related line the slice changed anywhere was the regenerate guard that stops
+the client re-uploading photos it already attached. No product change was made. Five focused cases
+were added to `tests/smoke/generation-contractor-pricing.spec.ts` covering the photo path and the fact
+that the generation route never reads, writes or deletes a photo record.
+
+**Slice 4 correction (2026-09-16 PT): scope restraint.** The live photo run proved photos reach the
+model and then proved the model overreaches on what they establish. It called dark staining "mould
+growth", prescribed replacing the braided supply line and the cabinet base with no evidence either had
+failed, and wrote "pricing may change" into Assumptions. Instructions only, no logic change:
+`app/api/analyze-photo/route.ts` and the generation prompt both now say to keep an observation separate
+from the action it calls for, never to state an uncertain diagnosis as fact ("dark staining, possible
+moisture-related deterioration" rather than "mould"), never to call for replacement or remediation just
+because something is visible (inspect, verify, or replace if damaged), and never to assume an adjacent
+component has failed without evidence. The generation prompt also forbids generic pricing hedges.
+
+Because "must not contain" cannot be guaranteed by a prompt, `PRICE_LEAK` in `lib/estimate-prose.ts`
+was extended to catch a hedge with no figure in it: price/prices/pricing plus may/can/could/might plus
+change, and additional charges/fees/costs (may) apply. Deliberately narrow: "The scope may change once
+the wall is opened up" survives, and there is a test for that. This is the one place a Slice 4.2
+behaviour change exists; everything else in this correction is prompt text.
+
+**Slice 4 correction, second pass (2026-09-16 PT): no AI-authored business terms.** The second live
+run showed the photo restraint holding but the model still writing the contractor's own terms:
+"quoted separately", "cost will depend on what we find", "The balance is due upon completion", "This
+estimate is valid for 30 days". None of those is the model's to say, and TradePulse has no setting
+holding any of them, so there is nothing to substitute either.
+
+Phase 1 generation is now four sections: Job Summary, Scope of Work, Assumptions and Exclusions, and
+Notes. **The Payment Terms section is gone from generated output entirely**, and was deliberately not
+replaced with an invented default. The prompt says so, and `sanitizeGeneratedProse()` drops a Payment
+Terms section whole, heading and content together, if the model writes one anyway.
+
+`lib/estimate-prose.ts` now carries two patterns. `PRICE_LEAK` gained "quoted/priced/billed
+separately" and "cost/price/pricing will depend". A new `COMMERCIAL_TERM` catches an invented validity
+period, a payment due date or timing, payment terms, progress payments, a warranty, financing and a
+cancellation policy, wherever in the prose they appear. `SanitizedProse` gained `removedSections`.
+"Due to" is deliberately not matched, because it is ordinary scope language, and there is a nine-case
+test pinning the sentences the filter must never touch (timing, sequencing, access, condition,
+inspect-and-confirm wording, "the scope may change").
+
+When TradePulse grows real settings for validity, payment timing or warranty, those belong in the
+document deterministically from the contractor's own record, not from the model. Nothing here blocks
+that.
+
+**Reported, not fixed: the website-quote intake still injects pricing into prose.**
+`handleCreateEstimate` in `app/components/estimate-actions.tsx` fetches the price book and calls
+`buildDraftSummary(...)` in `lib/quote-templates.ts`, which writes price-book prices and a Pricing
+Summary into the prose, then PATCHes `status: 'draft'` while `pricing_source` is still `markdown`,
+stranding the quote as legacy before it can be priced. That is spec section 15's work (inbound-quote
+promotion on first pricing save), not section 9 or 12, so it was left alone deliberately. There are
+zero `website_quote` rows in production.
+
+**Known dead exports.** `taxHeaders`, `parseTaxHeaders`, `TAX_LABEL_HEADER` and `TAX_RATE_HEADER` in
+`lib/estimate-tax.ts` no longer have an application caller now that `/new` renders no money. They are
+still exported and still unit-tested. Removing them touches `lib/estimate-tax.ts` and its spec for no
+behaviour change, so it was left for a later slice.
+
+**AICC header conflict, unresolved.** The task's `[AICC]` block carries `Session type: Implementation`,
+which this repo's AI Control Centre CLI rejects (`handoff record` accepts only
+Planning|Review|Research|Debugging|Other). The browser-chat handoff was therefore **not** recorded, and
+no substitute value was invented. The Claude Code session itself was recorded normally.
+
+**Exact next step: Phase 1 Slice 5**, against `specs/contractor-owned-pricing.md` sections 11, 12 and
+13:
+
+- customer-facing output for a `contractor_pricing` estimate. The customer must never see the
+  contractor's material cost or markup percentage.
+- send and completeness gating: client and server, including the 409s in `send-sms` and `send-email`
+  and the "estimate not ready" state on `/share/[id]`.
+- delivery locking, server-side at every mutation route that can change the customer's document.
+- resend rules, and the fixed copy-link order (confirm, then server-side check and PATCH, then
+  clipboard).
+- photo locking after delivery, including `include_photos` and the photo add/delete routes.
+- the old sticky Send Estimate bar, which still reads "Add pricing to your line items before sending"
+  and needs re-sourcing onto the contractor-pricing completeness check.
+
+## Phase 1 slice 3: contractor pricing editor approved (2026-09-15 PT)
+
+**Status:** approved after a manual review on a real phone, and closed locally. Nothing pushed, nothing
+deployed.
+
+**Local commits:**
+
+- `cae8700a31c512cbeeb9aa133a7fbbab699a59f9` -- Slice 3 contractor pricing editor
+- `90c294c` -- tests only, pinning estimate-owned markup
+
+**What the phone review confirmed:** hourly and fixed labour both worked, materials cost plus markup
+worked, the customer selling price updated correctly, optional charges worked, and the tax, totals and
+deposit arithmetic was correct.
+
+**Markup is owned by the estimate.** The Markup % field sits in the estimate's own Materials section and
+is edited there, not in Profile/Rates. The stored `tpe_estimate_items.markup_percent` on the material row
+is what fills it. `tpe_businesses.markup_percent` is only the starting value offered to an estimate that
+has no material row yet: changing Rates later never moves an estimate that is already priced, and an
+estimate-side markup edit never writes the business default. A review note suggesting markup could only be
+changed in Rates was investigated and did not match the code at any layer; the likely cause was the
+un-hydrated LAN page described below. `tests/smoke/contractor-pricing-form.spec.ts` cases 26 to 30 pin all
+of this, including 0% staying explicitly editable.
+
+**The LAN manual-testing fix, since reverted.** Next 16 blocks cross-origin access to dev resources unless
+the origin is listed in `allowedDevOrigins`, and localhost is exempt from that block. Without it the phone
+received the server-rendered HTML and no working client JavaScript, so React never hydrated and every
+control on the page was inert. A temporary `allowedDevOrigins: ["192.168.68.55"]` entry in
+`next.config.ts` made the review possible and was reverted once the review finished. If LAN device testing
+is needed again, re-add it temporarily with the machine's current IP and remove it afterwards.
+
+**Production disposable test data cleaned up.** The disposable business
+`c5e44bd3-0522-4ea7-9f8e-1502471afcc7`, its estimates `499affeb-e831-46b2-9fe8-2b487ce7f871` and
+`55a82176-578f-4ed7-8ab4-291bdfe8b479`, all of their estimate items, and the auth user
+`7c2f3741-ad28-4a46-aa47-4cec7f3ca038` were deleted. Cleanup was verified externally.
+
+**Known and parked, not Slice 3 defects.** The customer must never see the contractor's material cost or
+markup percentage, which is a delivery-surface rule for a later slice. The old send bar still reads "Add
+pricing to your line items before sending" and overlays part of the editor. Both are deliberately left to
+the delivery/send slice.
+
+**Exact next step:** Phase 1 Slice 4, the generation and new-estimate flow, against
+`specs/contractor-owned-pricing.md`.
+
+## Phase 1 slice 2: schema activated in production (2026-09-15 PT)
+
+**Status:** the Slice 2 migration (`supabase/migrations/20260916000000_add_contractor_pricing_snapshots_and_save_fn.sql`)
+is applied to the production Supabase project (`fctequqcwxyhmnjgxixg`). Verified read-only afterward:
+`tpe_estimates` has `tax_label_snapshot`, `tax_rate_snapshot`, `deposit_percent_snapshot`,
+`deposit_threshold_snapshot` (all nullable, as designed), the `tpe_save_contractor_pricing` function
+exists with its expected five-argument signature, and its EXECUTE privilege is granted only to the
+function owner and `service_role`, not `anon` or `authenticated`. No estimate or business rows were
+touched. `lib/database.types.ts` was regenerated from the now-current production schema; the pricing
+route's hand-written RPC cast (`app/api/estimates/[id]/pricing/route.ts`) was evaluated for removal but
+kept, because the generated function signature wants `Json` args and `undefined` (not `null`) for the
+optional ones, and this route's `CanonicalPricingRow`/`TaxInput` types use `null`-based optionality --
+removing the cast would mean reworking those types, which is out of this checkpoint's scope. Its comment
+was updated to state the real reason.
+
+**Local commits (all still unpushed, per this task's scope limits):**
+
+- `bfe6692a4c8947f5f16c5e981c1f45bb605cf84c` -- spec corrections
+- `e34fef5a93c445d68076edc50dd9cb87cbc499c6` -- Slice 1 calculator
+- `43045b73e92d34d964a54aac19521fcc7df74603` -- Slice 2 route/RPC
+- `2dc508971b46b86b4c15a567c3de44dca0424758` -- Slice 2 verification (transaction proved against real
+  disposable PostgreSQL 18.4: rollback, promotion, snapshot preservation, cross-business protection, the
+  three-connection concurrency test)
+
+**Verification run for this checkpoint:** the three contractor-pricing spec files
+(`tests/smoke/contractor-pricing-calculation.spec.ts`, `contractor-pricing-request.spec.ts`,
+`contractor-pricing-route.spec.ts`), all 49 passing against the disposable PostgreSQL harness;
+`npx tsc --noEmit` clean; `git diff --check` clean. The full smoke suite was deliberately not run.
+
+**Unresolved / not done:** no Phase 1 application code has been deployed. Slice 3 (wiring the app's editor
+and generation paths through this schema) has not started and is now unblocked.
+
+**Exact next step:** start Slice 3 against `specs/contractor-owned-pricing.md`.
 
 ## Tax hotfix (Appendix A): Rates is the tax authority for undelivered estimates (2026-09-15 PT)
 

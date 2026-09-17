@@ -3,11 +3,17 @@ import { CompanyEstimateHeader } from "@/app/components/company-estimate-header"
 import { EstimateActions } from "@/app/components/estimate-actions";
 import { DeleteEstimateLink } from "@/app/components/delete-estimate-link";
 import { CustomerDetailsBlock } from "@/app/components/customer-details-block";
-import { EstimatePricingEditor } from "@/app/components/estimate-pricing-editor";
 import { EstimatePhotos } from "@/app/components/estimate-photos";
 import { BottomNav } from "@/app/components/bottom-nav";
-import { loadCustomerPricingView } from "@/lib/estimate-pricing-server";
-import { businessTax, taxAuthorityFor } from "@/lib/estimate-tax";
+import { loadContractorPricingRows, loadCustomerPricingView } from "@/lib/estimate-pricing-server";
+import { businessTax } from "@/lib/estimate-tax";
+import { ContractorPricingEditor } from "@/app/components/contractor-pricing-editor";
+import { EstimateMarkdown } from "@/app/components/estimate-markdown";
+import { stripTitleHeading } from "@/lib/estimate-prose";
+import { calculateContractorPricing } from "@/lib/contractor-pricing";
+import { classifyEstimate } from "@/lib/estimate-classification";
+import { isDelivered } from "@/lib/estimate-delivery";
+import { contractorCustomerDocument } from "@/lib/customer-pricing";
 import { readEstimateCurrency } from "@/lib/currency-db";
 import { supabaseAdmin, createSupabaseServerClient } from "@/lib/supabase-server";
 import { normalizePhoneE164 } from "@/lib/sms-suppression";
@@ -30,7 +36,7 @@ export default async function EstimatePage({
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
-    .select("id, logo_url, name, show_company_name_below_logo, email, phone, plan, google_review_link, payment_link, tax_label, tax_rate")
+    .select("id, logo_url, name, show_company_name_below_logo, email, phone, plan, google_review_link, payment_link, tax_label, tax_rate, labour_rate, markup_percent")
     .eq("owner_user_id", user.id)
     .maybeSingle();
 
@@ -49,13 +55,20 @@ export default async function EstimatePage({
     redirect("/estimates");
   }
 
+  // Phase 1 classification comes first (specs/contractor-owned-pricing.md
+  // section 2): it decides which pricing path this page may use at all.
+  const pricingClass = classifyEstimate(estimate);
+  const isContractorPricing = pricingClass === "contractor_pricing";
+
   // Pricing rows and photo records are independent once the estimate is
   // owned, so load them together rather than adding another server waterfall.
-  // The business's Rates tax. Undelivered estimates use it; delivered ones
-  // keep the tax row the customer was given (lib/estimate-tax.ts).
-  const rates = businessTax(business);
-  const [pricing, { data: photoRecords }, estimateCurrency] = await Promise.all([
-    loadCustomerPricingView(estimate, rates),
+  // A contractor_pricing estimate never goes through the legacy customer view
+  // (it would parse the prose as if it held prices); everything else keeps
+  // the frozen legacy path, which uses the business's Rates tax for an
+  // undelivered estimate and the stored tax row for a delivered one.
+  const [legacyPricing, contractorRows, { data: photoRecords }, estimateCurrency] = await Promise.all([
+    isContractorPricing ? Promise.resolve(null) : loadCustomerPricingView(estimate, businessTax(business)),
+    isContractorPricing ? loadContractorPricingRows(estimate.id) : Promise.resolve([]),
     supabaseAdmin
       .from("tpe_estimate_photos")
       .select("storage_path")
@@ -92,8 +105,57 @@ export default async function EstimatePage({
   const businessPhone = business?.phone ?? "";
   const isPro = business?.plan === "pro";
   const googleReviewLink = business?.google_review_link ?? null;
-  const isQuoteRequest = estimate.status === "needs_review" && estimate.source === "website_quote";
-  const estimateTotal = pricing.selected.total;
+  const isQuoteRequest = pricingClass === "website_quote_intake";
+
+  const contractorPricing = isContractorPricing
+    ? calculateContractorPricing(
+        contractorRows.map((row) => ({
+          item_type: row.item_type,
+          unit: row.unit,
+          quantity: row.quantity,
+          unit_price: row.unit_price,
+          markup_percent: row.markup_percent,
+        })),
+        {
+          taxRatePercent: estimate.tax_rate_snapshot,
+          depositPercent: estimate.deposit_percent_snapshot,
+          depositThresholdDollars: estimate.deposit_threshold_snapshot,
+        }
+      )
+    : null;
+
+  // The customer document and the total every downstream consumer reads. For
+  // contractor pricing both come from the persisted rows and snapshots
+  // through calculateContractorPricing, never from pricing.selected, which is
+  // the legacy markdown parse. An incomplete contractor estimate has no
+  // customer document and a total of 0 until the contractor prices it.
+  const contractorDocument = isContractorPricing
+    ? contractorCustomerDocument(estimate, contractorRows, estimateCurrency)
+    : null;
+  const customerSummary = contractorDocument
+    ? contractorDocument.ready
+      ? contractorDocument.document
+      : ""
+    : legacyPricing?.selected.summary ?? "";
+  const estimateTotal = contractorDocument
+    ? contractorDocument.ready
+      ? contractorDocument.totalCents / 100
+      : 0
+    : legacyPricing?.selected.total ?? 0;
+  // The authoritative send-readiness signal EstimateActions seeds its state
+  // from. For contractor pricing this is contractorDocument.ready itself
+  // (calculateContractorPricing's own `complete`, not a total-is-nonzero
+  // guess -- an explicit $0 fixed-labour job is complete and sendable).
+  // Legacy has no completeness concept of its own, so it keeps the same
+  // total-based check EstimateActions has always used for it. The
+  // `estimateTotal > 0` branch is unreachable for a contractor_pricing
+  // estimate: contractorDocument above is set to `null` exactly when
+  // `!isContractorPricing`, and contractorCustomerDocument() never returns
+  // null itself (its type is `{ ready: true, ... } | { ready: false, ... }`),
+  // so `contractorDocument` is truthy for every contractor_pricing estimate
+  // regardless of completeness, and this ternary always takes the `.ready`
+  // branch for one.
+  const estimateComplete = contractorDocument ? contractorDocument.ready : estimateTotal > 0;
 
   // Only unpaid invoiced estimates need this check -- opting out doesn't
   // matter for an estimate that was never invoiced or is already paid, and
@@ -136,17 +198,26 @@ export default async function EstimatePage({
           bar plus BottomNav) or the fixed bar either shows a gap behind it
           (padding too generous) or hides real estimate content with no way
           to scroll it into view (padding too small) -- the actual bug this
-          padding is fixing. EstimateActions' own height is state-dependent
-          (a single 56px button up to several stacked panels well over
-          400px), so a static guess can't stay correct for every state;
-          it publishes its real measured height as --tp-estimate-action-bar-
-          height (see estimate-actions.tsx), and 108px below covers
-          BottomNav's ~87px plus the small deliberate overlap plus a little
-          breathing room. The 200px fallback only applies before that
-          effect's first paint. */}
+          padding is fixing. Both bars' heights are state- and device-
+          dependent: EstimateActions' own content ranges from a single 56px
+          button to several stacked panels well over 400px, and BottomNav
+          renders taller on a phone with a safe-area inset than one without
+          (its own bottom padding is `env(safe-area-inset-bottom)`-driven).
+          A static guess of either can't stay correct everywhere -- a flat
+          "108px" tuned against a no-safe-area BottomNav measurement is what
+          previously let scrolled content end up behind this bar on an
+          inset device -- so both publish their real measured height as CSS
+          custom properties (--tp-estimate-action-bar-height here,
+          --tp-bottom-nav-height from bottom-nav.tsx) and this adds them
+          together, minus the 3px EstimateActions already overlaps
+          BottomNav by (see its own comment) plus a little breathing room.
+          The fallback values only apply before each effect's first paint. */}
       <main
         className="flex-1 px-4 sm:px-5"
-        style={{ paddingBottom: "calc(var(--tp-estimate-action-bar-height, 200px) + 108px)" }}
+        style={{
+          paddingBottom:
+            "calc(var(--tp-estimate-action-bar-height, 200px) + var(--tp-bottom-nav-height, 87px) - 3px + 24px)",
+        }}
       >
         {isQuoteRequest ? (
           <>
@@ -238,19 +309,48 @@ export default async function EstimatePage({
                 dateStr={estimate.created_at ?? ""}
               />
 
-              <EstimatePricingEditor
-                currency={estimateCurrency}
-                key={estimate.id}
-                estimateId={estimate.id}
-                summary={estimate.summary ?? ""}
-                detailedSummary={pricing.detailedSummary}
-                groupedSummary={pricing.groupedSummary}
-                initialMode={pricing.selected.renderedMode}
-                structuredPricing={estimate.pricing_source === "structured"}
-                taxAuthority={taxAuthorityFor(estimate, rates)}
-                canEditMode={pricing.canEditMode}
-                pricingError={!pricing.selected.ok}
-              />
+              {isContractorPricing && contractorPricing ? (
+                <>
+                  {/* The saved job wording. A contractor_pricing estimate
+                      stores prose only, so this is the whole generated
+                      document; every figure below it comes from the pricing
+                      rows, never from this text. The H1 is stripped because
+                      the title is already shown above. */}
+                  <EstimateMarkdown content={stripTitleHeading(estimate.summary ?? "")} />
+                  <ContractorPricingEditor
+                    key={estimate.id}
+                    estimateId={estimate.id}
+                    currency={estimateCurrency}
+                    initialRows={contractorRows}
+                    initialTax={{
+                      label: estimate.tax_label_snapshot,
+                      rate: estimate.tax_rate_snapshot,
+                    }}
+                    initialPricing={contractorPricing}
+                    defaults={{
+                      labourRate: business.labour_rate,
+                      markupPercent: business.markup_percent,
+                    }}
+                  />
+                </>
+              ) : (
+                // Legacy, read-only (specs/contractor-owned-pricing.md section
+                // 14). The frozen customer representation, exactly as the
+                // share page renders it, with no editor of any kind. That
+                // includes pricing_source='structured': old structured rows do
+                // not make an estimate editable under either pricing path.
+                <>
+                  {!isDelivered(estimate) && (
+                    <div className="mb-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3">
+                      <p className="text-sm text-zinc-700">
+                        This estimate was created with the previous pricing system and is read-only.
+                        Create a new estimate to change or send it.
+                      </p>
+                    </div>
+                  )}
+                  <EstimateMarkdown content={customerSummary} />
+                </>
+              )}
 
               <EstimatePhotos
                 estimateId={estimate.id}
@@ -267,7 +367,7 @@ export default async function EstimatePage({
       <EstimateActions
         estimateId={estimate.id}
         title={estimate.title ?? ""}
-        summary={pricing.selected.summary}
+        summary={customerSummary}
         currency={estimateCurrency}
         status={estimate.status}
         source={estimate.source ?? null}
@@ -284,6 +384,7 @@ export default async function EstimatePage({
         paymentStatus={estimate.payment_status ?? null}
         invoiceAmount={estimate.invoice_amount ?? null}
         estimateTotal={estimateTotal}
+        estimateComplete={estimateComplete}
         justSent={sent === "1"}
         businessHasPaymentLink={Boolean(business?.payment_link?.trim())}
         hasPhotos={photoUrls.length > 0}

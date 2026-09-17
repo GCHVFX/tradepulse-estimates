@@ -49,6 +49,7 @@ export function SendEstimateSheet({
     setPhone(formatPhoneInput(customerPhone ?? ""));
   }, [customerEmail, customerPhone]);
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState("");
   const [smsStatus, setSmsStatus] = useState<SendStatus>("idle");
   const [smsError, setSmsError] = useState("");
   const [emailStatus, setEmailStatus] = useState<SendStatus>("idle");
@@ -65,6 +66,7 @@ export function SendEstimateSheet({
         setSmsError("");
         setEmailStatus("idle");
         setEmailError("");
+        setCopyError("");
       }, 300);
       return () => clearTimeout(t);
     }
@@ -75,41 +77,85 @@ export function SendEstimateSheet({
       ? window.location.origin + "/share/" + estimateId
       : "";
 
-  async function handleCopyLink() {
-    if (!shareUrl) return;
+  async function writeToClipboard(text: string): Promise<boolean> {
     try {
-      await navigator.clipboard.writeText(shareUrl);
+      await navigator.clipboard.writeText(text);
+      return true;
     } catch {
       // Clipboard API unavailable, fall back to legacy method
-      const el = document.createElement("textarea");
-      el.value = shareUrl;
-      el.style.position = "fixed";
-      el.style.opacity = "0";
-      document.body.appendChild(el);
-      el.focus();
-      el.select();
-      document.execCommand("copy");
-      document.body.removeChild(el);
+      try {
+        const el = document.createElement("textarea");
+        el.value = text;
+        el.style.position = "fixed";
+        el.style.opacity = "0";
+        document.body.appendChild(el);
+        el.focus();
+        el.select();
+        document.execCommand("copy");
+        document.body.removeChild(el);
+        return true;
+      } catch {
+        return false;
+      }
     }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  }
 
-    // Track copy as delivery: draft→sent + copied_at; sent→update copied_at only; done→skip
+  /**
+   * Copy link order is fixed (specs/contractor-owned-pricing.md section 13):
+   * the server verifies completeness and records delivery first, and only
+   * once that PATCH succeeds does anything reach the clipboard. An estimate
+   * still missing pricing must not leak a link a customer could open. If the
+   * PATCH succeeds and only the clipboard write then fails, the estimate
+   * stays delivered -- there is nothing left to roll back -- and the
+   * contractor just retries the copy.
+   */
+  async function handleCopyLink() {
+    if (!shareUrl) return;
+    setCopyError("");
+
+    // Already delivered (or nothing to deliver): copy is the only step left.
     if (estimateId && currentStatus !== "done") {
       const body: Record<string, unknown> = {
         id: estimateId,
         copied_at: new Date().toISOString(),
       };
-      if (!currentStatus || currentStatus === "draft") {
+      const isFirstDelivery = !currentStatus || currentStatus === "draft";
+      if (isFirstDelivery) {
         body.status = "sent";
-        onSent?.();
       }
-      fetch("/api/estimates", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }).catch(() => {});
+
+      let res: Response;
+      try {
+        res = await fetch("/api/estimates", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      } catch {
+        setCopyError("Could not reach the server. Nothing was copied.");
+        return;
+      }
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setCopyError((data as { error?: string }).error ?? "Could not deliver this estimate. Nothing was copied.");
+        return;
+      }
+
+      if (isFirstDelivery) onSent?.();
     }
+
+    const copiedOk = await writeToClipboard(shareUrl);
+    if (!copiedOk) {
+      setCopyError(
+        estimateId && currentStatus !== "done"
+          ? "Estimate delivered, but the link could not be copied. Try again."
+          : "Could not copy the link. Try again."
+      );
+      return;
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   }
 
   async function handleSendSMS() {
@@ -307,6 +353,9 @@ export function SendEstimateSheet({
               </div>
             </button>
 
+            {copyError && (
+              <p className="text-red-400 text-xs text-center px-1">{copyError}</p>
+            )}
           </div>
         )}
 

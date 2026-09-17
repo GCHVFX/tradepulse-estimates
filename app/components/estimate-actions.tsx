@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { SendEstimateSheet } from "./send-estimate-sheet";
 import { MarkJobDoneSheet } from "./mark-job-done-sheet";
@@ -34,6 +34,13 @@ interface EstimateActionsProps {
   paymentStatus?: string | null;
   invoiceAmount?: number | null;
   estimateTotal?: number;
+  /** The authoritative send-readiness signal at page load: for contractor
+   * pricing, calculateContractorPricing's own `complete` (never a client
+   * guess from the total); for legacy, the same total-is-nonzero check this
+   * component has always used for it. Kept live after a pricing save by the
+   * `estimate-total-change` event ContractorPricingEditor dispatches with
+   * the server's own response -- see the effect below. */
+  estimateComplete?: boolean;
   businessHasPaymentLink?: boolean;
   justSent?: boolean;
   hasPhotos?: boolean;
@@ -42,6 +49,49 @@ interface EstimateActionsProps {
    * whether automated SMS reminders keep going out (enforced server-side
    * in app/api/cron/payment-reminders/route.ts, not here). */
   smsOptedOut?: boolean;
+}
+
+/** The event ContractorPricingEditor dispatches after a successful pricing
+ * save, and this component listens for. One name, shared by both files. */
+export const PRICING_CHANGE_EVENT = "estimate-total-change";
+
+/**
+ * Pulls the authoritative `complete` flag out of a dispatched
+ * estimate-total-change event. Deliberately hook-free and exported so its
+ * exact runtime behaviour -- not just its presence in the source -- can be
+ * exercised against a real EventTarget/CustomEvent dispatch in
+ * tests/smoke/estimate-actions-send-state-sync.spec.ts, without a DOM or a
+ * React renderer. It reads nothing but `.complete`: a total on the same
+ * detail object, present or not, never changes what this returns.
+ */
+export function readPricingComplete(event: Event): boolean {
+  return (event as CustomEvent<{ complete: boolean }>).detail.complete;
+}
+
+/**
+ * Whether the sticky action bar should render at all. The bar exists only
+ * when it is actionable: a plain, undelivered contractor_pricing draft that
+ * is still incomplete has nothing to do there (Send can't be used yet, and
+ * the missing-inputs guidance already lives inline with the pricing editor),
+ * so it renders nothing rather than a disabled button plus a warning that
+ * duplicates that guidance and permanently occupies screen space. Every
+ * other state this covers -- a website-quote conversion, a done job, an
+ * already-sent estimate -- is either not contractor_pricing or already
+ * delivered, and delivery requires having passed this same completeness
+ * gate, so none of them can coincide with `sendBlocked`.
+ *
+ * Deliberately hook-free and exported, the same as readPricingComplete
+ * above, so the actual show/hide decision -- not just its presence in the
+ * source -- can be exercised as real logic in
+ * tests/smoke/estimate-actions-send-state-sync.spec.ts.
+ */
+export function shouldShowStickyActionBar(state: {
+  isQuoteRequest: boolean;
+  isDone: boolean;
+  localStatus: string;
+  sendBlocked: boolean;
+}): boolean {
+  return state.isQuoteRequest || state.isDone || state.localStatus === "sent" || !state.sendBlocked;
 }
 
 export function EstimateActions({
@@ -64,6 +114,7 @@ export function EstimateActions({
   paymentStatus,
   invoiceAmount,
   estimateTotal,
+  estimateComplete,
   businessHasPaymentLink,
   justSent,
   hasPhotos,
@@ -73,18 +124,27 @@ export function EstimateActions({
   const isQuoteRequest = status === "needs_review" && source === "website_quote";
   const [isConverting, setIsConverting] = useState(false);
   const [convertError, setConvertError] = useState("");
-  const [liveTotal, setLiveTotal] = useState(estimateTotal ?? 0);
+  const [liveComplete, setLiveComplete] = useState(estimateComplete ?? false);
   const [sendSheetInitialPanel, setSendSheetInitialPanel] = useState<"menu" | "email">("menu");
 
+  // ContractorPricingEditor dispatches this after every successful pricing
+  // save, carrying the server's own calculated state -- the same PUT
+  // /api/estimates/[id]/pricing response body it just received. Nothing here
+  // recomputes completeness from a total; `complete` is forwarded exactly as
+  // the server returned it, so this component and the server can never
+  // disagree about whether the estimate is ready to send. estimateTotal
+  // itself (used below for the invoice prefill) needs no live counterpart:
+  // it is a prop, not mirrored into state, so it already refreshes with the
+  // rest of this page's server data on the editor's router.refresh().
   useEffect(() => {
-    function handleTotalChange(e: Event) {
-      setLiveTotal((e as CustomEvent<number>).detail);
+    function handlePricingChange(e: Event) {
+      setLiveComplete(readPricingComplete(e));
     }
-    window.addEventListener('estimate-total-change', handleTotalChange);
-    return () => window.removeEventListener('estimate-total-change', handleTotalChange);
+    window.addEventListener(PRICING_CHANGE_EVENT, handlePricingChange);
+    return () => window.removeEventListener(PRICING_CHANGE_EVENT, handlePricingChange);
   }, []);
 
-  const isZeroTotal = !liveTotal || liveTotal <= 0;
+  const sendBlocked = !liveComplete;
 
   // This fixed bar's content is genuinely variable height: it can be one
   // 56px button or several stacked blocks (Job Done card, review-request
@@ -98,18 +158,40 @@ export function EstimateActions({
   // and publishing it as a CSS custom property is what makes that padding
   // correct for every state without page.tsx needing to know this
   // component's internals.
-  const actionBarRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = actionBarRef.current;
-    if (!el) return;
+  //
+  // A callback ref, not useRef+useEffect: the bar is now conditionally
+  // rendered at all (see the render condition below), and an effect with an
+  // empty dependency array only runs once at this component's own mount --
+  // it would never re-observe a bar that mounts *later*, when pricing goes
+  // from incomplete to complete without a page reload. A callback ref fires
+  // on every actual DOM attach and detach, so the observer (and the
+  // published height) always matches whether the bar currently exists.
+  //
+  // The null branch sets the variable to "0px" rather than clearing it.
+  // page.tsx's fallback (200px) exists only to avoid a flash of
+  // insufficient padding for a bar that *will* render, before this ref has
+  // fired even once -- it is not a stand-in for "no bar", and leaving the
+  // property unset here would fall through to that same 200px, reserving
+  // clearance for a bar that this render deliberately does not show.
+  const actionBarObserverRef = useRef<ResizeObserver | null>(null);
+  const actionBarRef = useCallback((el: HTMLDivElement | null) => {
+    actionBarObserverRef.current?.disconnect();
+    actionBarObserverRef.current = null;
+    if (!el) {
+      document.documentElement.style.setProperty("--tp-estimate-action-bar-height", "0px");
+      return;
+    }
     const publishHeight = () => {
       document.documentElement.style.setProperty("--tp-estimate-action-bar-height", `${el.offsetHeight}px`);
     };
     publishHeight();
     const observer = new ResizeObserver(publishHeight);
     observer.observe(el);
+    actionBarObserverRef.current = observer;
+  }, []);
+  useEffect(() => {
     return () => {
-      observer.disconnect();
+      actionBarObserverRef.current?.disconnect();
       document.documentElement.style.removeProperty("--tp-estimate-action-bar-height");
     };
   }, []);
@@ -120,6 +202,26 @@ export function EstimateActions({
   const [localStatus, setLocalStatus] = useState(status ?? "");
   const [localCustomerPhone, setLocalCustomerPhone] = useState(customerPhone ?? "");
   const [isDone, setIsDone] = useState(status === "done");
+
+  // Guarantees --tp-estimate-action-bar-height is 0 whenever the sticky bar
+  // is absent, independent of whether the callback ref above has ever run.
+  // A callback ref only fires on an actual DOM attach or detach -- if this
+  // estimate loads directly into the state the bar is hidden for (the
+  // common case: a fresh contractor_pricing draft loads incomplete), the
+  // bar's <div> never mounts even once, the callback ref is never invoked
+  // at all, and the property is left permanently unset. page.tsx's
+  // fallback for an unset property is 200px (a transitional placeholder for
+  // a bar that *will* render, not a stand-in for "no bar"), so without this
+  // effect the page silently reserves ~200px of dead clearance for a bar
+  // that was never even attempted -- the actual cause of the large empty
+  // gap above BottomNav on an incomplete estimate.
+  const showStickyActionBar = shouldShowStickyActionBar({ isQuoteRequest, isDone, localStatus, sendBlocked });
+  useEffect(() => {
+    if (!showStickyActionBar) {
+      document.documentElement.style.setProperty("--tp-estimate-action-bar-height", "0px");
+    }
+  }, [showStickyActionBar]);
+
   const [localReviewRequestedAt, setLocalReviewRequestedAt] = useState(reviewRequestedAt ?? null);
   const [isMarkingDone, setIsMarkingDone] = useState(false);
   const [markDoneError, setMarkDoneError] = useState("");
@@ -316,24 +418,44 @@ export function EstimateActions({
 
   return (
     <>
-      {/* BottomNav was redesigned to a flat grid-cols-4 bar (2026-08) and now
-          renders at 87px tall (measured via getBoundingClientRect at
-          375-412px widths, no safe-area inset), not the ~93.5px an earlier
-          version of this comment assumed for the older floating-circle nav.
-          That drift silently turned the old bottom-[90px]'s intended ~3.5px
-          overlap into a 3px *gap* -- through which the scrolling white
-          estimate card behind this bar became visible as a thin strip,
-          since the gap fell inside this div's own top-fade gradient where
-          neither element paints a solid background. bottom-[84px] restores
-          a small deliberate overlap (87-84=3px) against the nav's current
-          height. Both bars are solid zinc-950 here, so the overlap itself
-          is invisible. If BottomNav's height changes again, remeasure and
-          update this number -- this is exactly the failure mode that
-          reopened once already. */}
+      {/* The sticky bar exists only when it is actionable. A plain
+          undelivered contractor_pricing draft that is still incomplete has
+          nothing to do here: Send can't be used yet, and the detailed
+          "Still needed before you can send this" guidance already lives
+          inline with the pricing editor (app/components/contractor-
+          pricing-editor.tsx), where a contractor can actually read it
+          alongside the fields it refers to. A disabled Send button plus a
+          second, shorter warning duplicated that message and permanently
+          occupied screen space -- on a real phone, enough of it to cover
+          the bottom of the pricing summary. Every other branch below
+          (isQuoteRequest, isDone, already sent) represents a state that is
+          either not contractor_pricing or is already delivered -- delivery
+          requires having passed this same completeness gate -- so none of
+          them can coincide with sendBlocked, and hiding the bar only for
+          that one case cannot hide an action any other branch needs. */}
+      {showStickyActionBar && (
       <div
         ref={actionBarRef}
-        className="fixed bottom-[84px] left-0 right-0 px-5 pb-7 pt-4 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent flex flex-col gap-3 z-30"
+        className="fixed left-0 right-0 px-5 pb-7 pt-4 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent flex flex-col gap-3 z-30"
+        style={{ bottom: "calc(var(--tp-bottom-nav-height, 87px) - 3px)" }}
       >
+        {/* BottomNav was redesigned to a flat grid-cols-4 bar (2026-08),
+            measured at 87px tall on a device with no safe-area inset -- but
+            its own bottom padding is `env(safe-area-inset-bottom)`-driven,
+            so a phone with a safe-area inset (most current iPhones, many
+            Android browsers) renders it taller than that. A hardcoded
+            `bottom-[84px]` here assumed the no-inset figure, so on an
+            inset device this bar floated above a real gap over BottomNav,
+            and (more importantly) app/estimates/[id]/page.tsx's bottom-
+            padding formula -- built from that same assumption -- reserved
+            too little space, so scrolled content ended up behind this bar
+            instead of above it on those phones. `--tp-bottom-nav-height`
+            (published by BottomNav itself, see bottom-nav.tsx) is
+            BottomNav's real measured height on whatever device this
+            renders on, so this bar's position tracks it instead of
+            guessing. `- 3px` keeps the same small deliberate overlap as
+            before (87 - 84 = 3) so the two solid zinc-950 bars still meet
+            with no visible seam. */}
         {isQuoteRequest ? (
           <>
             {convertError && (
@@ -419,23 +541,23 @@ export function EstimateActions({
             </button>
           </>
         ) : (
-          <>
-            {isZeroTotal && (
-              <p className="text-amber-400 text-xs text-center">Add pricing to your line items before sending.</p>
-            )}
-            <button
-              type="button"
-              disabled={isZeroTotal}
-              onClick={handleSendClick}
-              className={`w-full font-bold text-base rounded-xl py-4 transition-colors min-h-[56px] ${
-                isZeroTotal
-                  ? "bg-zinc-800 text-zinc-500 cursor-not-allowed"
-                  : "bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950"
-              }`}
-            >
-              Send Estimate
-            </button>
-          </>
+          // Reached only when !sendBlocked -- the wrapping condition above
+          // hides this whole bar for the incomplete case, so there is no
+          // disabled state to render here and nothing left to warn about.
+          // The missing-inputs message lives once, inline with the pricing
+          // editor, not duplicated here.
+          <button
+            type="button"
+            disabled={sendBlocked}
+            onClick={handleSendClick}
+            className={`w-full font-bold text-base rounded-xl py-4 transition-colors min-h-[56px] ${
+              sendBlocked
+                ? "bg-zinc-800 text-zinc-500 cursor-not-allowed"
+                : "bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950"
+            }`}
+          >
+            Send Estimate
+          </button>
         )}
 
         {isDone && !hasInvoice && (localPaymentStatus === null || localPaymentStatus === "unpaid") && (
@@ -611,6 +733,7 @@ export function EstimateActions({
           </div>
         )}
       </div>
+      )}
 
       <SendEstimateSheet
         isOpen={showSendSheet}

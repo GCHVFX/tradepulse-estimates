@@ -5,6 +5,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
 import { claimDelivery, markDeliverySent } from "@/lib/delivery-claims";
+import { classifyEstimate } from "@/lib/estimate-classification";
+import { isDeliveredContractorPricing } from "@/lib/estimate-delivery";
+import { contractorPricingCompleteness } from "@/lib/estimate-pricing-server";
 import { normalizeEmail } from "@/lib/request-guards";
 import { canonicalUrl } from "@/lib/site-url";
 import { ESTIMATES_FROM } from "@/lib/email-addresses";
@@ -78,13 +81,32 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // Verify ownership of estimate
   const { data: estimate } = await supabaseAdmin
     .from("tpe_estimates")
-    .select("id, customer_name, customer_email, sent_at")
+    .select(
+      "id, customer_name, customer_email, sent_at, copied_at, pricing_source, source, status, tax_rate_snapshot, deposit_percent_snapshot, deposit_threshold_snapshot"
+    )
     .eq("id", estimateId)
     .eq("business_id", business.id)
     .maybeSingle();
 
   if (!estimate) {
     return applyTo(NextResponse.json({ error: "Estimate not found" }, { status: 404 }));
+  }
+
+  // Classification first (specs/contractor-owned-pricing.md section 2), then
+  // the same completeness gate PATCH /api/estimates and send-sms share
+  // (section 13). No side effect has happened yet: nothing is claimed, no
+  // email sent.
+  const pricingClass = classifyEstimate(estimate);
+  if (pricingClass === "contractor_pricing") {
+    const pricing = await contractorPricingCompleteness(estimateId, estimate);
+    if (!pricing.complete) {
+      return applyTo(
+        NextResponse.json(
+          { error: "This estimate is missing pricing information and cannot be sent yet" },
+          { status: 409 }
+        )
+      );
+    }
   }
 
   const storedEmail = estimate.customer_email ? normalizeEmail(estimate.customer_email) : null;
@@ -166,7 +188,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         status: "sent",
         sent_via: "email",
         sent_at: new Date().toISOString(),
-        ...(!storedEmail ? { customer_email: recipient } : {}),
+        // A contractor_pricing estimate already delivered through some other
+        // channel (e.g. copy link, with no email ever entered) must not have
+        // its customer-visible document silently gain an email address now
+        // -- the share page renders customer_email when present, so this is
+        // a document edit, not a delivery-mechanics detail. This only ever
+        // skips a write that would otherwise happen; it never blocks the
+        // send itself.
+        ...(!storedEmail && !isDeliveredContractorPricing(estimate) ? { customer_email: recipient } : {}),
       })
       .eq("id", estimateId)
       .eq("business_id", business.id);

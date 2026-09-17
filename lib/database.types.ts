@@ -419,6 +419,8 @@ export type Database = {
           customer_phone: string
           customer_pricing_mode: string
           deposit_amount: string | null
+          deposit_percent_snapshot: number | null
+          deposit_threshold_snapshot: number | null
           description: string
           due_date: string | null
           id: string
@@ -441,6 +443,8 @@ export type Database = {
           source: string
           status: string
           summary: string | null
+          tax_label_snapshot: string | null
+          tax_rate_snapshot: number | null
           title: string | null
           updated_at: string
           urgency: string
@@ -457,6 +461,8 @@ export type Database = {
           customer_phone: string
           customer_pricing_mode?: string
           deposit_amount?: string | null
+          deposit_percent_snapshot?: number | null
+          deposit_threshold_snapshot?: number | null
           description: string
           due_date?: string | null
           id?: string
@@ -479,6 +485,8 @@ export type Database = {
           source?: string
           status?: string
           summary?: string | null
+          tax_label_snapshot?: string | null
+          tax_rate_snapshot?: number | null
           title?: string | null
           updated_at?: string
           urgency: string
@@ -495,6 +503,8 @@ export type Database = {
           customer_phone?: string
           customer_pricing_mode?: string
           deposit_amount?: string | null
+          deposit_percent_snapshot?: number | null
+          deposit_threshold_snapshot?: number | null
           description?: string
           due_date?: string | null
           id?: string
@@ -517,6 +527,8 @@ export type Database = {
           source?: string
           status?: string
           summary?: string | null
+          tax_label_snapshot?: string | null
+          tax_rate_snapshot?: number | null
           title?: string | null
           updated_at?: string
           urgency?: string
@@ -859,6 +871,16 @@ export type Database = {
       }
       tpe_delete_business_account_data: {
         Args: { p_business_id: string; p_owner_user_id: string }
+        Returns: Json
+      }
+      tpe_save_contractor_pricing: {
+        Args: {
+          p_business_id: string
+          p_estimate_id: string
+          p_first_hourly_rate?: number
+          p_rows: Json
+          p_tax?: Json
+        }
         Returns: Json
       }
     }

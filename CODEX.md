@@ -140,7 +140,7 @@ docs/
 
 ### Starter Features
 
-- Estimate creation: text input -> AI streaming -> save to DB
+- Estimate creation: text input, photos, or dictation -> AI writes the job wording only -> saved as a `contractor_pricing` draft -> contractor enters the pricing
 - Estimate list, detail, edit, delete
 - Send estimate by SMS, email, copy link, and PDF download
 - Business profile: name, phone, email, logo, prepared_by
@@ -186,8 +186,19 @@ docs/
 - `payment_link` on profile, either PayPal link or e-transfer email, is included in reminders and omitted cleanly when not set.
 - Requires `CRON_SECRET`.
 
+### Contractor-owned pricing, Phase 1, in progress on `phase1-contractor-pricing`
+
+`specs/contractor-owned-pricing.md` is the authority. Local only, not deployed.
+
+- The AI writes the job wording. It authors no number that changes the selling price.
+- A generated estimate saves as `source='ai_generated'`, `status='draft'`, `pricing_source='contractor_pricing'`, with the business tax and deposit settings snapshotted onto the row and no pricing rows. It is deliberately incomplete until the contractor prices it. That is correct, not a regression.
+- The contractor enters labour, materials, markup, and optional charges in the pricing editor on the saved estimate. `lib/contractor-pricing.ts` does the arithmetic and is the only implementation of it.
+- `/new` renders the saved sanitized prose the server returns, never its own stream buffer.
+- Regenerate replaces the wording on the same estimate id. Pricing rows, snapshots, customer details, and photos survive.
+
 ### Not Yet Built
 
+- Customer output and delivery locking for contractor pricing, Phase 1 slice 5
 - Follow-Up, scheduled customer outreach
 - Pro upgrade flow. No Pro subscribers yet and `STRIPE_PRO_PRICE_ID` is not set.
 
@@ -351,9 +362,11 @@ import { stripe } from "@/lib/stripe";
 `POST /api/generate-estimate` rules:
 
 - Rate limited: 10 calls per user per 60 seconds via `tpe_rate_limits`.
-- Input `jobDescription` capped at 2000 characters.
-- `controller.close()` must come after the `__ID__` chunk is enqueued.
-- Injects price book data, including labour rate, markup, and common items, into the prompt.
+- Input `jobDescription` capped at 2000 characters. Optional `photoAnalysis` capped at 4000.
+- Reads no `labour_rate`, no `markup_percent`, and no price book. A value this route never loads cannot reach the model.
+- Saves explicitly as `source='ai_generated'`, `status='draft'`, `pricing_source='contractor_pricing'`, snapshots the business tax and deposit settings onto the row, and writes no pricing rows.
+- Optional `estimateId` regenerates the wording on that estimate instead of inserting a new one. The write is title and summary only, so pricing rows, snapshots, customer details and photos survive. Refused for anything that is not an undelivered `contractor_pricing` estimate the caller owns.
+- Stream markers, in order: `__ID__` then `__SAVED__`, the saved sanitized prose that `/new` renders. `controller.close()` must come after both are enqueued.
 
 `POST /api/analyze-photo` rules:
 
@@ -425,16 +438,27 @@ SMS pulls `name` from `tpe_businesses`, not `company_name`.
 
 ## Estimate Output Structure
 
-Every generated estimate follows this exact structure:
+The AI writes the job. The contractor owns the price. TradePulse owns the maths.
+
+Every generated estimate is prose only, in this exact structure:
 
 1. Job Title, H1 heading. Filtered from rendered output by `EstimateMarkdown`.
 2. Job Summary, 2 to 3 sentences.
 3. Scope of Work, bullet list, specific tasks, plain language.
-4. Line Items, labour and materials, pipe table.
-5. Assumptions and Exclusions, plain bullets, no bold labels.
-6. Pricing Summary, pipe table with subtotal, tax, total, deposit, balance.
-7. Payment Terms, 2 to 4 lines, always includes "This estimate is valid for 30 days".
-8. Notes, optional, omit if nothing relevant.
+4. Assumptions and Exclusions, plain bullets, no bold labels.
+5. Notes, job-specific and useful, omit if nothing relevant.
+
+The model must never author any of these. There is no Line Items table and no Pricing Summary in generated output:
+
+- labour hours, labour rates, material prices, markup, tax, deposits, totals
+- any other value whose purpose is to decide a selling price
+- Payment Terms, estimate validity periods such as "valid for 30 days", warranties, cancellation or financing terms, payment due dates or timing, or any other contractor business term
+
+Pricing is contractor-owned and calculated deterministically from the structured rows in `tpe_estimate_items` by `lib/contractor-pricing.ts`. Business terms are the contractor's own and are added outside the model. There is no setting holding them yet, so generated output carries none rather than carrying an invented default.
+
+`lib/estimate-prose.ts` is the guardrail behind those rules, not a substitute for them. It runs on model output only, once, before the estimate row is written. It deletes a sentence carrying a currency figure, a deposit, a pricing hedge such as "pricing may change", "quoted separately" or "cost will depend", or an invented business term; deletes a heading its deletions emptied; and drops a Payment Terms section whole. It never rewrites contractor-typed prose, never retries the model, and never blocks a save.
+
+Photos may help the model understand the job: visible conditions, materials and components, access difficulty, likely scope, and what belongs in assumptions and exclusions. Photos must not author a price-driving value. The instruction in `app/api/analyze-photo/route.ts` keeps an observation separate from the action it calls for: describe what is visible, do not state an uncertain diagnosis as fact ("dark staining, possible moisture-related deterioration", not "mould"), do not call for replacement just because something is visible (inspect, verify, or replace if damaged), and do not assume an adjacent component has failed.
 
 Customer details are stored as columns on `tpe_estimates` and rendered with `CustomerDetailsBlock`. They are not baked into AI output. H1 lines are filtered from markdown rendering. Business name and job title are displayed separately in the UI.
 

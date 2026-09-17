@@ -268,7 +268,7 @@ test("normalization failure: a thrown error is never swallowed into a fallback s
   expect((thrown as Error).message).toContain("Deterministic deposit normalization failed");
 });
 
-test("the generation route never falls back to the model's raw text when deposit normalization fails", () => {
+test("the generation route never saves the model's raw text", () => {
   const routeSource = readFileSync(
     path.join(__dirname, "../../app/api/generate-estimate/route.ts"),
     "utf8"
@@ -276,6 +276,14 @@ test("the generation route never falls back to the model's raw text when deposit
   // The old unsafe pattern this replaced: initializing the saved value to
   // the raw model text and only overwriting it on success.
   expect(routeSource).not.toContain("let normalizedSummary = fullText;");
-  expect(routeSource).toContain("applyDeterministicDeposit(fullText, estimateCurrency, depositRule, tax)");
-  expect(routeSource).toContain("throw new Error(");
+
+  // Phase 1 slice 4 removed the deterministic deposit step from generation
+  // altogether: the model is no longer asked for a deposit, a total or any
+  // other figure, so there is nothing left to normalize. What replaced it is
+  // the price-safety filter, and the value that reaches the database is
+  // always its output, never fullText.
+  expect(routeSource).not.toContain("applyDeterministicDeposit");
+  expect(routeSource).toContain("const sanitized = sanitizeGeneratedProse(fullText);");
+  expect(routeSource).toContain("const summary = sanitized.prose;");
+  expect(routeSource).not.toContain("summary: fullText");
 });

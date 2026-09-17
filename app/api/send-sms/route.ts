@@ -5,6 +5,9 @@ import { NextRequest, NextResponse } from "next/server";
 import twilio from "twilio";
 import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
 import { claimDelivery, markDeliverySent } from "@/lib/delivery-claims";
+import { classifyEstimate } from "@/lib/estimate-classification";
+import { isDeliveredContractorPricing } from "@/lib/estimate-delivery";
+import { contractorPricingCompleteness } from "@/lib/estimate-pricing-server";
 import {
   normalizePhoneE164,
   createSupabaseSmsSuppressionStore,
@@ -98,13 +101,32 @@ if (!hasAccess) return applyTo(NextResponse.json({ error: "Subscription required
   // Verify ownership of estimate
   const { data: estimate } = await supabaseAdmin
     .from("tpe_estimates")
-    .select("id, customer_phone, customer_name, sent_at")
+    .select(
+      "id, customer_phone, customer_name, sent_at, copied_at, pricing_source, source, status, tax_rate_snapshot, deposit_percent_snapshot, deposit_threshold_snapshot"
+    )
     .eq("id", estimateId)
     .eq("business_id", business.id)
     .maybeSingle();
 
   if (!estimate) {
     return applyTo(NextResponse.json({ error: "Estimate not found" }, { status: 404 }));
+  }
+
+  // Classification first (specs/contractor-owned-pricing.md section 2), then
+  // the same completeness gate PATCH /api/estimates and send-email share
+  // (section 13). A legacy or unpriced inbound estimate is untouched by this
+  // check. No side effect has happened yet: nothing is claimed, nothing sent.
+  const pricingClass = classifyEstimate(estimate);
+  if (pricingClass === "contractor_pricing") {
+    const pricing = await contractorPricingCompleteness(estimateId, estimate);
+    if (!pricing.complete) {
+      return applyTo(
+        NextResponse.json(
+          { error: "This estimate is missing pricing information and cannot be sent yet" },
+          { status: 409 }
+        )
+      );
+    }
   }
 
   // Pinned to the canonical host, never SITE_URL. A share link is a
@@ -186,7 +208,16 @@ if (!hasAccess) return applyTo(NextResponse.json({ error: "Subscription required
 
     await markDeliverySent(supabaseAdmin, claimId);
 
-    const phoneUpdate = !estimate.customer_phone ? { customer_phone: formattedPhone } : {};
+    // A contractor_pricing estimate already delivered through some other
+    // channel (e.g. copy link, with no phone ever entered) must not have its
+    // customer-visible document silently gain a phone number now -- the
+    // share page renders customer_phone when present, so this is a document
+    // edit, not a delivery-mechanics detail. Undelivered and legacy/inbound
+    // estimates are unaffected: this only ever skips a write that would
+    // otherwise happen, never blocks the send itself.
+    const lockCustomerDetails = isDeliveredContractorPricing(estimate);
+    const phoneUpdate =
+      !estimate.customer_phone && !lockCustomerDetails ? { customer_phone: formattedPhone } : {};
     const { error: updateError } = await supabaseAdmin
       .from("tpe_estimates")
       .update({

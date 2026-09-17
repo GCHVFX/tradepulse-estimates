@@ -2,6 +2,7 @@ import "server-only";
 
 import type { Database } from "./database.types";
 import { estimateCurrencyOf } from "./currency-db";
+import { calculateContractorPricing, type ContractorPricing } from "./contractor-pricing";
 import type { EstimateTax } from "./estimate-tax";
 import { isGroupedPricingEnabled } from "./estimate-groups";
 import {
@@ -94,6 +95,67 @@ export async function loadStructuredPricingItems(
 
   if (error) throw new Error(error.message);
   return (data ?? []).map(toStructuredPricingItem);
+}
+
+/** One stored contractor-pricing row, as the editor needs it. */
+export type ContractorPricingRow = Pick<
+  Database["public"]["Tables"]["tpe_estimate_items"]["Row"],
+  "item_type" | "unit" | "quantity" | "unit_price" | "markup_percent" | "description" | "display_order"
+>;
+
+/**
+ * The canonical pricing rows for a contractor-priced estimate.
+ *
+ * Separate from loadStructuredPricingItems above, which serves the legacy
+ * customer view and does not select item_type. The editor cannot tell labour
+ * from materials from a charge without it.
+ */
+export async function loadContractorPricingRows(estimateId: string): Promise<ContractorPricingRow[]> {
+  const { data, error } = await supabaseAdmin
+    .from("tpe_estimate_items")
+    .select("item_type, unit, quantity, unit_price, markup_percent, description, display_order")
+    .eq("estimate_id", estimateId)
+    .order("display_order", { ascending: true });
+
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+/** The estimate's own snapshot columns, as stored -- never the live business Rates. */
+export interface ContractorPricingSnapshotSource {
+  tax_rate_snapshot: number | null;
+  deposit_percent_snapshot: number | null;
+  deposit_threshold_snapshot: number | null;
+}
+
+/**
+ * Whether a contractor_pricing estimate is complete enough to deliver
+ * (specs/contractor-owned-pricing.md section 13). The one completeness check
+ * every delivery route shares: PATCH /api/estimates (status='sent' or a first
+ * copied_at), send-sms and send-email. Reads the same persisted rows and
+ * snapshots the customer document is built from, through the same
+ * calculateContractorPricing(), so a route can never disagree with what the
+ * share page would render.
+ */
+export async function contractorPricingCompleteness(
+  estimateId: string,
+  snapshots: ContractorPricingSnapshotSource
+): Promise<ContractorPricing> {
+  const rows = await loadContractorPricingRows(estimateId);
+  return calculateContractorPricing(
+    rows.map((row) => ({
+      item_type: row.item_type,
+      unit: row.unit,
+      quantity: row.quantity,
+      unit_price: row.unit_price,
+      markup_percent: row.markup_percent,
+    })),
+    {
+      taxRatePercent: snapshots.tax_rate_snapshot,
+      depositPercent: snapshots.deposit_percent_snapshot,
+      depositThresholdDollars: snapshots.deposit_threshold_snapshot,
+    }
+  );
 }
 
 export async function loadCustomerPricingView(

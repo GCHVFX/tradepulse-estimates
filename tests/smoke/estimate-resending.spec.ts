@@ -34,7 +34,13 @@ test("send timestamps update only after provider success and recipient guards re
   expect(sms).not.toContain("Use the customer phone saved on this estimate");
   expect(sms).toContain("let formattedPhone = suppliedPhone;");
   expect(sheet).toContain('useState(formatPhoneInput(customerPhone ?? ""))');
-  expect(sms).toContain("const phoneUpdate = !estimate.customer_phone ?");
+  // Slice 5B (specs/contractor-owned-pricing.md section 12): the backfill is
+  // skipped once a contractor_pricing estimate is already delivered, so a
+  // later resend/other-channel send cannot add a phone number to a document
+  // the customer already holds. See
+  // tests/smoke/contractor-pricing-delivery-lock.spec.ts for that behaviour.
+  expect(sms).toContain("const lockCustomerDetails = isDeliveredContractorPricing(estimate);");
+  expect(sms).toContain("!estimate.customer_phone && !lockCustomerDetails");
 
   for (const [source, providerCall] of [[email, "resend.emails.send"], [sms, "messages.create"]] as const) {
     const providerIndex = source.indexOf(providerCall);

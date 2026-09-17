@@ -5,6 +5,30 @@ import {
   releasePhotoUploadReservation,
   reservePhotoUpload,
 } from "@/lib/photo-upload-reservations";
+import { isDeliveredContractorPricing } from "@/lib/estimate-delivery";
+
+/**
+ * A delivered contractor_pricing estimate's photos are part of the customer
+ * document (specs/contractor-owned-pricing.md section 12: `include_photos`
+ * and photo add/delete change the customer's page after delivery). Undelivered
+ * contractor_pricing photos, and every legacy/inbound-quote estimate, are
+ * unaffected.
+ */
+interface PhotoLockEstimate {
+  pricing_source: string | null;
+  source: string | null;
+  status: string | null;
+  sent_at: string | null;
+  copied_at: string | null;
+}
+
+function deliveryLockError(estimate: PhotoLockEstimate): NextResponse | null {
+  if (!isDeliveredContractorPricing(estimate)) return null;
+  return NextResponse.json(
+    { error: "This estimate has already gone to the customer and its photos cannot be changed" },
+    { status: 409 }
+  );
+}
 
 const MAX_PHOTOS = 5;
 const MAX_PHOTO_SIZE = 2 * 1024 * 1024; // 2MB per photo
@@ -32,7 +56,7 @@ export async function POST(
 
   const { data: estimate } = await supabaseAdmin
     .from("tpe_estimates")
-    .select("id, business_id")
+    .select("id, business_id, pricing_source, source, status, sent_at, copied_at")
     .eq("id", id)
     .eq("business_id", business.id)
     .maybeSingle();
@@ -40,6 +64,9 @@ export async function POST(
   if (!estimate) {
     return applyTo(NextResponse.json({ error: "Estimate not found or access denied" }, { status: 404 }));
   }
+
+  const lockError = deliveryLockError(estimate);
+  if (lockError) return applyTo(lockError);
 
   let body: { photos?: unknown };
   try {
@@ -192,7 +219,7 @@ export async function DELETE(
 
   const { data: estimate } = await supabaseAdmin
     .from("tpe_estimates")
-    .select("id, business_id")
+    .select("id, business_id, pricing_source, source, status, sent_at, copied_at")
     .eq("id", id)
     .eq("business_id", business.id)
     .maybeSingle();
@@ -200,6 +227,9 @@ export async function DELETE(
   if (!estimate) {
     return applyTo(NextResponse.json({ error: "Estimate not found or access denied" }, { status: 404 }));
   }
+
+  const lockError = deliveryLockError(estimate);
+  if (lockError) return applyTo(lockError);
 
   let body: { storage_path?: unknown };
   try {

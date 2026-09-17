@@ -12,10 +12,10 @@ function adminClient() {
 const JOB_DESCRIPTION =
   "Replace 50-gallon gas water heater. New unit, expansion tank, about 3 hours labour.";
 
-// EditableEstimateBody renders line-item and scope descriptions as
-// textarea/input values, which Element.innerText never includes (it only
-// reflects rendered text nodes). Read both so the spelling check actually
-// sees the editable line item text a contractor sees on screen.
+// The old markdown editor rendered scope and line-item text as
+// textarea/input values, which Element.innerText never includes. A generated
+// estimate is read-only prose now, but reading both keeps this helper correct
+// if a field is ever reintroduced to this screen.
 async function readEstimateText(page: import("@playwright/test").Page): Promise<string> {
   const bodyText = await page.locator("main").first().innerText();
   const fieldValues = await page
@@ -24,14 +24,37 @@ async function readEstimateText(page: import("@playwright/test").Page): Promise<
   return `${bodyText}\n${fieldValues}`;
 }
 
-test("generating an estimate renders a pricing summary", async ({ page }) => {
+/**
+ * Phase 1 acceptance test: pricing-ai-authors-no-numbers
+ * (specs/contractor-owned-pricing.md). This used to assert the opposite --
+ * that generation rendered a Pricing Summary -- because the model wrote the
+ * prices. It does not any more: the AI writes the job, the contractor owns
+ * the price, and a freshly generated estimate carries no figures at all until
+ * the contractor enters them in the pricing editor on the saved record.
+ *
+ * This is the one test in the suite that deliberately makes a real
+ * generation call.
+ */
+test("a generated estimate contains no currency figures before contractor input", async ({ page }) => {
   const account = await signUpFreshAccount(page);
 
   try {
     await page.locator("textarea").fill(JOB_DESCRIPTION);
     await page.getByRole("button", { name: /generate estimate/i }).click();
 
-    await expect(page.getByText(/pricing summary/i)).toBeVisible({ timeout: 30000 });
+    // Add Pricing appears only once the estimate row is saved and the server
+    // has handed back the sanitized prose, so what is on screen from here is
+    // the saved record rather than the raw stream.
+    await expect(page.getByRole("link", { name: /^add pricing$/i })).toBeVisible({ timeout: 45000 });
+
+    const bodyText = await page.locator("main").first().innerText();
+    expect(bodyText, "no currency figure may appear in generated prose").not.toMatch(/[$]/);
+    expect(bodyText, "no deposit may appear in generated prose").not.toMatch(/deposit/i);
+    expect(bodyText, "no pricing summary is generated any more").not.toMatch(/pricing summary/i);
+    expect(bodyText, "no estimated total is generated any more").not.toMatch(/estimated total/i);
+    expect(bodyText, "the model does not write the contractor's business terms").not.toMatch(
+      /payment terms|valid for \d+ days|quoted separately|cost will depend/i
+    );
   } finally {
     await cleanupTestAccount(account.userId);
   }
@@ -54,10 +77,10 @@ test("a Canadian (default) business gets Canadian spelling in generated content"
     await page.locator("textarea").fill(JOB_DESCRIPTION);
     await page.getByRole("button", { name: /generate estimate/i }).click();
     // Wait for generation to fully finish, not just for the heading to
-    // stream in -- "Send Estimate" only enables once the stream (and the
-    // server's claim release) has completed, so the summary text below is
-    // guaranteed complete rather than a mid-stream snapshot.
-    await expect(page.getByRole("button", { name: /^send estimate$/i })).toBeEnabled({
+    // stream in -- Add Pricing only appears once the estimate row is saved
+    // and the server has returned the sanitized prose, so the text below is
+    // the saved record rather than a mid-stream snapshot.
+    await expect(page.getByRole("link", { name: /^add pricing$/i })).toBeVisible({
       timeout: 45000,
     });
 
@@ -87,17 +110,19 @@ test("a US business gets American spelling in generated content", async ({ page 
     await page.locator("textarea").fill(JOB_DESCRIPTION);
     await page.getByRole("button", { name: /generate estimate/i }).click();
     // Wait for generation to fully finish, not just for the heading to
-    // stream in -- "Send Estimate" only enables once the stream (and the
-    // server's claim release) has completed, so the summary text below is
-    // guaranteed complete rather than a mid-stream snapshot.
-    await expect(page.getByRole("button", { name: /^send estimate$/i })).toBeEnabled({
+    // stream in -- Add Pricing only appears once the estimate row is saved
+    // and the server has returned the sanitized prose, so the text below is
+    // the saved record rather than a mid-stream snapshot.
+    await expect(page.getByRole("link", { name: /^add pricing$/i })).toBeVisible({
       timeout: 45000,
     });
 
     const bodyText = await readEstimateText(page);
     expect(bodyText, "expected 'labor' somewhere in a US estimate").toMatch(/\blabor\b/i);
     expect(bodyText, "must not also contain the Canadian spelling").not.toMatch(/\blabour\b/i);
-    expect(bodyText, "currency must still render as US$, unchanged by this task").toMatch(/US\$/);
+    // No currency assertion: Phase 1 slice 4 removed every figure from
+    // generated prose, so this screen renders no money in either currency.
+    // The estimate's own currency snapshot is covered in currency.spec.ts.
   } finally {
     await cleanupTestAccount(account.userId);
   }
