@@ -408,3 +408,25 @@ test("24: a failed save reports the failure and does not claim success", () => {
   expect(catchIndex, "the save has a catch clause").toBeGreaterThan(-1);
   expect(editor.slice(catchIndex)).not.toContain('setStatus("saved")');
 });
+
+test("a long rejection message (e.g. the delivery-lock error) does not squeeze the Save pricing button on mobile", () => {
+  const editor = readFileSync("app/components/contractor-pricing-editor.tsx", "utf8");
+
+  // Found on the phone: "This estimate has already gone to the customer and
+  // cannot be repriced" sitting beside the button in a plain flex row with
+  // no shrink protection squeezed it into a narrow, wrapped-text shape.
+  // Column below sm, row at sm+ keeps the desktop look and puts the message
+  // under a full-width mobile button instead of squeezing it.
+  const containerMatch = editor.match(/<div className="flex[^"]*">\s*<button[\s\S]*?Save pricing/);
+  expect(containerMatch, "the Save pricing button's wrapping div").not.toBeNull();
+  const container = containerMatch![0];
+  expect(container).toContain("flex-col sm:flex-row");
+
+  // The button itself no longer relies solely on the row layout to keep its
+  // shape: it refuses to shrink or wrap its own label even if something else
+  // ever puts it back in a horizontal row with a long sibling.
+  const buttonMatch = editor.match(/<button[^>]*onClick=\{save\}[^>]*>/);
+  expect(buttonMatch, "the Save pricing button element").not.toBeNull();
+  expect(buttonMatch![0]).toContain("shrink-0");
+  expect(buttonMatch![0]).toContain("whitespace-nowrap");
+});

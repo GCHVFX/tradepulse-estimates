@@ -1,11 +1,161 @@
 # TradePulse handoff
 
-Updated: 2026-09-17 (Phase 1 slice 5C implemented, uncommitted: fixed the isZeroTotal/estimate-total-change
-staleness so the Send button reflects the PUT /pricing response immediately after a save, with no page
-reload; no mobile/field-use layout defect was found beyond that staleness, so no CSS or layout was touched.
-This is the last slice of Phase 1 -- once committed, reviewed and pushed, Phase 1 (contractor-owned pricing)
-is done. See "Phase 1 slice 5C" below for detail, and its own open-work note for one pre-existing, harmless,
-out-of-scope inconsistency found along the way.)
+Updated: 2026-09-17 (Phase 1 -- all of slices 1 through 5C -- is implemented, real-phone verified, and
+committed locally on `phase1-contractor-pricing`. The seeded phone pass found and fixed two further mobile
+layout defects beyond the state-sync fix (a dead-space gap above BottomNav on an incomplete estimate, and
+the Save-pricing button squeezing under a long delivery-lock rejection message); both were verified on the
+same real phone and are included in this commit. Both disposable production estimates used for the pass
+were deleted by Greg through the normal TradePulse UI and independently confirmed gone via read-only
+production checks -- no cleanup defect. The temporary `allowedDevOrigins` LAN entry has been removed from
+`next.config.ts`. Nothing has been pushed, deployed, or merged. Next step is the Phase 1 merge/deploy plan,
+prepared but not executed, at the end of this entry.)
+
+## Phase 1 seeded phone pass: two further mobile fixes, cleanup verified (2026-09-17 PT)
+
+**Status: real-phone verified, committed.** Starting point: `dadad73` (slice 5C state-sync, closed and
+committed). Greg ran the branch locally against production Supabase over LAN (the same method as the Slice
+3 phone review: `next.config.ts`'s `allowedDevOrigins` temporarily carrying his machine's LAN IP,
+`192.168.68.55`, removed again below).
+
+**Phone pass confirmed, on the original Slice 5C fixes:** incomplete pricing showed no fixed disabled Send
+overlay; missing-input guidance was readable; labour/material pricing could be entered; Send became
+available immediately after a valid save with no reload; Copy Link delivered successfully; the delivered
+estimate showed "Resend Estimate"; attempting to reprice after delivery was correctly rejected with "This
+estimate has already gone to the customer and cannot be repriced"; the customer-facing link rendered
+correctly.
+
+**Two further defects found on the same pass, both fixed and re-verified on the same phone:**
+
+**Issue 1 -- a large empty gap above BottomNav on an incomplete estimate.** Not `flex-1`/`min-h-dvh`
+forcing viewport fill (checked and ruled out by direct flexbox reasoning: the wrapper's `min-h-dvh`
+guarantees the same total page height either way, so moving `flex-1` off `<main>` would only relocate where
+in the DOM that leftover space nominally lives, not shrink it -- same colour, same size, no visible
+difference; this was correctly diagnosed as a dead end before anything was touched). The actual cause:
+`EstimateActions`' action-bar height is published through a **callback ref**, which React only invokes on
+an actual DOM mount or unmount. An estimate that loads *directly* into the state the sticky bar is hidden
+for (a fresh incomplete `contractor_pricing` draft -- the common case) never mounts the bar's `<div>` even
+once, so the callback ref is never invoked at all, `--tp-estimate-action-bar-height` stays permanently
+unset for the whole session, and `page.tsx`'s `200px` placeholder (meant only to bridge the gap before that
+ref's first paint, for a bar that *will* render) applies indefinitely -- reserving clearance for a bar that
+was never even attempted. Fixed with a `useEffect` in `app/components/estimate-actions.tsx` keyed on the
+already-computed `showStickyActionBar` boolean, which force-sets the property to `"0px"` whenever the bar is
+hidden, independent of whether the callback ref has ever fired.
+
+**Issue 2 -- Save pricing button squeezed by a long rejection message.** The button and its status/error
+message shared one `<div className="flex items-center gap-3">` (horizontal row, no `shrink-0` on the
+button, no wrap). The delivery-lock rejection text ("This estimate has already gone to the customer and
+cannot be repriced") is long enough that flexbox's default shrink behaviour squeezed the button into a
+narrow, wrapped-text shape on a phone. Fixed in `app/components/contractor-pricing-editor.tsx`: the
+container is now `flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3` (column on mobile, the same row
+layout as before at `sm:` and up, so desktop is unchanged), and the button itself gained `shrink-0
+whitespace-nowrap` as a defensive second guard.
+
+**Files changed by this phone pass, in total (state-sync fix plus these two layout fixes):**
+`app/components/bottom-nav.tsx`, `app/components/contractor-pricing-editor.tsx`,
+`app/components/estimate-actions.tsx`, `app/estimates/[id]/page.tsx`, `playwright.unit.config.ts`,
+`tests/smoke/contractor-pricing-form.spec.ts`, `tests/smoke/estimate-actions-send-state-sync.spec.ts`,
+`tests/smoke/estimate-action-bar-safe-area-spacing.spec.ts` (new).
+
+**Disposable production data used, and its cleanup.** One business (Greg's own, pre-existing:
+`dc5438e2-cd68-4ba9-890a-17a54f219cd4`), two disposable estimates created under it for this pass, both
+deleted afterward through the normal authenticated **Delete estimate** UI action -- never by SQL, admin
+tooling, or a script:
+
+- `d1084b6d-42b6-4f18-bede-7ab53b51bc92` ("Kitchen Outlet Repair") -- used first while incomplete, then
+  completed and delivered via Copy Link (`status='sent'`, `copied_at` set 2026-09-17 04:37:32 UTC,
+  `sent_at` null) for the Issue 2 check. Pre-delete inventory: 1 `tpe_estimates` row, 2 `tpe_estimate_items`
+  rows, 0 `tpe_estimate_photos`, 0 `tpe_payment_reminders`, 0 `tpe_estimate_changes`. No customer
+  name/phone/email/address was ever entered.
+- `f0df605e-9bb5-40ee-a2bc-d2f407af6744` ("Replace Hot Water Tank in Basement") -- created specifically to
+  re-verify Issue 1 after the fix, since the first estimate could not be reverted from delivered back to
+  incomplete (delivery is irreversible by design, per the Slice 5B `wouldNewlyUndeliver` work -- confirmed
+  from source rather than assumed). Pre-delete inventory: 1 `tpe_estimates` row (`status='draft'`,
+  `copied_at`/`sent_at` both null), 1 `tpe_estimate_items` row, 0 photos, 0 reminders, 0 changes rows. Also
+  no customer contact fields entered.
+
+**Post-delete verification (read-only, both UUIDs, after Greg confirmed both UI deletions):** zero rows in
+`tpe_estimates`, `tpe_estimate_items`, `tpe_estimate_photos`, `tpe_payment_reminders` and
+`tpe_estimate_changes` for both estimate ids. Neither estimate ever had a photo row, so there was no Storage
+bucket path to check. **No cleanup defect found; both deletions verified clean.** No other estimate, business,
+or account was inspected, queried, or touched during this pass.
+
+**Temporary LAN configuration removed.** `next.config.ts`'s `allowedDevOrigins: ["192.168.68.55"]` entry
+(and the accompanying drop of the `: NextConfig` type annotation) is gone; `git diff -- next.config.ts` is
+empty against the last commit.
+
+**Verification run:** the phone-pass-relevant focused suites --
+`estimate-action-bar-safe-area-spacing.spec.ts` (4 cases, includes the new Issue 1 regression test),
+`estimate-actions-send-state-sync.spec.ts` (9 cases), `contractor-pricing-form.spec.ts` (24 cases, includes
+the new Issue 2 regression test), `bottom-nav.spec.ts`, `sms-suppression-guard.spec.ts` -- all passed (59
+total), plus `unit-suite-completeness.spec.ts`'s same pre-existing failure noted throughout this branch's
+history (3 unregistered marketing/nav specs, unrelated). `npx tsc --noEmit` clean. `eslint` on every file
+this phone pass touched -- clean except the same pre-existing, unrelated `<a>`-vs-`Link` error at
+`app/estimates/[id]/page.tsx`, confirmed present before this work. `git diff --check` clean.
+
+**Branch and commit state:** `phase1-contractor-pricing`, committed as a new commit on top of `dadad73`
+(slice 5C) and `24e959b` (slice 5B) -- neither of those commits was amended. Nothing pushed, nothing
+deployed, nothing merged.
+
+**Phase 1 (slices 1 through 5C) is now complete and real-phone verified.** Next step: the merge/deploy plan
+below, prepared but not executed -- awaiting Greg's explicit instruction to proceed.
+
+## Phase 1 merge/deploy plan (prepared, not executed)
+
+**Pre-merge checks, on `phase1-contractor-pricing` before opening a PR:**
+1. `git log --oneline main..phase1-contractor-pricing` -- review every commit going in; confirm B3
+   (`24e959b`'s delivery-lock work already carries the identical B3 fix `main` has at `4ef93a6`) is not
+   double-applied or conflicting.
+2. `npx tsc --noEmit` clean (already true as of this entry).
+3. Full unit-safe suite: `npx playwright test --config playwright.unit.config.ts` (not run this session --
+   this session ran only the focused subsets each change touched, per every task's explicit instruction not
+   to run the full suite; run it once, in full, before opening the PR).
+4. `npx eslint .` across the whole repo, not just changed files (same reasoning as above).
+5. Confirm `git diff main...phase1-contractor-pricing -- next.config.ts` is empty (no leftover LAN
+   config) and that no other dev-only or debug change rode along.
+6. Re-read `specs/contractor-owned-pricing.md`'s acceptance-test list against what actually has coverage;
+   file any gap as a fast-follow rather than blocking the merge on it if the gap is test-only, not a
+   behaviour gap.
+7. Confirm no new Supabase migration is pending: all Phase 1 migrations are already applied to production,
+   so this merge should ship application code only.
+
+**Integration into `main`:** open a PR from `phase1-contractor-pricing` into `main` (currently at `4ef93a6`,
+the B3 hotfix). Squash or preserve history per Greg's preference; either way the PR description should name
+every slice (1 through 5C) and link this HANDOFF entry. Do not fast-forward without review given the size
+of this change (Phase 1 touches pricing generation, the estimate detail page, delivery/send routes, and
+photo routes). Merge only after Greg's explicit approval.
+
+**Expected production deployment path:** this repo auto-deploys `main` to production via Vercel (the same
+path the B3 hotfix used). Merging the PR triggers that deploy automatically -- there is no separate manual
+deploy step -- so the PR merge itself is the deploy action and should not happen until Greg is ready for
+production to start serving Phase 1 code.
+
+**Minimum post-deploy smoke checks (account-free first, matching the B3 hotfix's own pattern):**
+1. `/` and a couple of public pages load with no console errors.
+2. `/estimates` and `/new` redirect signed-out to `/login` (proxy.ts unaffected by this change, but cheap to
+   confirm).
+3. An existing legacy delivered share link (the 2026-09-11 estimate referenced throughout Phase 1 planning)
+   still renders byte-for-byte the same as before -- this is the one legacy-preservation guarantee the whole
+   phase was built around.
+4. Signed in as Greg on production (real account, no throwaway signup needed): create one real (non-
+   disposable, or a deliberately-labelled test estimate Greg owns and cleans up himself) `contractor_pricing`
+   estimate, price it, confirm Send is blocked while incomplete and enables immediately on save, deliver it
+   via Copy Link, confirm the customer link renders correctly with no internal numbers, confirm re-pricing
+   after delivery is refused with the same message verified in this phase.
+5. Confirm the mobile layout fixes from this entry (no dead-space gap, no Save-button squeeze) hold on
+   production's actual deployed bundle, not just the local dev server -- production JS/CSS output can differ
+   from dev in ways that occasionally matter for exact spacing.
+
+**Rollback point:** `main` at `4ef93a6` (the current production commit, B3 hotfix). If Phase 1 needs to be
+rolled back after deploy, Vercel's own deployment history can re-promote the `4ef93a6` build directly
+(no `git revert` needed for the fastest path back); a `git revert` of the merge commit is the slower,
+code-level fallback if the Vercel promotion path is unavailable for any reason. No new migration was applied
+by this phase at merge time (all Phase 1 migrations already live in production ahead of this code), so no
+migration rollback is needed alongside a code rollback.
+
+**Not part of this plan, deliberately:** anything from Phase 2 (saved pricing standards), Phase 3
+(historical learning), Pricing Insights, or the general cleanup debt already logged elsewhere in this file
+(`EditableEstimateBody`/`EstimatePricingEditor`/pricing-mode route being unmounted-not-deleted; the dead
+event-shape mismatch in `editable-estimate-body.tsx`). None of that blocks this merge.
 
 ## Phase 1 slice 5C: send-gating state-sync, and a mobile/field-use pass (2026-09-17 PT)
 

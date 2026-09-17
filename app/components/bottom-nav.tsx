@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Tag, Plus, FileText, User } from "lucide-react";
@@ -13,6 +14,28 @@ interface BottomNavProps {
 export function BottomNav({ onNewClick }: BottomNavProps = {}) {
   const pathname = usePathname();
   const router = useRouter();
+
+  // Published so any fixed bar above this nav can position and pad itself
+  // against this nav's real height instead of a hardcoded guess. This nav's
+  // own bottom padding is `env(safe-area-inset-bottom)`-driven (below), so
+  // its rendered height varies by device -- a plain iPhone with no home
+  // indicator and one with a safe-area inset do not render the same height,
+  // which a static pixel constant elsewhere silently assumed away.
+  const navRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    const publishHeight = () => {
+      document.documentElement.style.setProperty("--tp-bottom-nav-height", `${el.offsetHeight}px`);
+    };
+    publishHeight();
+    const observer = new ResizeObserver(publishHeight);
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      document.documentElement.style.removeProperty("--tp-bottom-nav-height");
+    };
+  }, []);
 
   const handleNew = () => {
     if (onNewClick) {
@@ -34,6 +57,7 @@ export function BottomNav({ onNewClick }: BottomNavProps = {}) {
 
   return (
     <nav
+      ref={navRef}
       aria-label="Primary navigation"
       className="flex border-t border-zinc-800 bg-zinc-950 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
     >

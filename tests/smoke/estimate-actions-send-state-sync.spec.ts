@@ -1,7 +1,11 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "fs";
 import path from "path";
-import { PRICING_CHANGE_EVENT, readPricingComplete } from "../../app/components/estimate-actions";
+import {
+  PRICING_CHANGE_EVENT,
+  readPricingComplete,
+  shouldShowStickyActionBar,
+} from "../../app/components/estimate-actions";
 
 /**
  * Phase 1 slice 5C: the isZeroTotal/estimate-total-change staleness
@@ -70,6 +74,51 @@ test("dispatching the real estimate-total-change event actually flips the send-g
   expect(liveComplete).toBe(false);
 });
 
+// ── The sticky bar's own show/hide decision, also real behaviour ───────────
+
+test("the sticky Send bar is absent while an undelivered contractor_pricing draft is incomplete, and appears the instant the save response says it is complete", () => {
+  // Same real EventTarget/CustomEvent dispatch as above, now carried all the
+  // way through to the actual render decision (shouldShowStickyActionBar),
+  // for the one state this fix targets: a plain draft, not a website-quote
+  // conversion, not done, not already sent.
+  const draftState = { isQuoteRequest: false, isDone: false, localStatus: "" };
+  let liveComplete = false;
+  const target = new EventTarget();
+  target.addEventListener(PRICING_CHANGE_EVENT, (e) => {
+    liveComplete = readPricingComplete(e);
+  });
+
+  // 1. Incomplete at page load: no fixed Send overlay to render at all.
+  expect(shouldShowStickyActionBar({ ...draftState, sendBlocked: !liveComplete })).toBe(false);
+
+  // 4. The exact save-success dispatch flips it on immediately -- no
+  // navigation, no reload, just the same in-process callback as above.
+  target.dispatchEvent(new CustomEvent(PRICING_CHANGE_EVENT, { detail: { complete: true } }));
+  expect(shouldShowStickyActionBar({ ...draftState, sendBlocked: !liveComplete })).toBe(true);
+
+  // 5. Editing back to incomplete and saving again removes it.
+  target.dispatchEvent(new CustomEvent(PRICING_CHANGE_EVENT, { detail: { complete: false } }));
+  expect(shouldShowStickyActionBar({ ...draftState, sendBlocked: !liveComplete })).toBe(false);
+});
+
+test("shouldShowStickyActionBar still shows the bar for every other state regardless of sendBlocked", () => {
+  // isDone, already-sent, and a website-quote conversion are all either not
+  // contractor_pricing or already delivered (which requires having already
+  // passed the completeness gate this fix hides the bar for), so hiding the
+  // bar for the incomplete-draft case cannot hide an action any of these
+  // need. sendBlocked: true here is deliberately the "would otherwise hide
+  // it" value, to prove these branches override that.
+  expect(
+    shouldShowStickyActionBar({ isQuoteRequest: true, isDone: false, localStatus: "", sendBlocked: true })
+  ).toBe(true);
+  expect(
+    shouldShowStickyActionBar({ isQuoteRequest: false, isDone: true, localStatus: "", sendBlocked: true })
+  ).toBe(true);
+  expect(
+    shouldShowStickyActionBar({ isQuoteRequest: false, isDone: false, localStatus: "sent", sendBlocked: true })
+  ).toBe(true);
+});
+
 // ── Source-level wiring: connects the proven function above to React state
 // and to the JSX Send button, which cannot be exercised without a DOM ------
 
@@ -93,7 +142,7 @@ test("ContractorPricingEditor dispatches the shared event and the server's own c
   expect(dispatchIndex).toBeGreaterThan(successGuardIndex);
 });
 
-test("EstimateActions wires the proven handler to React state and to the Send button, with no second completeness definition", () => {
+test("EstimateActions wires the proven handler to React state and to the sticky bar's own show/hide decision, with no second completeness definition", () => {
   const actions = code("app/components/estimate-actions.tsx");
 
   expect(actions).toContain("const [liveComplete, setLiveComplete] = useState(estimateComplete ?? false);");
@@ -107,9 +156,36 @@ test("EstimateActions wires the proven handler to React state and to the Send bu
   expect(actions).not.toContain("liveTotal");
   expect(actions).not.toMatch(/detail\.total/);
 
-  // Send button visibility/disabled state is driven by the one flag.
-  expect(actions).toContain("{sendBlocked && (");
+  // The sticky bar's presence is gated by the proven function (computed once
+  // and reused, not re-called at the render site -- see
+  // estimate-action-bar-safe-area-spacing.spec.ts for that), and the button
+  // inside it (reached only when the bar renders at all) still carries the
+  // same disabled attribute as a defensive second check.
+  expect(actions).toContain(
+    "const showStickyActionBar = shouldShowStickyActionBar({ isQuoteRequest, isDone, localStatus, sendBlocked });"
+  );
+  expect(actions).toContain("{showStickyActionBar && (");
   expect(actions).toContain("disabled={sendBlocked}");
+
+  // The duplicate warning this fix removes is gone, not just unreachable.
+  expect(actions).not.toContain("Add pricing to your line items before sending.");
+});
+
+test("the missing-inputs guidance is not duplicated: it exists exactly once, inline with the pricing editor", () => {
+  const actions = code("app/components/estimate-actions.tsx");
+  const editor = code("app/components/contractor-pricing-editor.tsx");
+
+  // The exact rendered string (with its trailing colon), not a comment
+  // mentioning it -- estimate-actions.tsx's own comment above the render
+  // gate quotes this phrase for context, which is not a duplicate render.
+  expect(actions).not.toContain("Still needed before you can send this:");
+  expect(editor).toContain("Still needed before you can send this:");
+
+  // Inline with the editor's own scrollable content, not inside any fixed
+  // element -- the editor renders no `position: fixed` bar of its own
+  // (checked as a className pattern, not the bare word: "fixed price" is
+  // ordinary labour-method copy elsewhere in this same file).
+  expect(editor).not.toMatch(/className="[^"]*\bfixed\b/);
 });
 
 test("the estimate detail page computes estimateComplete from the same authority the share page uses, not a total guess", () => {

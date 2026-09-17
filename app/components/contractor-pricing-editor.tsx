@@ -321,12 +321,20 @@ export function ContractorPricingEditor({
         </div>
       )}
 
-      <div className="flex items-center gap-3">
+      {/* Column on mobile, row on sm+ (matching the previous desktop look
+          exactly). A long server-rejection message ("This estimate has
+          already gone to the customer and cannot be repriced") in a plain
+          flex row with no shrink protection squeezed the button down to a
+          narrow, wrapped-text shape on a phone -- shrink-0 plus the column
+          layout below the button removes that pressure entirely, and puts
+          the message where it reads best next to a full-width mobile
+          button: underneath it, not beside it. */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
         <button
           type="button"
           onClick={save}
           disabled={status === "saving"}
-          className="min-h-[48px] rounded-xl bg-amber-500 px-5 text-base font-bold text-zinc-950 hover:bg-amber-400 disabled:opacity-50"
+          className="min-h-[48px] shrink-0 whitespace-nowrap rounded-xl bg-amber-500 px-5 text-base font-bold text-zinc-950 hover:bg-amber-400 disabled:opacity-50"
         >
           {status === "saving" ? "Saving..." : "Save pricing"}
         </button>

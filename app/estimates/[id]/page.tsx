@@ -198,17 +198,26 @@ export default async function EstimatePage({
           bar plus BottomNav) or the fixed bar either shows a gap behind it
           (padding too generous) or hides real estimate content with no way
           to scroll it into view (padding too small) -- the actual bug this
-          padding is fixing. EstimateActions' own height is state-dependent
-          (a single 56px button up to several stacked panels well over
-          400px), so a static guess can't stay correct for every state;
-          it publishes its real measured height as --tp-estimate-action-bar-
-          height (see estimate-actions.tsx), and 108px below covers
-          BottomNav's ~87px plus the small deliberate overlap plus a little
-          breathing room. The 200px fallback only applies before that
-          effect's first paint. */}
+          padding is fixing. Both bars' heights are state- and device-
+          dependent: EstimateActions' own content ranges from a single 56px
+          button to several stacked panels well over 400px, and BottomNav
+          renders taller on a phone with a safe-area inset than one without
+          (its own bottom padding is `env(safe-area-inset-bottom)`-driven).
+          A static guess of either can't stay correct everywhere -- a flat
+          "108px" tuned against a no-safe-area BottomNav measurement is what
+          previously let scrolled content end up behind this bar on an
+          inset device -- so both publish their real measured height as CSS
+          custom properties (--tp-estimate-action-bar-height here,
+          --tp-bottom-nav-height from bottom-nav.tsx) and this adds them
+          together, minus the 3px EstimateActions already overlaps
+          BottomNav by (see its own comment) plus a little breathing room.
+          The fallback values only apply before each effect's first paint. */}
       <main
         className="flex-1 px-4 sm:px-5"
-        style={{ paddingBottom: "calc(var(--tp-estimate-action-bar-height, 200px) + 108px)" }}
+        style={{
+          paddingBottom:
+            "calc(var(--tp-estimate-action-bar-height, 200px) + var(--tp-bottom-nav-height, 87px) - 3px + 24px)",
+        }}
       >
         {isQuoteRequest ? (
           <>
