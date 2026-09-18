@@ -231,6 +231,11 @@ export function toPricingRequestPayload(state: ContractorPricingFormState): Cont
     materials: materialsPayload(state),
     charges: chargesPayload(state),
     tax: null,
+    // This form has no confirmed Phase 2 line items yet (no matcher
+    // integration, no mode switching -- later slices). Sent explicitly
+    // rather than omitted so this payload always matches the parsed shape;
+    // an older deployed server ignores the key entirely either way.
+    lineItems: [],
   };
 
   if (!state.taxEdited) return payload;

@@ -6,7 +6,9 @@ import {
   toCanonicalRows,
   LABOUR_DESCRIPTION,
   MATERIALS_DESCRIPTION,
+  LINE_ITEM_UNIT,
   type ContractorPricingRequest,
+  type ConfirmedLineItemInput,
 } from "../../lib/contractor-pricing-request";
 import { calculateContractorPricing } from "../../lib/contractor-pricing";
 
@@ -232,6 +234,246 @@ test("more than one labour or materials entry is rejected", () => {
   ).toContain("single");
   expect(errorFor(complete({ materials: [{ cost: 1, markupPercent: 0 }] }))).toContain("single");
   expect(errorFor(complete({ labour: { method: "both", hours: 1, rate: 1 } }))).toContain("method");
+});
+
+// ── Confirmed line items (Phase 2 slice 3A) ──────────────────────────────────
+
+const FAUCET_ITEMS: ConfirmedLineItemInput[] = [
+  { description: "Kitchen faucet replacement", quantity: 1, labourUnitPrice: 325, materialUnitPrice: 0 },
+  { description: "Quarter-turn shutoff valve replacement", quantity: 2, labourUnitPrice: 145, materialUnitPrice: 18 },
+  { description: "Braided supply line replacement", quantity: 2, labourUnitPrice: 55, materialUnitPrice: 15 },
+];
+
+test("1: an omitted lineItems key still parses, normalized to an empty array", () => {
+  const request = ok(complete());
+  expect(request.lineItems).toEqual([]);
+});
+
+test("2: an explicitly empty lineItems array behaves identically to omitting it", () => {
+  const request = ok(complete({ lineItems: [] }));
+  expect(request.lineItems).toEqual([]);
+  expect(toCanonicalRows(request)).toEqual(toCanonicalRows(ok(complete())));
+});
+
+test("3: one confirmed item produces exactly one labour row and one material row", () => {
+  const rows = toCanonicalRows(
+    ok(complete({ lineItems: [{ description: "Widget install", quantity: 1, labourUnitPrice: 50, materialUnitPrice: 10 }] }))
+  );
+  expect(rows).toHaveLength(2);
+  expect(rows[0].item_type).toBe("labour");
+  expect(rows[1].item_type).toBe("material");
+});
+
+test("4: confirmed quantity is copied to both rows", () => {
+  const rows = toCanonicalRows(
+    ok(complete({ lineItems: [{ description: "Widget install", quantity: 3, labourUnitPrice: 50, materialUnitPrice: 10 }] }))
+  );
+  expect(rows[0].quantity).toBe(3);
+  expect(rows[1].quantity).toBe(3);
+});
+
+test("5: the labour row uses unit 'ea' and markup_percent null", () => {
+  const rows = toCanonicalRows(
+    ok(complete({ lineItems: [{ description: "Widget install", quantity: 1, labourUnitPrice: 50, materialUnitPrice: 10 }] }))
+  );
+  expect(rows[0]).toMatchObject({ unit: LINE_ITEM_UNIT, markup_percent: null });
+  expect(LINE_ITEM_UNIT).toBe("ea");
+});
+
+test("6: the material row uses unit 'ea' and markup_percent explicit 0", () => {
+  const rows = toCanonicalRows(
+    ok(complete({ lineItems: [{ description: "Widget install", quantity: 1, labourUnitPrice: 50, materialUnitPrice: 10 }] }))
+  );
+  expect(rows[1].unit).toBe(LINE_ITEM_UNIT);
+  expect(rows[1].markup_percent).toBe(0);
+  expect(rows[1].markup_percent).not.toBeNull();
+});
+
+test("7: a zero labour price is preserved", () => {
+  const rows = toCanonicalRows(
+    ok(complete({ lineItems: [{ description: "Free labour", quantity: 1, labourUnitPrice: 0, materialUnitPrice: 25 }] }))
+  );
+  expect(rows[0].unit_price).toBe(0);
+});
+
+test("8: a zero material price is preserved and the material row is not omitted", () => {
+  const rows = toCanonicalRows(
+    ok(complete({ lineItems: [{ description: "Kitchen faucet replacement", quantity: 1, labourUnitPrice: 325, materialUnitPrice: 0 }] }))
+  );
+  expect(rows).toHaveLength(2);
+  expect(rows[1].item_type).toBe("material");
+  expect(rows[1].unit_price).toBe(0);
+});
+
+test("9: multiple confirmed items preserve pairwise adjacent display order", () => {
+  const rows = toCanonicalRows(ok(complete({ lineItems: FAUCET_ITEMS })));
+  expect(rows.map((row) => row.display_order)).toEqual([0, 1, 2, 3, 4, 5]);
+  expect(rows.map((row) => [row.description, row.item_type])).toEqual([
+    ["Kitchen faucet replacement", "labour"],
+    ["Kitchen faucet replacement", "material"],
+    ["Quarter-turn shutoff valve replacement", "labour"],
+    ["Quarter-turn shutoff valve replacement", "material"],
+    ["Braided supply line replacement", "labour"],
+    ["Braided supply line replacement", "material"],
+  ]);
+});
+
+test("10: the faucet fixture produces six rows and calculates the expected totals", () => {
+  const rows = toCanonicalRows(ok(complete({ lineItems: FAUCET_ITEMS })));
+  expect(rows).toHaveLength(6);
+  expect(rows.every((row) => row.item_type !== "material" || row.markup_percent === 0)).toBe(true);
+
+  const pricing = calculateContractorPricing(rows, {
+    taxRatePercent: 0,
+    depositPercent: null,
+    depositThresholdDollars: null,
+  });
+  // Labour: 325 + (2 x 145) + (2 x 55) = 725
+  expect(pricing.labourCents).toBe(72_500);
+  // Materials: 0 + (2 x 18) + (2 x 15) = 66
+  expect(pricing.materialsCents).toBe(6_600);
+  expect(pricing.subtotalCents).toBe(79_100);
+});
+
+test("11: confirmed line items combined with generic labour is rejected", () => {
+  expect(
+    errorFor(
+      complete({ labour: { method: "fixed", amount: 100 }, lineItems: FAUCET_ITEMS })
+    )
+  ).toContain("generic labour");
+});
+
+test("12: confirmed line items combined with generic materials is rejected", () => {
+  expect(
+    errorFor(
+      complete({ materials: { cost: 100, markupPercent: 10 }, lineItems: FAUCET_ITEMS })
+    )
+  ).toContain("generic materials");
+});
+
+test("13: confirmed line items combined with charges is accepted", () => {
+  const request = ok(complete({ lineItems: FAUCET_ITEMS, charges: [{ description: "Permit", amount: 50 }] }));
+  const rows = toCanonicalRows(request);
+  expect(rows).toHaveLength(7);
+  expect(rows[6]).toMatchObject({ item_type: "other", description: "Permit" });
+});
+
+test("14: a blank line item description is rejected", () => {
+  expect(
+    errorFor(complete({ lineItems: [{ description: "   ", quantity: 1, labourUnitPrice: 10, materialUnitPrice: 0 }] }))
+  ).toContain("description");
+});
+
+test("15: a line item quantity of 0 is rejected", () => {
+  expect(
+    errorFor(complete({ lineItems: [{ description: "Widget", quantity: 0, labourUnitPrice: 10, materialUnitPrice: 0 }] }))
+  ).toContain("quantity");
+});
+
+test("16: a negative line item quantity is rejected", () => {
+  expect(
+    errorFor(complete({ lineItems: [{ description: "Widget", quantity: -1, labourUnitPrice: 10, materialUnitPrice: 0 }] }))
+  ).toContain("quantity");
+});
+
+test("17: NaN or Infinity line item quantity is rejected", () => {
+  expect(
+    errorFor(complete({ lineItems: [{ description: "Widget", quantity: Number.NaN, labourUnitPrice: 10, materialUnitPrice: 0 }] }))
+  ).toContain("quantity");
+  expect(
+    errorFor(
+      complete({ lineItems: [{ description: "Widget", quantity: Number.POSITIVE_INFINITY, labourUnitPrice: 10, materialUnitPrice: 0 }] })
+    )
+  ).toContain("quantity");
+});
+
+test("18: a negative or non-finite labourUnitPrice is rejected", () => {
+  expect(
+    errorFor(complete({ lineItems: [{ description: "Widget", quantity: 1, labourUnitPrice: -5, materialUnitPrice: 0 }] }))
+  ).toContain("labourUnitPrice");
+  expect(
+    errorFor(
+      complete({ lineItems: [{ description: "Widget", quantity: 1, labourUnitPrice: Number.NaN, materialUnitPrice: 0 }] })
+    )
+  ).toContain("labourUnitPrice");
+});
+
+test("19: a negative or non-finite materialUnitPrice is rejected", () => {
+  expect(
+    errorFor(complete({ lineItems: [{ description: "Widget", quantity: 1, labourUnitPrice: 10, materialUnitPrice: -1 }] }))
+  ).toContain("materialUnitPrice");
+  expect(
+    errorFor(
+      complete({
+        lineItems: [{ description: "Widget", quantity: 1, labourUnitPrice: 10, materialUnitPrice: Number.POSITIVE_INFINITY }],
+      })
+    )
+  ).toContain("materialUnitPrice");
+});
+
+test("20: generic Phase 1 encoding is unchanged when lineItems is empty or omitted", () => {
+  const withoutKey = toCanonicalRows(
+    ok(complete({ labour: { method: "hourly", hours: 8, rate: 95 }, materials: { cost: 100, markupPercent: 20 } }))
+  );
+  const withEmptyArray = toCanonicalRows(
+    ok(
+      complete({
+        labour: { method: "hourly", hours: 8, rate: 95 },
+        materials: { cost: 100, markupPercent: 20 },
+        lineItems: [],
+      })
+    )
+  );
+  expect(withoutKey).toEqual(withEmptyArray);
+  expect(withoutKey).toEqual([
+    {
+      description: LABOUR_DESCRIPTION,
+      item_type: "labour",
+      quantity: 8,
+      unit: "hr",
+      unit_price: 95,
+      markup_percent: null,
+      line_total: 760,
+      display_order: 0,
+    },
+    {
+      description: MATERIALS_DESCRIPTION,
+      item_type: "material",
+      quantity: 1,
+      unit: null,
+      unit_price: 100,
+      markup_percent: 20,
+      line_total: 100,
+      display_order: 1,
+    },
+  ]);
+});
+
+test("confirmed rows are a literal copy: mutating the source object afterward does not change them, and no price-book identity travels", () => {
+  const source = { id: "pricebook-row-123", name: "Kitchen faucet replacement", labourUnitPrice: 325, materialUnitPrice: 0 };
+  const confirmed: ConfirmedLineItemInput = {
+    description: source.name,
+    quantity: 1,
+    labourUnitPrice: source.labourUnitPrice,
+    materialUnitPrice: source.materialUnitPrice,
+  };
+  const rows = toCanonicalRows(ok(complete({ lineItems: [confirmed] })));
+  const before = JSON.stringify(rows);
+
+  // A later, unrelated change to whatever the value came from (a saved
+  // price-book item, a matcher suggestion) cannot reach back into rows
+  // already produced from a contractor-confirmed copy.
+  source.labourUnitPrice = 999;
+  source.name = "Renamed item";
+
+  expect(JSON.stringify(rows)).toBe(before);
+  expect(rows[0].unit_price).toBe(325);
+  expect(rows[0].description).toBe("Kitchen faucet replacement");
+  for (const row of rows) {
+    expect(Object.keys(row)).not.toContain("id");
+    expect(Object.keys(row)).not.toContain("pricebookItemId");
+    expect(Object.keys(row)).not.toContain("source_pricebook_item_id");
+  }
 });
 
 // ── Business-default candidate ───────────────────────────────────────────────

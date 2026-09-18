@@ -251,7 +251,7 @@ test("30: an estimate markup edit never writes the business markup default", () 
   const payload = payloadOf(edited);
 
   // The request has no way to carry a business default in the first place.
-  expect(Object.keys(payload)).toEqual(["labour", "materials", "charges", "tax"]);
+  expect(Object.keys(payload)).toEqual(["labour", "materials", "charges", "tax", "lineItems"]);
 
   // And the save transaction never sets it. Every update to tpe_businesses is
   // inspected, rather than searching the file for a string that also appears
@@ -344,6 +344,17 @@ test("21: every payload carries labour, materials and charges", () => {
     // The route rejects a request with any of the three missing.
     const parsed = parseContractorPricingRequest(JSON.parse(JSON.stringify(payload)));
     expect(parsed.ok).toBe(true);
+  }
+});
+
+test("this form has no confirmed Phase 2 line items yet: it always sends lineItems: []", () => {
+  const states = [
+    initContractorPricingForm([], { label: null, rate: null }, NO_DEFAULTS),
+    initContractorPricingForm([HOURLY_ROW, MATERIALS_ROW], GST_5, DEFAULTS),
+    addCharge(initContractorPricingForm([], GST_5, DEFAULTS)),
+  ];
+  for (const state of states) {
+    expect(toPricingRequestPayload(state).lineItems).toEqual([]);
   }
 });
 
