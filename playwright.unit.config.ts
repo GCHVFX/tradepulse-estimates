@@ -64,6 +64,7 @@ export default defineConfig({
     "estimate-action-bar-safe-area-spacing.spec.ts",
     "estimate-deletion.spec.ts",
     "tax-rate-from-rates-not-ai.spec.ts",
+    "pricebook-suggestions.spec.ts",
     "unit-suite-completeness.spec.ts",
   ],
   fullyParallel: false,
