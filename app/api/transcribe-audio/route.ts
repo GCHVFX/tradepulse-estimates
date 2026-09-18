@@ -14,6 +14,10 @@ type AllowedMimeType = (typeof ALLOWED_MIME_TYPES)[number];
 // ~2MB of base64 comfortably covers a 2-minute dictation at typical voice bitrates
 const MAX_BASE64_LENGTH = 2_000_000;
 
+// Named once so it cannot drift between the actual Gemini call and the
+// timing logs below.
+const TRANSCRIBE_MODEL = "gemini-3.5-flash";
+
 const TRANSCRIBE_PROMPT =
   "Transcribe this audio recording of a contractor describing a job. Clean up filler words (um, uh) and false starts, but otherwise keep it in the contractor's own words. Return only the transcription as plain text. No commentary, no formatting, no description of tone. Canadian English spelling.";
 
@@ -52,6 +56,7 @@ async function generateWithRetry(params: GenerateContentParameters) {
 }
 
 export async function POST(request: NextRequest) {
+  const requestStartedAt = Date.now();
   const { supabase, applyTo } = createApiClient(request);
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return applyTo(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
@@ -67,11 +72,17 @@ export async function POST(request: NextRequest) {
   if (contentTypeError) return applyTo(contentTypeError);
 
   let body: unknown;
+  const parseStartedAt = Date.now();
   try {
     body = await request.json();
   } catch {
     return applyTo(NextResponse.json({ error: "Invalid JSON" }, { status: 400 }));
   }
+  // Time spent inside this route awaiting/parsing request.json() only -- not
+  // the phone's full upload time (the platform may already have buffered the
+  // request body before this function was even invoked), and not a base64
+  // decode step, since this route has none.
+  const parseMs = Date.now() - parseStartedAt;
 
   const { audioBase64, mimeType } = body as { audioBase64?: unknown; mimeType?: unknown };
 
@@ -87,9 +98,10 @@ export async function POST(request: NextRequest) {
     return applyTo(NextResponse.json({ error: "Unsupported audio format" }, { status: 400 }));
   }
 
+  const providerStartedAt = Date.now();
   try {
     const response = await generateWithRetry({
-      model: "gemini-3.5-flash",
+      model: TRANSCRIBE_MODEL,
       contents: [
         {
           role: "user",
@@ -99,6 +111,15 @@ export async function POST(request: NextRequest) {
           ],
         },
       ],
+    });
+
+    console.info("[transcribe-audio] success", {
+      model: TRANSCRIBE_MODEL,
+      parseMs,
+      providerMs: Date.now() - providerStartedAt,
+      routeMs: Date.now() - requestStartedAt,
+      audioBase64Chars: audioBase64.length,
+      mimeType,
     });
 
     const transcription = response.text?.trim();
@@ -111,7 +132,15 @@ export async function POST(request: NextRequest) {
 
     return applyTo(NextResponse.json({ transcription }));
   } catch (err) {
-    console.error("[transcribe-audio] transcription request failed:", err);
+    console.error("[transcribe-audio] transcription request failed", {
+      error: err,
+      model: TRANSCRIBE_MODEL,
+      parseMs,
+      providerMs: Date.now() - providerStartedAt,
+      routeMs: Date.now() - requestStartedAt,
+      audioBase64Chars: audioBase64.length,
+      mimeType,
+    });
     return applyTo(
       NextResponse.json({ error: "Could not transcribe that recording. Try again." }, { status: 500 })
     );
