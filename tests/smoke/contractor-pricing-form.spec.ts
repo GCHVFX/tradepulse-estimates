@@ -8,12 +8,14 @@ import {
   initContractorPricingForm,
   missingLabels,
   removeCharge,
+  resolveContractorPricingPreview,
   toPricingRequestPayload,
   updateCharge,
   type BusinessPricingDefaults,
   type ContractorPricingRowInput,
 } from "../../lib/contractor-pricing-form";
-import { parseContractorPricingRequest } from "../../lib/contractor-pricing-request";
+import { parseContractorPricingRequest, toCanonicalRows } from "../../lib/contractor-pricing-request";
+import { calculateContractorPricing, type ContractorPricing } from "../../lib/contractor-pricing";
 
 /**
  * Phase 1 slice 3: the contractor pricing editor's state rules
@@ -377,9 +379,12 @@ test("1 and 2: contractor_pricing selects the new editor, everything else does n
 test("22 and 25: the editor displays backend totals and never parses markdown", () => {
   const editor = readFileSync("app/components/contractor-pricing-editor.tsx", "utf8");
 
-  // Figures come from the response, not from arithmetic in the component.
-  expect(editor).toContain("pricing.subtotalCents");
-  expect(editor).toContain("pricing.totalCents");
+  // Figures come from calculateContractorPricing's own result (reached via
+  // the preview while undelivered, the saved response once delivered -- see
+  // resolveContractorPricingPreview), never from arithmetic in the
+  // component itself.
+  expect(editor).toContain("preview.subtotalCents");
+  expect(editor).toContain("preview.totalCents");
   expect(editor).not.toMatch(/subtotalCents\s*=\s*[^;]*[+*]/);
   expect(editor).not.toMatch(/taxCents\s*=\s*[^;]*[*/]/);
 
@@ -429,4 +434,159 @@ test("a long rejection message (e.g. the delivery-lock error) does not squeeze t
   expect(buttonMatch, "the Save pricing button element").not.toBeNull();
   expect(buttonMatch![0]).toContain("shrink-0");
   expect(buttonMatch![0]).toContain("whitespace-nowrap");
+});
+
+// ── Live pricing preview (production smoke: "WORKING AS BUILT BUT MISLEADING") ──
+//
+// The editor's totals and "Customer sees" line used to read every dollar
+// figure from `pricing`, which only ever changes inside a successful Save --
+// so a fresh estimate with real typed values still showed $0.00 everywhere
+// until Save ran. resolveContractorPricingPreview() is the one place that
+// now decides what is shown: a live preview of what Save would produce while
+// undelivered, computed through the same toPricingRequestPayload ->
+// toCanonicalRows -> calculateContractorPricing pipeline Save itself uses
+// (so there is no second arithmetic definition to drift from the first),
+// and the persisted, authoritative pricing once delivered.
+//
+// This module-level coverage proves the calculation/selection logic is
+// correct. It cannot prove the component's JSX is actually bound to this
+// function's result instead of `pricing` directly -- that requires either
+// rendering the component (this project's tests cannot: see the file header
+// comment) or reading the component's source, which the two tests after
+// this section do.
+
+const PREVIEW_SNAPSHOTS = { taxRatePercent: 5, depositPercent: 10, depositThresholdDollars: 50 };
+
+function typedFixedLabourMaterialsForm(fixedAmount: string, materialsCost: string, markupPercent: string) {
+  let form = initContractorPricingForm([], GST_5, NO_DEFAULTS);
+  form = chooseLabourMethod(form, "fixed", NO_DEFAULTS);
+  form = { ...form, fixedAmount, materialsCost, markupPercent };
+  return form;
+}
+
+test("preview 1: a fresh undelivered draft previews exactly what Save would produce", () => {
+  const form = typedFixedLabourMaterialsForm("100", "20", "25");
+
+  const preview = resolveContractorPricingPreview(form, {
+    isDelivered: false,
+    persistedPricing: calculateContractorPricing([], PREVIEW_SNAPSHOTS), // all-zero, as a fresh estimate loads
+    snapshots: PREVIEW_SNAPSHOTS,
+  });
+
+  expect(preview.labourCents).toBe(10000);
+  expect(preview.materialsCents).toBe(2500);
+  expect(preview.subtotalCents).toBe(12500);
+  expect(preview.taxCents).toBe(625);
+  expect(preview.totalCents).toBe(13125);
+  expect(preview.depositCents).toBe(1313);
+  expect(preview.balanceCents).toBe(11812);
+});
+
+test("preview 2: changing unsaved form values changes the returned preview without Save", () => {
+  const persistedPricing = calculateContractorPricing([], PREVIEW_SNAPSHOTS);
+  const before = resolveContractorPricingPreview(typedFixedLabourMaterialsForm("100", "20", "25"), {
+    isDelivered: false,
+    persistedPricing,
+    snapshots: PREVIEW_SNAPSHOTS,
+  });
+  const after = resolveContractorPricingPreview(typedFixedLabourMaterialsForm("200", "20", "25"), {
+    isDelivered: false,
+    persistedPricing,
+    snapshots: PREVIEW_SNAPSHOTS,
+  });
+
+  expect(before.labourCents).toBe(10000);
+  expect(after.labourCents).toBe(20000);
+  expect(before.totalCents).not.toBe(after.totalCents);
+  // Neither preview ever touched `persistedPricing`, matching the component:
+  // typing never mutates the last-saved state.
+  expect(persistedPricing.labourCents).toBe(0);
+});
+
+test("preview 3: undelivered materials preview is cost plus markup, same as a saved materials row", () => {
+  const form = typedFixedLabourMaterialsForm("0", "20", "25");
+
+  const preview = resolveContractorPricingPreview(form, {
+    isDelivered: false,
+    persistedPricing: calculateContractorPricing([], PREVIEW_SNAPSHOTS),
+    snapshots: PREVIEW_SNAPSHOTS,
+  });
+
+  // 2000 cents cost + 25% markup = 2500 cents, the same rule
+  // calculateContractorPricing already applies to a persisted materials row.
+  expect(preview.materialsCents).toBe(2500);
+});
+
+test("preview 4: a delivered estimate previews the persisted pricing, never the unsaved draft", () => {
+  const persistedRows: ContractorPricingRowInput[] = [
+    { item_type: "labour", unit: null, quantity: 1, unit_price: 500, markup_percent: null, description: "Labour", display_order: 0 },
+    { item_type: "material", unit: null, quantity: 1, unit_price: 100, markup_percent: 10, description: "Materials", display_order: 1 },
+  ];
+  const persistedPricing: ContractorPricing = calculateContractorPricing(persistedRows, PREVIEW_SNAPSHOTS);
+
+  // A very different, unsaved draft sitting in the form -- must not leak in.
+  const draftForm = typedFixedLabourMaterialsForm("999", "999", "99");
+
+  const preview = resolveContractorPricingPreview(draftForm, {
+    isDelivered: true,
+    persistedPricing,
+    snapshots: PREVIEW_SNAPSHOTS,
+  });
+
+  expect(preview).toBe(persistedPricing); // the exact same object, not a recomputation
+  expect(preview.labourCents).toBe(50000);
+  expect(preview.materialsCents).not.toBe(99900 * 1.99); // sanity: nothing derived from the draft
+});
+
+test("preview 5: the preview reuses calculateContractorPricing directly, with no second arithmetic path", () => {
+  const form = typedFixedLabourMaterialsForm("100", "20", "25");
+  const rows = toCanonicalRows(toPricingRequestPayload(form));
+  const direct = calculateContractorPricing(rows, PREVIEW_SNAPSHOTS);
+
+  const preview = resolveContractorPricingPreview(form, {
+    isDelivered: false,
+    persistedPricing: calculateContractorPricing([], PREVIEW_SNAPSHOTS),
+    snapshots: PREVIEW_SNAPSHOTS,
+  });
+
+  expect(preview).toEqual(direct);
+});
+
+test("the editor binds every dollar display to the preview, not directly to saved pricing", () => {
+  const editor = readFileSync("app/components/contractor-pricing-editor.tsx", "utf8");
+
+  expect(editor).toContain("resolveContractorPricingPreview");
+  expect(editor).toContain(
+    'Customer sees {money(preview.materialsCents)} at {form.markupPercent.trim() === "" ? "0" : form.markupPercent}% markup'
+  );
+  expect(editor).toContain('<Row label="Labour" value={money(preview.labourCents)} />');
+  expect(editor).toContain('<Row label="Materials" value={money(preview.materialsCents)} />');
+  expect(editor).toContain('<Row label="Subtotal" value={money(preview.subtotalCents)} />');
+  expect(editor).toContain('<Row label="Tax" value={money(preview.taxCents)} />');
+  expect(editor).toContain(
+    '<Row label="Total" value={formatCurrency(centsToDollars(preview.totalCents), currency)} strong />'
+  );
+  expect(editor).toContain('<Row label="Deposit required" value={money(preview.depositCents)} />');
+  expect(editor).toContain('<Row label="Balance on completion" value={money(preview.balanceCents)} />');
+
+  // "Still needed before you can send this" is deliberately NOT part of this
+  // fix: it stays tied to the last saved state, the same value that gates
+  // Send elsewhere on the page.
+  expect(editor).toContain("const missing = missingLabels(pricing.missing);");
+});
+
+test("the editor passes isDelivered and the estimate's own deposit snapshot into the preview", () => {
+  const editor = readFileSync("app/components/contractor-pricing-editor.tsx", "utf8");
+  expect(editor).toContain("isDelivered: boolean;");
+  expect(editor).toContain("depositPercent: number | null;");
+  expect(editor).toContain("depositThresholdDollars: number | null;");
+  expect(editor).toContain("snapshots: { taxRatePercent: initialTax.rate, depositPercent, depositThresholdDollars }");
+
+  const page = readFileSync("app/estimates/[id]/page.tsx", "utf8");
+  // The exact same resolved snapshot values the page already uses to compute
+  // the server-side initialPricing -- not a second, independently-guessed
+  // source of the deposit settings.
+  expect(page).toContain("isDelivered={isDelivered(estimate)}");
+  expect(page).toContain("depositPercent={estimate.deposit_percent_snapshot}");
+  expect(page).toContain("depositThresholdDollars={estimate.deposit_threshold_snapshot}");
 });

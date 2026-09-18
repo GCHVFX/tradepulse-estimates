@@ -14,13 +14,14 @@
  * unanswered question into a priced answer.
  */
 
-import type {
-  ChargeInput,
-  ContractorPricingRequest,
-  LabourInput,
-  MaterialsInput,
+import {
+  toCanonicalRows,
+  type ChargeInput,
+  type ContractorPricingRequest,
+  type LabourInput,
+  type MaterialsInput,
 } from "./contractor-pricing-request";
-import type { PricingGap } from "./contractor-pricing";
+import { calculateContractorPricing, type ContractorPricing, type PricingGap } from "./contractor-pricing";
 
 export type LabourMethod = "hourly" | "fixed";
 
@@ -234,6 +235,41 @@ export function toPricingRequestPayload(state: ContractorPricingFormState): Cont
 
   if (!state.taxEdited) return payload;
   return { ...payload, tax: { label: state.taxLabel.trim(), rate: numberOrNull(state.taxRate) ?? 0 } };
+}
+
+/** The estimate's own resolved tax and deposit snapshot, as Save would use them. */
+export interface PricingPreviewSnapshots {
+  taxRatePercent: number | null;
+  depositPercent: number | null;
+  depositThresholdDollars: number | null;
+}
+
+/**
+ * The one place that decides what pricing figures the contractor is shown.
+ * Delivered: the persisted, saved pricing -- a draft edit must never claim
+ * the customer already sees it. Undelivered: a live preview of what Save
+ * would produce right now, computed through the exact same pipeline Save
+ * uses (toPricingRequestPayload -> toCanonicalRows -> calculateContractorPricing),
+ * so nothing here is a second definition of the arithmetic. The tax rate
+ * follows the same rule the PUT payload already encodes: this session's edit
+ * when there is one, the estimate's own snapshot otherwise.
+ */
+export function resolveContractorPricingPreview(
+  state: ContractorPricingFormState,
+  options: {
+    isDelivered: boolean;
+    persistedPricing: ContractorPricing;
+    snapshots: PricingPreviewSnapshots;
+  }
+): ContractorPricing {
+  if (options.isDelivered) return options.persistedPricing;
+
+  const payload = toPricingRequestPayload(state);
+  return calculateContractorPricing(toCanonicalRows(payload), {
+    taxRatePercent: payload.tax ? payload.tax.rate : options.snapshots.taxRatePercent,
+    depositPercent: options.snapshots.depositPercent,
+    depositThresholdDollars: options.snapshots.depositThresholdDollars,
+  });
 }
 
 /** What the contractor is told is still missing. Backend reasons only. */

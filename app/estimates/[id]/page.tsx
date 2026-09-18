@@ -331,6 +331,9 @@ export default async function EstimatePage({
                       labourRate: business.labour_rate,
                       markupPercent: business.markup_percent,
                     }}
+                    isDelivered={isDelivered(estimate)}
+                    depositPercent={estimate.deposit_percent_snapshot}
+                    depositThresholdDollars={estimate.deposit_threshold_snapshot}
                   />
                 </>
               ) : (

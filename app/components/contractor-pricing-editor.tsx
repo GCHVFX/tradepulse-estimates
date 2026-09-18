@@ -13,6 +13,7 @@ import {
   initContractorPricingForm,
   missingLabels,
   removeCharge,
+  resolveContractorPricingPreview,
   toPricingRequestPayload,
   updateCharge,
   type BusinessPricingDefaults,
@@ -43,6 +44,9 @@ export function ContractorPricingEditor({
   initialTax,
   initialPricing,
   defaults,
+  isDelivered,
+  depositPercent,
+  depositThresholdDollars,
 }: {
   estimateId: string;
   /** The estimate's own snapshot, never the business setting. */
@@ -51,6 +55,11 @@ export function ContractorPricingEditor({
   initialTax: EstimateTaxSnapshot;
   initialPricing: ContractorPricing;
   defaults: BusinessPricingDefaults;
+  /** Once delivered, displayed pricing must stay the persisted figures. */
+  isDelivered: boolean;
+  /** The estimate's own deposit snapshot, the same values Save resolves against. */
+  depositPercent: number | null;
+  depositThresholdDollars: number | null;
 }) {
   const router = useRouter();
   const [form, setForm] = useState<ContractorPricingFormState>(() =>
@@ -59,6 +68,16 @@ export function ContractorPricingEditor({
   const [pricing, setPricing] = useState<ContractorPricing>(initialPricing);
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
+
+  // The one place that decides what figures are on screen: a live preview of
+  // what Save would produce while undelivered, the persisted figures once
+  // delivered. Never the saved-vs-draft mix the display used to read
+  // directly off `pricing` for every field regardless of what was typed.
+  const preview = resolveContractorPricingPreview(form, {
+    isDelivered,
+    persistedPricing: pricing,
+    snapshots: { taxRatePercent: initialTax.rate, depositPercent, depositThresholdDollars },
+  });
 
   const money = (cents: number, decimals: 0 | 2 = 2) =>
     formatCurrency(centsToDollars(cents), currency, { decimals, bare: true });
@@ -215,7 +234,7 @@ export function ContractorPricingEditor({
           </label>
         </div>
         <p className="text-xs text-zinc-500">
-          Customer sees {money(pricing.materialsCents)} at {form.markupPercent.trim() === "" ? "0" : form.markupPercent}% markup
+          Customer sees {money(preview.materialsCents)} at {form.markupPercent.trim() === "" ? "0" : form.markupPercent}% markup
         </p>
       </section>
 
@@ -292,19 +311,20 @@ export function ContractorPricingEditor({
         </div>
       </section>
 
-      {/* Totals, straight from the last saved calculation */}
+      {/* Totals. A live preview of what Save would produce while undelivered
+          (see `preview` above); the persisted figures once delivered. */}
       <section className="rounded-xl border border-zinc-200">
         <dl className="divide-y divide-zinc-200 text-sm">
-          <Row label="Labour" value={money(pricing.labourCents)} />
-          <Row label="Materials" value={money(pricing.materialsCents)} />
-          {pricing.chargesCents > 0 && <Row label="Other charges" value={money(pricing.chargesCents)} />}
-          <Row label="Subtotal" value={money(pricing.subtotalCents)} />
-          <Row label="Tax" value={money(pricing.taxCents)} />
-          <Row label="Total" value={formatCurrency(centsToDollars(pricing.totalCents), currency)} strong />
-          {pricing.depositCents > 0 && (
+          <Row label="Labour" value={money(preview.labourCents)} />
+          <Row label="Materials" value={money(preview.materialsCents)} />
+          {preview.chargesCents > 0 && <Row label="Other charges" value={money(preview.chargesCents)} />}
+          <Row label="Subtotal" value={money(preview.subtotalCents)} />
+          <Row label="Tax" value={money(preview.taxCents)} />
+          <Row label="Total" value={formatCurrency(centsToDollars(preview.totalCents), currency)} strong />
+          {preview.depositCents > 0 && (
             <>
-              <Row label="Deposit required" value={money(pricing.depositCents)} />
-              <Row label="Balance on completion" value={money(pricing.balanceCents)} />
+              <Row label="Deposit required" value={money(preview.depositCents)} />
+              <Row label="Balance on completion" value={money(preview.balanceCents)} />
             </>
           )}
         </dl>
