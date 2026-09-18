@@ -51,6 +51,14 @@ export interface ConfirmedLineItemInput {
   quantity: number;
   labourUnitPrice: number;
   materialUnitPrice: number;
+  /**
+   * Required, never defaulted. A saved price-book item's taxable flag applies
+   * to both rows this item becomes (Phase 2 slice 3B) -- there is no separate
+   * labour/material taxability for a saved item. Omitting this on a future
+   * accepted price-book item could silently overcharge or undercharge tax, so
+   * a missing value is rejected rather than assumed.
+   */
+  taxable: boolean;
 }
 
 export interface ContractorPricingRequest {
@@ -80,6 +88,8 @@ export interface CanonicalPricingRow {
   markup_percent: number | null;
   line_total: number;
   display_order: number;
+  /** Every newly encoded row carries a real boolean -- never left to the database default. */
+  taxable: boolean;
 }
 
 export type ParseResult =
@@ -204,6 +214,12 @@ function parseLineItem(
   if (!isMoney(raw.materialUnitPrice)) {
     return { ok: false, error: `lineItems[${index}] materialUnitPrice must be a number of zero or more` };
   }
+  // Required, actual boolean only. Not defaulted: a missing or malformed
+  // taxable flag on a confirmed line item must never silently become taxable
+  // or non-taxable, so it is rejected outright.
+  if (typeof raw.taxable !== "boolean") {
+    return { ok: false, error: `lineItems[${index}] taxable must be true or false` };
+  }
 
   return {
     ok: true,
@@ -212,6 +228,7 @@ function parseLineItem(
       quantity: raw.quantity,
       labourUnitPrice: raw.labourUnitPrice,
       materialUnitPrice: raw.materialUnitPrice,
+      taxable: raw.taxable,
     },
   };
 }
@@ -314,6 +331,8 @@ export function toCanonicalRows(request: ContractorPricingRequest): CanonicalPri
       markup_percent: null,
       line_total: round2(quantity * unitPrice),
       display_order: rows.length,
+      // Generic Phase 1 labour has no taxability control; it is taxable.
+      taxable: true,
     });
   }
 
@@ -327,6 +346,8 @@ export function toCanonicalRows(request: ContractorPricingRequest): CanonicalPri
       markup_percent: request.materials.markupPercent,
       line_total: round2(request.materials.cost),
       display_order: rows.length,
+      // Generic Phase 1 materials has no taxability control; it is taxable.
+      taxable: true,
     });
   }
 
@@ -344,6 +365,9 @@ export function toCanonicalRows(request: ContractorPricingRequest): CanonicalPri
       markup_percent: null,
       line_total: round2(item.quantity * item.labourUnitPrice),
       display_order: rows.length,
+      // Both rows of a confirmed item share one taxability flag -- no
+      // separate labour/material taxability for a saved item.
+      taxable: item.taxable,
     });
     rows.push({
       description: item.description,
@@ -359,6 +383,7 @@ export function toCanonicalRows(request: ContractorPricingRequest): CanonicalPri
       markup_percent: 0,
       line_total: round2(item.quantity * item.materialUnitPrice),
       display_order: rows.length,
+      taxable: item.taxable,
     });
   }
 
@@ -372,6 +397,8 @@ export function toCanonicalRows(request: ContractorPricingRequest): CanonicalPri
       markup_percent: null,
       line_total: round2(charge.amount),
       display_order: rows.length,
+      // Generic Phase 1 charges have no taxability control; taxable.
+      taxable: true,
     });
   }
 

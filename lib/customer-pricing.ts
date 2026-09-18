@@ -62,6 +62,7 @@ function toPricingRow(row: CustomerPricingSourceRow): PricingRow {
     quantity: row.quantity,
     unit_price: row.unit_price,
     markup_percent: row.markup_percent,
+    taxable: row.taxable,
   };
 }
 

@@ -24,6 +24,7 @@ export interface PricingInitRow {
   markup_percent: number | null;
   description: string;
   display_order: number;
+  taxable: boolean;
 }
 
 /** The estimate row fields this needs, exactly as stored -- never business Rates. */
@@ -100,6 +101,7 @@ export async function loadEstimatePricingInit(
     quantity: row.quantity,
     unit_price: row.unit_price,
     markup_percent: row.markup_percent,
+    taxable: row.taxable,
   }));
 
   // The one arithmetic implementation. Never duplicated here or in SQL.

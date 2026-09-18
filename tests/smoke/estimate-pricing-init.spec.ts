@@ -65,8 +65,8 @@ function completeContractorPricingEstimate(): OwnedEstimateForPricingInit {
 
 function completeRows(): PricingInitRow[] {
   return [
-    { item_type: "labour", unit: null, quantity: 1, unit_price: 100, markup_percent: null, description: "Labour", display_order: 0 },
-    { item_type: "material", unit: null, quantity: 1, unit_price: 20, markup_percent: 25, description: "Materials", display_order: 1 },
+    { item_type: "labour", unit: null, quantity: 1, unit_price: 100, markup_percent: null, description: "Labour", display_order: 0, taxable: true },
+    { item_type: "material", unit: null, quantity: 1, unit_price: 20, markup_percent: 25, description: "Materials", display_order: 1, taxable: true },
   ];
 }
 
@@ -169,6 +169,24 @@ test("a fresh estimate with no persisted rows initializes empty and incomplete, 
   expect(result.pricing.totalCents).toBe(0);
   // Still the estimate's own tax snapshot, not a business default guess.
   expect(result.estimate.taxRate).toBe(5);
+});
+
+test("a stored taxable = false row reaches the returned pricing calculation unchanged (Phase 2 slice 3B)", async () => {
+  const rows: PricingInitRow[] = [
+    { item_type: "labour", unit: null, quantity: 1, unit_price: 100, markup_percent: null, description: "Labour", display_order: 0, taxable: false },
+    { item_type: "material", unit: null, quantity: 1, unit_price: 20, markup_percent: 25, description: "Materials", display_order: 1, taxable: true },
+  ];
+  const { deps } = makeDeps(completeContractorPricingEstimate(), rows);
+
+  const result = await loadEstimatePricingInit(ESTIMATE_ID, OWNER_BUSINESS, deps);
+
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  // Subtotal: 100 (labour) + 25 (materials, 20 x 1.25) = 125. Only the
+  // taxable materials row contributes: 5% of 25 = 1.25 -> 125 cents.
+  expect(result.pricing.subtotalCents).toBe(12_500);
+  expect(result.pricing.taxCents).toBe(125);
+  expect(result.pricing.totalCents).toBe(12_625);
 });
 
 test("a delivered estimate is reported as delivered, not silently treated as undelivered", async () => {

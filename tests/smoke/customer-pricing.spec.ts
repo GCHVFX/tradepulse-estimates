@@ -137,6 +137,34 @@ test("1: customer totals come only from the persisted rows and snapshots, throug
   expect(text).toContain("| Balance on completion | $1,314.18 |");
 });
 
+test("Phase 2 slice 3B: taxable and non-taxable rows both stay in subtotal, but only taxable rows contribute to tax", () => {
+  const mixedRows: CustomerPricingSourceRow[] = [
+    { item_type: "labour", unit: "hr", quantity: 6.5, unit_price: 91, markup_percent: null, description: "Labour", taxable: true },
+    { item_type: "material", unit: null, quantity: 1, unit_price: 910, markup_percent: 15, description: "Materials", taxable: false },
+    { item_type: "other", unit: null, quantity: 1, unit_price: 150, markup_percent: null, description: "Permit", taxable: true },
+  ];
+  const document = readyDocument(ESTIMATE, mixedRows);
+  const calculated = calculateContractorPricing(mixedRows, {
+    taxRatePercent: 5,
+    depositPercent: 30,
+    depositThresholdDollars: 1000,
+  });
+
+  // Document total matches the one calculation, exactly like the all-taxable case.
+  expect(document.totalCents).toBe(calculated.totalCents);
+
+  const text = document.document;
+  // Subtotal is unaffected by taxable: both rows are still in it.
+  expect(text).toContain("| Subtotal | $1,788.00 |");
+  // Tax is 5% of only the taxable rows: 591.50 (labour) + 150 (permit) = 741.50.
+  expect(text).toContain("| GST 5% | $37.08 |");
+  expect(text).toContain("| **Total** | **CA$1,825.08** |");
+  expect(document.totalCents).toBe(182_508);
+
+  // The internal taxable flag itself never reaches the rendered document.
+  expect(text.toLowerCase()).not.toContain("taxable");
+});
+
 test("the estimate's own snapshots decide tax and deposit, not anything live", () => {
   // Same rows, different snapshots, different document. There is no other
   // input the function could be reading.
@@ -194,6 +222,7 @@ test("6: the customer projection has no field that could carry a row, an hour, a
     "markup",
     "hourly",
     "fixed",
+    "taxable",
   ]) {
     expect(serialized, internal).not.toContain(`"${internal}`);
   }

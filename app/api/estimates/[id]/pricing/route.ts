@@ -128,6 +128,7 @@ interface SavedPricingState {
     markup_percent: number | null;
     description: string;
     display_order: number;
+    taxable: boolean;
   }>;
 }
 
@@ -162,6 +163,9 @@ function narrowSavedState(data: unknown): SavedPricingState | null {
         markup_percent: toNumberOrNull(item.markup_percent),
         description: String(item.description ?? ""),
         display_order: toNumberOrNull(item.display_order) ?? 0,
+        // Only an explicit false is non-taxable. Missing (an older RPC
+        // response) or any malformed value reads as taxable, never as false.
+        taxable: item.taxable !== false,
       };
     }),
   };
@@ -285,6 +289,7 @@ export async function PUT(
     quantity: row.quantity,
     unit_price: row.unit_price,
     markup_percent: row.markup_percent,
+    taxable: row.taxable,
   }));
 
   // The one arithmetic implementation. Never duplicated here or in SQL.

@@ -100,7 +100,7 @@ export async function loadStructuredPricingItems(
 /** One stored contractor-pricing row, as the editor needs it. */
 export type ContractorPricingRow = Pick<
   Database["public"]["Tables"]["tpe_estimate_items"]["Row"],
-  "item_type" | "unit" | "quantity" | "unit_price" | "markup_percent" | "description" | "display_order"
+  "item_type" | "unit" | "quantity" | "unit_price" | "markup_percent" | "description" | "display_order" | "taxable"
 >;
 
 /**
@@ -113,7 +113,7 @@ export type ContractorPricingRow = Pick<
 export async function loadContractorPricingRows(estimateId: string): Promise<ContractorPricingRow[]> {
   const { data, error } = await supabaseAdmin
     .from("tpe_estimate_items")
-    .select("item_type, unit, quantity, unit_price, markup_percent, description, display_order")
+    .select("item_type, unit, quantity, unit_price, markup_percent, description, display_order, taxable")
     .eq("estimate_id", estimateId)
     .order("display_order", { ascending: true });
 
@@ -149,6 +149,7 @@ export async function contractorPricingCompleteness(
       quantity: row.quantity,
       unit_price: row.unit_price,
       markup_percent: row.markup_percent,
+      taxable: row.taxable,
     })),
     {
       taxRatePercent: snapshots.tax_rate_snapshot,

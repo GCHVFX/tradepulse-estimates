@@ -115,6 +115,7 @@ export default async function EstimatePage({
           quantity: row.quantity,
           unit_price: row.unit_price,
           markup_percent: row.markup_percent,
+          taxable: row.taxable,
         })),
         {
           taxRatePercent: estimate.tax_rate_snapshot,

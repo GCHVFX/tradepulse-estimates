@@ -35,6 +35,15 @@ export interface PricingRow {
   unit_price: number;
   /** The percentage applied to a material row. null elsewhere. */
   markup_percent?: number | null;
+  /**
+   * Whether this row's already-rounded line amount contributes to tax.
+   * Optional for backward compatibility: every pure caller and existing test
+   * predating Phase 2 slice 3B constructs a PricingRow with no `taxable` at
+   * all, and every Phase 1 row was implicitly taxable, so `undefined` means
+   * taxable, same as `true`. Never defaults to false -- a persisted row
+   * always carries the real stored boolean once read from the database.
+   */
+  taxable?: boolean;
 }
 
 /** The estimate's own snapshots. Never the live business settings. */
@@ -109,6 +118,30 @@ function materialRowCents(row: PricingRow): number {
   return toCents(row.quantity * row.unit_price * (1 + markup / 100));
 }
 
+/** Undefined means taxable, same as true. Only an explicit false is non-taxable. */
+function isTaxable(row: PricingRow): boolean {
+  return row.taxable !== false;
+}
+
+/**
+ * Sums one row type's already-rounded line cents once, and reuses those same
+ * cents for both the type's total and its taxable-only subset -- there is no
+ * second computation of a row's price for tax purposes.
+ */
+function sumRowCents(
+  rows: readonly PricingRow[],
+  rowCents: (row: PricingRow) => number
+): { totalCents: number; taxableCents: number; lineCents: number[] } {
+  const lineCents = rows.map(rowCents);
+  let totalCents = 0;
+  let taxableCents = 0;
+  rows.forEach((row, i) => {
+    totalCents += lineCents[i];
+    if (isTaxable(row)) taxableCents += lineCents[i];
+  });
+  return { totalCents, taxableCents, lineCents };
+}
+
 export function calculateContractorPricing(
   rows: readonly PricingRow[],
   snapshots: PricingSnapshots
@@ -117,19 +150,27 @@ export function calculateContractorPricing(
   const materialRows = rows.filter((row) => row.item_type === "material");
   const chargeRows = rows.filter((row) => row.item_type === "other");
 
-  const labourCents = labourRows.reduce((sum, row) => sum + labourRowCents(row), 0);
-  const materialsCents = materialRows.reduce((sum, row) => sum + materialRowCents(row), 0);
-  const chargeLineCents = chargeRows.map((row) => toCents(row.unit_price));
-  const chargesCents = chargeLineCents.reduce((sum, cents) => sum + cents, 0);
+  const labour = sumRowCents(labourRows, labourRowCents);
+  const materials = sumRowCents(materialRows, materialRowCents);
+  const charges = sumRowCents(chargeRows, (row) => toCents(row.unit_price));
+
+  const labourCents = labour.totalCents;
+  const materialsCents = materials.totalCents;
+  const chargeLineCents = charges.lineCents;
+  const chargesCents = charges.totalCents;
 
   const subtotalCents = labourCents + materialsCents + chargesCents;
+  const taxableSubtotalCents = labour.taxableCents + materials.taxableCents + charges.taxableCents;
 
   // A null tax snapshot is an incomplete pricing state, not 0%. It reports no
   // tax so the figures stay readable, and `missing` is what blocks delivery.
+  // Tax applies only to the taxable subset of the subtotal; a non-taxable row
+  // still counts toward subtotal, total and the deposit threshold -- it
+  // simply contributes nothing to taxCents.
   const taxCents =
     snapshots.taxRatePercent === null
       ? 0
-      : Math.round((subtotalCents * snapshots.taxRatePercent) / 100);
+      : Math.round((taxableSubtotalCents * snapshots.taxRatePercent) / 100);
 
   const totalCents = subtotalCents + taxCents;
 

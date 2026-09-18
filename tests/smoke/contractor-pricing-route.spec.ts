@@ -101,9 +101,18 @@ test.beforeAll(async () => {
   admin = newClient();
   await admin.connect();
   await admin.query(readFileSync("tests/fixtures/contractor-pricing-schema.sql", "utf8"));
+  // Production order: the original save-function migration, then the Phase 2
+  // slice 3B taxable-handling replacement, exactly as they will land on the
+  // real database.
   await admin.query(
     readFileSync(
       "supabase/migrations/20260916000000_add_contractor_pricing_snapshots_and_save_fn.sql",
+      "utf8"
+    )
+  );
+  await admin.query(
+    readFileSync(
+      "supabase/migrations/20260918000000_add_taxable_to_contractor_pricing_save_fn.sql",
       "utf8"
     )
   );
@@ -174,7 +183,7 @@ async function save(
 
 async function rowsFor(estimateId: string, client: PgClient = admin) {
   const { rows } = await client.query(
-    "select item_type, description, quantity, unit, unit_price, markup_percent from tpe_estimate_items where estimate_id = $1 order by display_order",
+    "select item_type, description, quantity, unit, unit_price, markup_percent, taxable from tpe_estimate_items where estimate_id = $1 order by display_order",
     [estimateId]
   );
   return rows;
@@ -219,6 +228,51 @@ test("a second save replaces the prior rows instead of appending them", async ()
   const after = await rowsFor(estimateId);
   expect(after).toHaveLength(1);
   expect(after[0].item_type).toBe("labour");
+});
+
+// ── Taxable (Phase 2 slice 3B) ────────────────────────────────────────────────
+
+test("A: an old-style row payload without taxable persists as taxable = true", async () => {
+  // LABOUR_ROW and MATERIALS_ROW are deliberately unchanged from Phase 1 --
+  // no taxable field at all, exactly what the currently deployed 51e152d
+  // client still sends. Proves migration-first compatibility: this function
+  // must already handle that payload correctly before the application code
+  // that would ever send `taxable: false` is deployed.
+  const businessId = await newBusiness();
+  const estimateId = await newEstimate(businessId);
+
+  await save(admin, estimateId, businessId, [LABOUR_ROW, MATERIALS_ROW]);
+  const rows = await rowsFor(estimateId);
+  expect(rows).toHaveLength(2);
+  expect(rows.every((row: { taxable: boolean }) => row.taxable === true)).toBe(true);
+});
+
+test("B: a row containing taxable: false persists false", async () => {
+  const businessId = await newBusiness();
+  const estimateId = await newEstimate(businessId);
+
+  await save(admin, estimateId, businessId, [{ ...LABOUR_ROW, taxable: false }, MATERIALS_ROW]);
+  const rows = await rowsFor(estimateId);
+  const labourRow = rows.find((row: { item_type: string }) => row.item_type === "labour");
+  const materialRow = rows.find((row: { item_type: string }) => row.item_type === "material");
+  expect(labourRow.taxable).toBe(false);
+  expect(materialRow.taxable).toBe(true);
+});
+
+test("C: the RPC's own returned rows carry the correct taxable boolean, not just the table", async () => {
+  const businessId = await newBusiness();
+  const estimateId = await newEstimate(businessId);
+
+  const { rows: resultRows } = await save(admin, estimateId, businessId, [
+    { ...LABOUR_ROW, taxable: false },
+    MATERIALS_ROW,
+  ]);
+  const returnedRows = resultRows[0].result.rows as Array<{ item_type: string; taxable: boolean }>;
+  expect(returnedRows).toHaveLength(2);
+  const returnedLabour = returnedRows.find((row) => row.item_type === "labour");
+  const returnedMaterial = returnedRows.find((row) => row.item_type === "material");
+  expect(returnedLabour?.taxable).toBe(false);
+  expect(returnedMaterial?.taxable).toBe(true);
 });
 
 // ── Delivery ─────────────────────────────────────────────────────────────────

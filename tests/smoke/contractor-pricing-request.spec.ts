@@ -239,9 +239,9 @@ test("more than one labour or materials entry is rejected", () => {
 // ── Confirmed line items (Phase 2 slice 3A) ──────────────────────────────────
 
 const FAUCET_ITEMS: ConfirmedLineItemInput[] = [
-  { description: "Kitchen faucet replacement", quantity: 1, labourUnitPrice: 325, materialUnitPrice: 0 },
-  { description: "Quarter-turn shutoff valve replacement", quantity: 2, labourUnitPrice: 145, materialUnitPrice: 18 },
-  { description: "Braided supply line replacement", quantity: 2, labourUnitPrice: 55, materialUnitPrice: 15 },
+  { description: "Kitchen faucet replacement", quantity: 1, labourUnitPrice: 325, materialUnitPrice: 0, taxable: true },
+  { description: "Quarter-turn shutoff valve replacement", quantity: 2, labourUnitPrice: 145, materialUnitPrice: 18, taxable: true },
+  { description: "Braided supply line replacement", quantity: 2, labourUnitPrice: 55, materialUnitPrice: 15, taxable: true },
 ];
 
 test("1: an omitted lineItems key still parses, normalized to an empty array", () => {
@@ -257,7 +257,7 @@ test("2: an explicitly empty lineItems array behaves identically to omitting it"
 
 test("3: one confirmed item produces exactly one labour row and one material row", () => {
   const rows = toCanonicalRows(
-    ok(complete({ lineItems: [{ description: "Widget install", quantity: 1, labourUnitPrice: 50, materialUnitPrice: 10 }] }))
+    ok(complete({ lineItems: [{ description: "Widget install", quantity: 1, labourUnitPrice: 50, materialUnitPrice: 10, taxable: true }] }))
   );
   expect(rows).toHaveLength(2);
   expect(rows[0].item_type).toBe("labour");
@@ -266,7 +266,7 @@ test("3: one confirmed item produces exactly one labour row and one material row
 
 test("4: confirmed quantity is copied to both rows", () => {
   const rows = toCanonicalRows(
-    ok(complete({ lineItems: [{ description: "Widget install", quantity: 3, labourUnitPrice: 50, materialUnitPrice: 10 }] }))
+    ok(complete({ lineItems: [{ description: "Widget install", quantity: 3, labourUnitPrice: 50, materialUnitPrice: 10, taxable: true }] }))
   );
   expect(rows[0].quantity).toBe(3);
   expect(rows[1].quantity).toBe(3);
@@ -274,7 +274,7 @@ test("4: confirmed quantity is copied to both rows", () => {
 
 test("5: the labour row uses unit 'ea' and markup_percent null", () => {
   const rows = toCanonicalRows(
-    ok(complete({ lineItems: [{ description: "Widget install", quantity: 1, labourUnitPrice: 50, materialUnitPrice: 10 }] }))
+    ok(complete({ lineItems: [{ description: "Widget install", quantity: 1, labourUnitPrice: 50, materialUnitPrice: 10, taxable: true }] }))
   );
   expect(rows[0]).toMatchObject({ unit: LINE_ITEM_UNIT, markup_percent: null });
   expect(LINE_ITEM_UNIT).toBe("ea");
@@ -282,7 +282,7 @@ test("5: the labour row uses unit 'ea' and markup_percent null", () => {
 
 test("6: the material row uses unit 'ea' and markup_percent explicit 0", () => {
   const rows = toCanonicalRows(
-    ok(complete({ lineItems: [{ description: "Widget install", quantity: 1, labourUnitPrice: 50, materialUnitPrice: 10 }] }))
+    ok(complete({ lineItems: [{ description: "Widget install", quantity: 1, labourUnitPrice: 50, materialUnitPrice: 10, taxable: true }] }))
   );
   expect(rows[1].unit).toBe(LINE_ITEM_UNIT);
   expect(rows[1].markup_percent).toBe(0);
@@ -291,14 +291,14 @@ test("6: the material row uses unit 'ea' and markup_percent explicit 0", () => {
 
 test("7: a zero labour price is preserved", () => {
   const rows = toCanonicalRows(
-    ok(complete({ lineItems: [{ description: "Free labour", quantity: 1, labourUnitPrice: 0, materialUnitPrice: 25 }] }))
+    ok(complete({ lineItems: [{ description: "Free labour", quantity: 1, labourUnitPrice: 0, materialUnitPrice: 25, taxable: true }] }))
   );
   expect(rows[0].unit_price).toBe(0);
 });
 
 test("8: a zero material price is preserved and the material row is not omitted", () => {
   const rows = toCanonicalRows(
-    ok(complete({ lineItems: [{ description: "Kitchen faucet replacement", quantity: 1, labourUnitPrice: 325, materialUnitPrice: 0 }] }))
+    ok(complete({ lineItems: [{ description: "Kitchen faucet replacement", quantity: 1, labourUnitPrice: 325, materialUnitPrice: 0, taxable: true }] }))
   );
   expect(rows).toHaveLength(2);
   expect(rows[1].item_type).toBe("material");
@@ -435,6 +435,7 @@ test("20: generic Phase 1 encoding is unchanged when lineItems is empty or omitt
       markup_percent: null,
       line_total: 760,
       display_order: 0,
+      taxable: true,
     },
     {
       description: MATERIALS_DESCRIPTION,
@@ -445,8 +446,99 @@ test("20: generic Phase 1 encoding is unchanged when lineItems is empty or omitt
       markup_percent: 20,
       line_total: 100,
       display_order: 1,
+      taxable: true,
     },
   ]);
+});
+
+// ── Taxable (Phase 2 slice 3B) ────────────────────────────────────────────────
+
+test("21: confirmed item taxable true is accepted", () => {
+  const request = ok(
+    complete({ lineItems: [{ description: "Widget install", quantity: 1, labourUnitPrice: 50, materialUnitPrice: 10, taxable: true }] })
+  );
+  expect(request.lineItems[0].taxable).toBe(true);
+});
+
+test("22: confirmed item taxable false is accepted", () => {
+  const request = ok(
+    complete({ lineItems: [{ description: "Widget install", quantity: 1, labourUnitPrice: 50, materialUnitPrice: 10, taxable: false }] })
+  );
+  expect(request.lineItems[0].taxable).toBe(false);
+});
+
+test("23: a missing taxable flag is rejected", () => {
+  expect(
+    errorFor(complete({ lineItems: [{ description: "Widget", quantity: 1, labourUnitPrice: 10, materialUnitPrice: 0 }] }))
+  ).toContain("taxable");
+});
+
+test("24: a null taxable flag is rejected", () => {
+  expect(
+    errorFor(
+      complete({ lineItems: [{ description: "Widget", quantity: 1, labourUnitPrice: 10, materialUnitPrice: 0, taxable: null }] })
+    )
+  ).toContain("taxable");
+});
+
+test("25: a string 'false' taxable flag is rejected, not coerced", () => {
+  expect(
+    errorFor(
+      complete({ lineItems: [{ description: "Widget", quantity: 1, labourUnitPrice: 10, materialUnitPrice: 0, taxable: "false" }] })
+    )
+  ).toContain("taxable");
+});
+
+test("26: the labour and material canonical rows inherit true together", () => {
+  const rows = toCanonicalRows(
+    ok(complete({ lineItems: [{ description: "Widget install", quantity: 1, labourUnitPrice: 50, materialUnitPrice: 10, taxable: true }] }))
+  );
+  expect(rows[0].taxable).toBe(true);
+  expect(rows[1].taxable).toBe(true);
+});
+
+test("27: the labour and material canonical rows inherit false together", () => {
+  const rows = toCanonicalRows(
+    ok(complete({ lineItems: [{ description: "Widget install", quantity: 1, labourUnitPrice: 50, materialUnitPrice: 10, taxable: false }] }))
+  );
+  expect(rows[0].taxable).toBe(false);
+  expect(rows[1].taxable).toBe(false);
+});
+
+test("28: a price-book material row still gets markup_percent 0 regardless of taxable", () => {
+  const taxableItem = toCanonicalRows(
+    ok(complete({ lineItems: [{ description: "Widget install", quantity: 1, labourUnitPrice: 50, materialUnitPrice: 10, taxable: true }] }))
+  )[1];
+  const nonTaxableItem = toCanonicalRows(
+    ok(complete({ lineItems: [{ description: "Widget install", quantity: 1, labourUnitPrice: 50, materialUnitPrice: 10, taxable: false }] }))
+  )[1];
+  expect(taxableItem.markup_percent).toBe(0);
+  expect(nonTaxableItem.markup_percent).toBe(0);
+});
+
+test("29: generic labour, materials and charge rows explicitly encode taxable true", () => {
+  const rows = toCanonicalRows(
+    ok(
+      complete({
+        labour: { method: "hourly", hours: 8, rate: 95 },
+        materials: { cost: 100, markupPercent: 20 },
+        charges: [{ description: "Permit", amount: 50 }],
+      })
+    )
+  );
+  expect(rows.map((row) => row.taxable)).toEqual([true, true, true]);
+});
+
+test("30: the faucet fixture, updated with taxable booleans, keeps its $791 pre-tax subtotal", () => {
+  const rows = toCanonicalRows(ok(complete({ lineItems: FAUCET_ITEMS })));
+  expect(rows.every((row) => row.taxable === true)).toBe(true);
+
+  const pricing = calculateContractorPricing(rows, {
+    taxRatePercent: 0,
+    depositPercent: null,
+    depositThresholdDollars: null,
+  });
+  expect(pricing.subtotalCents).toBe(79_100);
 });
 
 test("confirmed rows are a literal copy: mutating the source object afterward does not change them, and no price-book identity travels", () => {
@@ -456,6 +548,7 @@ test("confirmed rows are a literal copy: mutating the source object afterward do
     quantity: 1,
     labourUnitPrice: source.labourUnitPrice,
     materialUnitPrice: source.materialUnitPrice,
+    taxable: true,
   };
   const rows = toCanonicalRows(ok(complete({ lineItems: [confirmed] })));
   const before = JSON.stringify(rows);

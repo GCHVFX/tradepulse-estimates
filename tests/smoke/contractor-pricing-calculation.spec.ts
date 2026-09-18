@@ -22,17 +22,17 @@ const GST_5: PricingSnapshots = {
 /** Tax-free, so a test about subtotals is not reading a tax rounding. */
 const NO_TAX: PricingSnapshots = { ...GST_5, taxRatePercent: 0 };
 
-function hourlyLabour(hours: number, rate: number): PricingRow {
-  return { item_type: "labour", unit: "hr", quantity: hours, unit_price: rate, markup_percent: null };
+function hourlyLabour(hours: number, rate: number, taxable?: boolean): PricingRow {
+  return { item_type: "labour", unit: "hr", quantity: hours, unit_price: rate, markup_percent: null, taxable };
 }
-function fixedLabour(amount: number, quantity = 1): PricingRow {
-  return { item_type: "labour", unit: null, quantity, unit_price: amount, markup_percent: null };
+function fixedLabour(amount: number, quantity = 1, taxable?: boolean): PricingRow {
+  return { item_type: "labour", unit: null, quantity, unit_price: amount, markup_percent: null, taxable };
 }
-function materials(cost: number, markupPercent: number, quantity = 1): PricingRow {
-  return { item_type: "material", unit: null, quantity, unit_price: cost, markup_percent: markupPercent };
+function materials(cost: number, markupPercent: number, quantity = 1, taxable?: boolean): PricingRow {
+  return { item_type: "material", unit: null, quantity, unit_price: cost, markup_percent: markupPercent, taxable };
 }
-function charge(amount: number): PricingRow {
-  return { item_type: "other", unit: null, quantity: 1, unit_price: amount, markup_percent: null };
+function charge(amount: number, taxable?: boolean): PricingRow {
+  return { item_type: "other", unit: null, quantity: 1, unit_price: amount, markup_percent: null, taxable };
 }
 
 // ── Labour ───────────────────────────────────────────────────────────────────
@@ -315,4 +315,83 @@ test("28: backward compatibility -- quantity 1 produces exactly the same cents a
     NO_TAX
   );
   expect(material.materialsCents).toBe(138_000);
+});
+
+// ── Taxable rows (Phase 2 slice 3B) ──────────────────────────────────────────
+
+test("29: rows with taxable omitted produce exactly the same tax as before this slice", () => {
+  const withHelper = calculateContractorPricing([fixedLabour(1000), materials(0, 0)], GST_5);
+  // No `taxable` key at all, not even set to undefined -- the exact shape
+  // every pre-slice-3B caller and test already uses.
+  const rowsWithoutTaxableKey: PricingRow[] = [
+    { item_type: "labour", unit: null, quantity: 1, unit_price: 1000, markup_percent: null },
+    { item_type: "material", unit: null, quantity: 1, unit_price: 0, markup_percent: 0 },
+  ];
+  const withoutKey = calculateContractorPricing(rowsWithoutTaxableKey, GST_5);
+  expect(withHelper).toEqual(withoutKey);
+  expect(withHelper.taxCents).toBe(5_000);
+});
+
+test("30: taxable labour is taxed", () => {
+  const result = calculateContractorPricing([fixedLabour(1000, 1, true), materials(0, 0)], GST_5);
+  expect(result.subtotalCents).toBe(100_000);
+  expect(result.taxCents).toBe(5_000);
+  expect(result.totalCents).toBe(105_000);
+});
+
+test("31: non-taxable labour remains in subtotal but contributes no tax", () => {
+  const result = calculateContractorPricing([fixedLabour(1000, 1, false), materials(0, 0)], GST_5);
+  expect(result.subtotalCents).toBe(100_000);
+  expect(result.taxCents).toBe(0);
+  expect(result.totalCents).toBe(100_000);
+});
+
+test("32: taxable materials are taxed on the calculated customer-facing amount, including markup", () => {
+  // $100 cost, 20% markup, taxable true -> selling amount $120, tax applies to $120.
+  const result = calculateContractorPricing([fixedLabour(0), materials(100, 20, 1, true)], GST_5);
+  expect(result.materialsCents).toBe(12_000);
+  expect(result.taxCents).toBe(600);
+  expect(result.totalCents).toBe(12_600);
+});
+
+test("33: non-taxable material still applies markup to its selling amount but contributes no tax", () => {
+  const result = calculateContractorPricing([fixedLabour(0), materials(100, 20, 1, false)], GST_5);
+  expect(result.materialsCents).toBe(12_000);
+  expect(result.taxCents).toBe(0);
+  expect(result.totalCents).toBe(12_000);
+});
+
+test("34: mixed taxable/non-taxable rows produce tax only from taxable already-rounded line amounts", () => {
+  const result = calculateContractorPricing(
+    [
+      fixedLabour(1000, 1, true), // $1,000, taxable
+      materials(100, 20, 1, false), // $120 selling amount, non-taxable
+      charge(50, true), // $50, taxable
+    ],
+    GST_5
+  );
+  expect(result.subtotalCents).toBe(117_000);
+  // Taxable subset: 100,000 (labour) + 5,000 (charge) = 105,000. 5% of that is 5,250.
+  expect(result.taxCents).toBe(5_250);
+  expect(result.totalCents).toBe(122_250);
+});
+
+test("35: other rows honour taxable false when supplied", () => {
+  const result = calculateContractorPricing([fixedLabour(0), materials(0, 0), charge(50, false)], GST_5);
+  expect(result.chargesCents).toBe(5_000);
+  expect(result.subtotalCents).toBe(5_000);
+  expect(result.taxCents).toBe(0);
+});
+
+test("36: deposit still uses the final total after the reduced tax amount", () => {
+  const result = calculateContractorPricing([fixedLabour(1000, 1, false), materials(0, 0)], {
+    taxRatePercent: 5,
+    depositPercent: 25,
+    depositThresholdDollars: 500,
+  });
+  // Non-taxable labour: total is $1,000, not the $1,050 a fully-taxable row
+  // would have produced, and the deposit is computed off that real total.
+  expect(result.totalCents).toBe(100_000);
+  expect(result.depositCents).toBe(25_000);
+  expect(result.depositCents).not.toBe(26_250); // what 25% of a fully-taxed $1,050 total would be
 });
