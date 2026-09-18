@@ -1,13 +1,159 @@
 # TradePulse handoff
 
-Updated: 2026-09-17 (Phase 1 -- all of slices 1 through 5C -- is merged, deployed to production, and
-smoke-verified. Production is on commit `2990e4d`, the `/new` hotfix on top of the Phase 1 merge `c99b1cf`.
-The stale-tab UI-only gap the hotfix fixed had no customer-facing exposure: every delivery route already
-blocked an incomplete `contractor_pricing` estimate server-side. Two non-blocking UI issues were found
-during the hotfix smoke and are logged as open follow-up, not Phase 1 blockers. Full detail is in "Phase 1
-production merge, hotfix, and smoke" below, which supersedes the "Nothing has been pushed, deployed, or
-merged" note this banner used to carry and the "not executed" framing on the merge/deploy plan further down
-this file.)
+Updated: 2026-09-17 21:51 PT (Production is on commit `f0eebeafbaf2cae83cd4b89f9bda33e82535b742`, deployment
+`dpl_JAwkG7Y821jeVoLeDpBLfD4NsbTB`, READY. This is the culmination of the same-page contractor-pricing work
+on `/new`: pricing now lives on `/new` itself instead of navigating to the detail page, initialized from the
+saved estimate's own authoritative state, not the business's current Rates. Phone-verified PASS. One further
+commit, `73b9d47429a353c5d442ae2948b1e72929a202bb` (smooth-scroll polish for the same-page Add Pricing
+action), is committed locally but **not pushed, not deployed, and not phone-verified in production** --- do
+not treat it as live. Full chronology, cleanup record, and open follow-ups are in "Same-page pricing
+closeout" immediately below, which supersedes this banner's own previous claim that production was on
+`2990e4d` and supersedes the "Phase 1 production merge, hotfix, and smoke" entry's own closing state further
+down this file.)
+
+## Same-page pricing closeout (2026-09-17 PT)
+
+**Current production status.** Commit `f0eebeafbaf2cae83cd4b89f9bda33e82535b742`, deployment
+`dpl_JAwkG7Y821jeVoLeDpBLfD4NsbTB`, **READY**. Same-page pricing phone smoke: **PASS**. Runtime check after
+deployment: no Vercel runtime errors found in the checked 30-minute production window.
+
+**Local-only, not yet live:** commit `73b9d47429a353c5d442ae2948b1e72929a202bb` is committed on top of the
+above but **not pushed, not deployed, and not phone-verified in production**. It changes the healthy `/new`
+Add Pricing interaction from an instant jump to native smooth scrolling, respecting
+`prefers-reduced-motion`. The existing `/estimates/{id}#pricing` mount/hash fallback remains instant,
+untouched. Do not describe smooth scrolling as live until this commit is pushed, deployed, and verified.
+
+### Chronology since `46a7e97` (all times PT unless noted)
+
+**1. `bddaf3a8f08352852166884f466e547d1f15ac29`** -- `.gitattributes` LF handling. Added
+`* text=auto eol=lf`, addressing the Windows CRLF test fragility found earlier (a checkout-environment
+difference, not a code defect). No product behaviour change. No standalone deployment -- this tree change
+first reached production bundled into the next commit's deployment, `64de93e`'s `dpl_9j7X8yRkrSEK77fSi1z9aGXZfCNw`.
+
+**2. `64de93ef260cf187b0e49697de77cbb50ccef5b0`** -- deployment `dpl_9j7X8yRkrSEK77fSi1z9aGXZfCNw`. Shipped
+the live contractor-pricing preview before Save: the preview uses the same pricing/canonical/calculation
+pipeline as Save itself, with live labour/materials/subtotal/tax/total/deposit/balance display. Delivered
+estimates remain bound to persisted pricing, never an unsaved edit. Phone result: **PASS**.
+
+**3. `7de04982838b792160166fef3a0bf2ffd4b7a5ad`** -- deployment `dpl_Ku5iYCfwj5tGeuSShraxjNPwxgcu`. Shipped
+exact cents in the contractor Total (a shared cents formatter, reused by both the contractor and customer
+views), the corrected live-guidance precedence (draft completeness checked before persisted completeness,
+so an edited-back-to-incomplete estimate shows the right warning), persisted completeness remaining the sole
+Send authority, and the `#pricing` anchor. Phone result: pricing behaviour passed -- live values correct,
+exact `CA$131.25` total, save-to-send guidance correct, Send absent before persisted Save, Send present after
+Save, clearing Labour restored "Add labour" guidance. Remaining issue found at this stage: Android Chrome
+hash navigation did not reliably land on the pricing section.
+
+**4. `ec57bcb91d6c88eec4bd1878a9d53189a52ec861`** -- deployment `dpl_BkQwtED6PQSvDtqDMo4WzPDSAuKT`. Shipped
+the mount/hash fallback for `#pricing`: an instant scroll into `ContractorPricingEditor`, at most once per
+mount. Phone result: hash navigation reached pricing correctly. New issue observed at this stage: tapping
+Add Pricing from `/new` (a cross-page navigation to the detail page) produced a visible dark/black
+route-transition gap on Android Chrome.
+
+**5. `f0eebeafbaf2cae83cd4b89f9bda33e82535b742`** -- deployment `dpl_JAwkG7Y821jeVoLeDpBLfD4NsbTB`
+(**current production**). The product decision behind this commit: keep Add Pricing on `/new` itself rather
+than navigating away, eliminating the route-transition gap entirely rather than chasing it further. Shipped:
+- Add Pricing stays on `/new`; the existing `ContractorPricingEditor` is reused unmodified.
+- Authoritative pricing initialization comes from the saved estimate, via a new GET on the existing
+  `app/api/estimates/[id]/pricing` route, backed by an ownership-first pricing initialization helper
+  (`lib/estimate-pricing-init.ts`, mirroring `lib/estimate-deletion.ts`'s pattern) -- a cross-tenant read is
+  blocked before any downstream pricing/currency/snapshot read runs.
+- The loading state never renders fake zero pricing; a transient failure gets Retry plus a detail-page
+  fallback link; a legacy (pre-contractor-pricing) estimate gets a distinct read-only response and state; a
+  delivered estimate defensively does not mount the editor at all.
+- The editor is keyed by `savedEstimateId`, so a second/different generated estimate cannot inherit the
+  previous one's form state. A stale response from a since-replaced estimate id is protected against
+  overwriting the current one via effect cancellation.
+- Persisted completeness controls Continue to Send; Send itself remains on the detail page only.
+
+Authority model this commit established: the **estimate** owns its pricing rows, currency snapshot, tax
+snapshot, deposit snapshots, persisted completeness, and delivered state. The **business** owns only
+defaults such as labour rate and markup, offered to a still-empty field, never substituted for the
+estimate's own snapshot.
+
+Phone result: **PASS**. Verified: Add Pricing stayed on `/new`; no black route-transition flash; the pricing
+editor appeared on the same page; live totals updated correctly; complete-but-unsaved pricing did not expose
+Continue to Send; Save exposed Continue to Send; Continue to Send reached the normal detail page; a second,
+fresh estimate did not carry over labour, materials, markup, totals, or completeness from the first.
+
+**6. `73b9d47429a353c5d442ae2948b1e72929a202bb`** -- **LOCAL ONLY. Not pushed. Not deployed. Not production
+phone-verified.** `/new`'s Add Pricing now requests native smooth scrolling (`prefers-reduced-motion` falls
+back to instant); the existing detail-page `#pricing` fallback remains instant, untouched. Local
+verification: focused test suite 18 passed; `npx tsc --noEmit` clean; `eslint` on changed files clean except
+the same pre-existing `handleSignOut` warning; `git diff --check` clean; `npm run build` passed. Do not
+state or imply this behaviour is live until it is pushed, deployed, and phone-verified.
+
+### Cleanup record
+
+Two distinct situations from this work. Do not conflate them.
+
+**A. Earlier same-page smoke (disposable estimates, exact deletion not independently observed).**
+Post-smoke read-only inventory found no remaining estimate rows from the earlier same-page smoke. No
+SQL/admin deletion was performed during this verification. The exact deletion moment was not independently
+observed. Do not claim these were definitely deleted during the smoke, do not claim a specific UI deletion
+was observed for them, and no UUIDs are recorded for them since they were not identified.
+
+**B. Confirmed later session test, fully verified UI cleanup.** Estimate
+`87901169-8eaa-4aba-be1a-5cbef0fa88ee`, "Slow-Leaking Pipe Under Kitchen Sink", created 2026-09-18 04:22 UTC
+(2026-09-17 21:22 PT). Greg explicitly confirmed he created this estimate during this session, then deleted
+it through the normal TradePulse UI. Post-delete read-only verification found zero rows across
+`tpe_estimates`, `tpe_estimate_items`, `tpe_estimate_photos`, `tpe_estimate_changes`, and
+`tpe_payment_reminders`, and zero Storage objects in `tpe-estimate-photos` containing that estimate's UUID.
+No SQL/admin deletion was performed.
+
+### Old Storage orphans (separate open follow-up, not today's cleanup)
+
+A read-only Storage check found 14 objects in the `tpe-estimate-photos` bucket with no matching current
+`tpe_estimate_photos.storage_path`. All inspected objects date from June/July 2026 -- they predate today's
+work entirely and were not touched.
+
+Open question, not concluded: **14 orphan Storage objects from June/July 2026 exist in
+`tpe-estimate-photos` with no matching `tpe_estimate_photos` row. First determine whether the app's photo
+deletion path actually removes Storage objects, or whether those database rows were removed another way.
+That determines whether this is an active deletion bug or historical debris. Do not delete anything before
+answering it.**
+
+### Standing pricing authority check
+
+**Pricing authority check: for every money or completeness value shown on screen, name the object that owns
+it and confirm the display binds to that object, not to a nearby copy, draft, default, or current business
+setting.**
+
+This exists because three separate defects in this same body of work shared the identical pattern:
+1. The live dollar display read persisted pricing while the live form owned the actual draft preview.
+2. Guidance read persisted `pricing.missing` while the live draft owned the current missing-state display.
+3. The first same-page initialization attempt used the business's current Rates for values whose authority
+   belonged to the saved estimate's own snapshots.
+
+Apply this as a standing review check for future pricing and Payments work, not just this slice.
+
+### Open follow-ups
+
+1. Delivered pricing inputs remain visually editable on the detail page even though the server correctly
+   rejects repricing.
+2. `unit-suite-completeness.spec.ts` still reports exactly these three unrelated, unregistered specs:
+   `nav-wordmark-no-crowding.spec.ts`, `trade-tabs-mobile-overflow.spec.ts`,
+   `trade-tabs-scroll-affordance.spec.ts`. Not fixed here.
+3. Migration bookkeeping mismatch remains open: repo filename
+   `20260916000000_add_contractor_pricing_snapshots_and_save_fn.sql` vs. production's recorded version
+   `20260916041903`. Not reconciled here.
+4. `lib/contractor-pricing-form.ts` now contains UI-adjacent scroll logic (`shouldScrollToPricing`)
+   alongside its pricing-form logic. Not refactored now. If another unrelated helper lands there,
+   reconsider splitting responsibilities.
+5. 14 orphan Storage objects from June/July 2026 in `tpe-estimate-photos` with no matching
+   `tpe_estimate_photos` row (see "Old Storage orphans" above). Open question: does the app's photo deletion
+   path actually remove Storage objects, or were those rows deleted another way? That determines whether
+   this is a live bug or historical debris. Do not delete anything before answering it.
+
+### Repo state (current, not the stale state this banner used to carry)
+
+`origin/main`: `f0eebeafbaf2cae83cd4b89f9bda33e82535b742`. Local `main` before this HANDOFF commit:
+`73b9d47429a353c5d442ae2948b1e72929a202bb`, 1 commit ahead of `origin/main`, 0 behind. After this HANDOFF
+commit, local `main` will be 2 commits ahead of `origin/main`, 0 behind, assuming `origin/main` remains
+unmoved. The same 16 unrelated dirty/untracked paths from this session (`.ai-control-centre/activity.jsonl`,
+`.ai-control-centre/current-session.json`, `.claude/settings.local.json`, `.gitignore`, `AGENTS.md`, three
+`AGENTS.md.bak-*`/three `CLAUDE.md.bak-*` files, three `public/tradepulse-*` image files, and
+`supabase/.temp/`) remain preserved byte-identically and untouched by this entry.
 
 ## Phase 1 production merge, hotfix, and smoke (2026-09-17 PT)
 
