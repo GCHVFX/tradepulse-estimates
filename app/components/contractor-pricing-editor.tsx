@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatCentsAsCurrency, type Currency } from "@/lib/currency";
 import type { ContractorPricing } from "@/lib/contractor-pricing";
@@ -13,6 +13,7 @@ import {
   removeCharge,
   resolveContractorPricingGuidance,
   resolveContractorPricingPreview,
+  shouldScrollToPricing,
   toPricingRequestPayload,
   updateCharge,
   type BusinessPricingDefaults,
@@ -67,6 +68,21 @@ export function ContractorPricingEditor({
   const [pricing, setPricing] = useState<ContractorPricing>(initialPricing);
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
+
+  // Add Pricing on /new links here as /estimates/{id}#pricing, but plain
+  // browser hash navigation to this client-rendered section proved
+  // unreliable on Android Chrome. Scroll there directly on mount instead --
+  // once only, so a later form edit, re-render or Save can never yank the
+  // contractor back down to pricing.
+  const pricingRef = useRef<HTMLDivElement>(null);
+  const hasScrolledToPricingRef = useRef(false);
+  useEffect(() => {
+    if (hasScrolledToPricingRef.current) return;
+    hasScrolledToPricingRef.current = true;
+    if (shouldScrollToPricing(window.location.hash)) {
+      pricingRef.current?.scrollIntoView({ block: "start" });
+    }
+  }, []);
 
   // The one place that decides what figures are on screen: a live preview of
   // what Save would produce while undelivered, the persisted figures once
@@ -129,7 +145,7 @@ export function ContractorPricingEditor({
   }
 
   return (
-    <div id="pricing" className="mb-4 flex flex-col gap-6 scroll-mt-6">
+    <div id="pricing" ref={pricingRef} className="mb-4 flex flex-col gap-6 scroll-mt-6">
       {/* Labour */}
       <section className="flex flex-col gap-3">
         <h3 className="text-base font-bold text-zinc-900">Labour</h3>

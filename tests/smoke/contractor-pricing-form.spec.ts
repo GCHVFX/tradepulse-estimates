@@ -10,6 +10,7 @@ import {
   removeCharge,
   resolveContractorPricingGuidance,
   resolveContractorPricingPreview,
+  shouldScrollToPricing,
   toPricingRequestPayload,
   updateCharge,
   type BusinessPricingDefaults,
@@ -821,7 +822,7 @@ test("an unsaved complete draft alone never activates Send: gating still require
 
 test("the pricing section carries a stable anchor with a scroll margin", () => {
   const editor = readFileSync("app/components/contractor-pricing-editor.tsx", "utf8");
-  expect(editor).toContain('<div id="pricing" className="mb-4 flex flex-col gap-6 scroll-mt-6">');
+  expect(editor).toContain('<div id="pricing" ref={pricingRef} className="mb-4 flex flex-col gap-6 scroll-mt-6">');
 });
 
 test("every real Add Pricing link on /new targets the pricing anchor", () => {
@@ -831,4 +832,22 @@ test("every real Add Pricing link on /new targets the pricing anchor", () => {
   for (const suffix of hrefs) {
     expect(suffix).toBe("#pricing");
   }
+});
+
+// ── Add Pricing scroll fallback (production follow-up: Android Chrome) ──────
+//
+// Plain browser hash navigation to /estimates/{id}#pricing proved unreliable
+// on Android Chrome for this client-rendered section, so the editor scrolls
+// there itself on mount when the hash asked for it. shouldScrollToPricing()
+// is the one decision behind that: this proves the decision only, not that
+// the effect is wired to the element correctly, that scrollIntoView() is
+// actually called, that the once-per-mount guard holds in the rendered app,
+// or that Android Chrome lands at the correct position -- those require the
+// production phone check, not a unit-safe test.
+
+test("shouldScrollToPricing decides only from the #pricing hash", () => {
+  expect(shouldScrollToPricing("#pricing")).toBe(true);
+  expect(shouldScrollToPricing("")).toBe(false);
+  expect(shouldScrollToPricing(undefined)).toBe(false);
+  expect(shouldScrollToPricing("#other")).toBe(false);
 });

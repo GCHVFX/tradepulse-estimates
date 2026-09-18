@@ -338,3 +338,14 @@ export function resolveContractorPricingGuidance(options: {
 export function centsToDollars(cents: number): number {
   return cents / 100;
 }
+
+/**
+ * Not a pricing rule -- the one decision behind the Add Pricing anchor
+ * fallback (app/components/contractor-pricing-editor.tsx). Plain browser
+ * hash navigation to `/estimates/{id}#pricing` proved unreliable on Android
+ * Chrome for this client-rendered section, so the editor checks this itself
+ * on mount and scrolls there directly when the hash asked for it.
+ */
+export function shouldScrollToPricing(hash: string | undefined): boolean {
+  return hash === "#pricing";
+}
