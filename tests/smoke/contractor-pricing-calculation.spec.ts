@@ -25,11 +25,11 @@ const NO_TAX: PricingSnapshots = { ...GST_5, taxRatePercent: 0 };
 function hourlyLabour(hours: number, rate: number): PricingRow {
   return { item_type: "labour", unit: "hr", quantity: hours, unit_price: rate, markup_percent: null };
 }
-function fixedLabour(amount: number): PricingRow {
-  return { item_type: "labour", unit: null, quantity: 1, unit_price: amount, markup_percent: null };
+function fixedLabour(amount: number, quantity = 1): PricingRow {
+  return { item_type: "labour", unit: null, quantity, unit_price: amount, markup_percent: null };
 }
-function materials(cost: number, markupPercent: number): PricingRow {
-  return { item_type: "material", unit: null, quantity: 1, unit_price: cost, markup_percent: markupPercent };
+function materials(cost: number, markupPercent: number, quantity = 1): PricingRow {
+  return { item_type: "material", unit: null, quantity, unit_price: cost, markup_percent: markupPercent };
 }
 function charge(amount: number): PricingRow {
   return { item_type: "other", unit: null, quantity: 1, unit_price: amount, markup_percent: null };
@@ -43,7 +43,7 @@ test("1: hourly labour is hours times rate", () => {
   expect(result.subtotalCents).toBe(76_000);
 });
 
-test("2: fixed labour is its own amount, and its quantity is not multiplied in", () => {
+test("2: fixed labour at quantity 1 is its own amount", () => {
   const result = calculateContractorPricing([fixedLabour(760), materials(0, 0)], NO_TAX);
   expect(result.labourCents).toBe(76_000);
 });
@@ -246,4 +246,73 @@ test("22: subtotal sums the rounded components, not the rounded sum of component
   expect(result.materialsCents).toBe(1_001);
   expect(result.subtotalCents).toBe(15_253);
   expect(result.subtotalCents).not.toBe(15_252);
+});
+
+// ── Quantity (Phase 2 slice 2) ────────────────────────────────────────────
+//
+// Phase 2 saved-item rows carry a contractor-confirmed quantity on fixed
+// labour and material rows, which Phase 1 never did (its single labour and
+// materials inputs always wrote quantity 1). These tests cover the new
+// multiplication; the backward-compatibility test right after them pins the
+// quantity-1 case to the exact same cents Phase 1 already produced.
+
+test("23: fixed labour quantity is multiplied", () => {
+  // 2 x $145 = $290.
+  const result = calculateContractorPricing([fixedLabour(145, 2), materials(0, 0)], NO_TAX);
+  expect(result.labourCents).toBe(29_000);
+});
+
+test("24: material quantity is multiplied at 0% markup -- a Phase 2 saved item's final price", () => {
+  // 2 x $18 = $36. tpe_pricebook_items.material_price is already a final
+  // customer-facing price, so a Phase 2 material row carries markup_percent
+  // 0: no markup is applied on top.
+  const result = calculateContractorPricing([fixedLabour(0), materials(18, 0, 2)], NO_TAX);
+  expect(result.materialsCents).toBe(3_600);
+});
+
+test("25: material quantity and markup compose -- the generic Materials arithmetic", () => {
+  // 2 x $100 x 1.20 = $240. The generic Materials control still writes a
+  // real markup_percent on a contractor-entered cost; this is the same
+  // formula as test 24, just with a non-zero markup.
+  const result = calculateContractorPricing([fixedLabour(0), materials(100, 20, 2)], NO_TAX);
+  expect(result.materialsCents).toBe(24_000);
+});
+
+test("26: fixed labour quantity multiplies before the single line-level rounding", () => {
+  // 2 x 33.3335 = 66.667 -> 6,667 cents. Rounding the unit price to the
+  // nearest cent first (3,333.35 -> 3,333) and then doubling would give
+  // 6,666 -- one cent less. Multiply first, round once, matches the module's
+  // stated rounding order for every other row type.
+  const result = calculateContractorPricing([fixedLabour(33.3335, 2), materials(0, 0)], NO_TAX);
+  expect(result.labourCents).toBe(6_667);
+  expect(result.labourCents).not.toBe(6_666);
+});
+
+test("27: multiple Phase 2-style labour/material rows sum correctly", () => {
+  // The reference faucet-repair fixture: three saved items, each a fixed
+  // labour row and a material row at markup_percent 0 (already-final saved
+  // prices). display_order and item identity are later-slice concerns; this
+  // only proves the calculator sums several quantity-bearing rows correctly.
+  const rows = [
+    fixedLabour(325, 1), materials(0, 0, 1), // Kitchen faucet replacement
+    fixedLabour(145, 2), materials(18, 0, 2), // Quarter-turn shutoff valve replacement
+    fixedLabour(55, 2), materials(15, 0, 2), // Braided supply line replacement
+  ];
+  const result = calculateContractorPricing(rows, NO_TAX);
+  // Labour: 325 + (2 x 145) + (2 x 55) = 725
+  expect(result.labourCents).toBe(72_500);
+  // Materials: 0 + (2 x 18) + (2 x 15) = 66
+  expect(result.materialsCents).toBe(6_600);
+  expect(result.subtotalCents).toBe(79_100);
+});
+
+test("28: backward compatibility -- quantity 1 produces exactly the same cents as before this slice", () => {
+  const fixed = calculateContractorPricing([fixedLabour(760, 1), materials(0, 0)], NO_TAX);
+  expect(fixed.labourCents).toBe(76_000);
+
+  const material = calculateContractorPricing(
+    [fixedLabour(0), materials(1150, 20, 1)],
+    NO_TAX
+  );
+  expect(material.materialsCents).toBe(138_000);
 });

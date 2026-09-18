@@ -24,7 +24,12 @@ export interface PricingRow {
   item_type: string;
   /** 'hr' means hourly labour. null means a fixed amount. */
   unit: string | null;
-  /** Hours for an hourly labour row; 1 for every other row. */
+  /**
+   * Hours for an hourly labour row. For a fixed labour or material row, this
+   * multiplies the line: 1 for a Phase 1 single-input row (the only value
+   * those ever wrote), a contractor-confirmed count for a Phase 2 saved-item
+   * row. Charge rows keep quantity 1; it is not multiplied for `other`.
+   */
   quantity: number;
   /** The hourly rate, the fixed amount, the pre-markup material cost, or the charge amount. */
   unit_price: number;
@@ -78,18 +83,30 @@ function isHourly(row: PricingRow): boolean {
 }
 
 /**
- * An hourly row is hours times rate, rounded once at the line result, never
- * through an intermediate rounded dollar value. A fixed row is its amount;
- * its quantity is always 1 and is not multiplied in.
+ * Quantity times rate, for both kinds of labour row: hours times hourly rate
+ * for an hourly row, count times amount for a fixed one. Phase 1's single
+ * labour input always wrote quantity 1 on a fixed row, so this is a no-op for
+ * every fixed row that predates Phase 2, and multiplies for a Phase 2
+ * saved-item row carrying a contractor-confirmed quantity. Rounded once at
+ * the line result, never through an intermediate rounded dollar value.
  */
 function labourRowCents(row: PricingRow): number {
-  return isHourly(row) ? toCents(row.quantity * row.unit_price) : toCents(row.unit_price);
+  return toCents(row.quantity * row.unit_price);
 }
 
-/** Pre-markup cost times the applied percentage, rounded once. */
+/**
+ * Quantity times pre-markup cost times the applied percentage, rounded once.
+ * Phase 1's single materials input always wrote quantity 1, so this is a
+ * no-op for every row that predates Phase 2. A Phase 2 saved-item material
+ * row carries markup_percent 0, because tpe_pricebook_items.material_price is
+ * already a final customer-facing price; the generic Materials control keeps
+ * writing a real markup_percent on top of a contractor-entered cost, and
+ * nothing here treats those two cases differently -- they are the same
+ * formula with a different markup value.
+ */
 function materialRowCents(row: PricingRow): number {
   const markup = row.markup_percent ?? 0;
-  return toCents(row.unit_price * (1 + markup / 100));
+  return toCents(row.quantity * row.unit_price * (1 + markup / 100));
 }
 
 export function calculateContractorPricing(
