@@ -100,6 +100,17 @@ export function formatCurrency(
   return `${prefix}${value}`;
 }
 
+/**
+ * Cents to a display string, always to the cent. The one shared formatter
+ * for a pricing document's own figures (contractor and customer alike): a
+ * bare `$` for a value that sits alongside another amount whose currency is
+ * already established on the same document, the explicit `CA$`/`US$` prefix
+ * for the one figure that names it -- normally the grand Total.
+ */
+export function formatCentsAsCurrency(cents: number, currency: Currency, bare: boolean): string {
+  return formatCurrency(cents / 100, currency, { decimals: 2, bare });
+}
+
 // ── Subscription plan pricing ────────────────────────────────────────────────
 
 export type BillingPlan = "starter" | "pro";

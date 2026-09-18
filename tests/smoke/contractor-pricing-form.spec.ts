@@ -8,6 +8,7 @@ import {
   initContractorPricingForm,
   missingLabels,
   removeCharge,
+  resolveContractorPricingGuidance,
   resolveContractorPricingPreview,
   toPricingRequestPayload,
   updateCharge,
@@ -16,6 +17,7 @@ import {
 } from "../../lib/contractor-pricing-form";
 import { parseContractorPricingRequest, toCanonicalRows } from "../../lib/contractor-pricing-request";
 import { calculateContractorPricing, type ContractorPricing } from "../../lib/contractor-pricing";
+import { formatCentsAsCurrency } from "../../lib/currency";
 
 /**
  * Phase 1 slice 3: the contractor pricing editor's state rules
@@ -564,15 +566,10 @@ test("the editor binds every dollar display to the preview, not directly to save
   expect(editor).toContain('<Row label="Subtotal" value={money(preview.subtotalCents)} />');
   expect(editor).toContain('<Row label="Tax" value={money(preview.taxCents)} />');
   expect(editor).toContain(
-    '<Row label="Total" value={formatCurrency(centsToDollars(preview.totalCents), currency)} strong />'
+    '<Row label="Total" value={formatCentsAsCurrency(preview.totalCents, currency, false)} strong />'
   );
   expect(editor).toContain('<Row label="Deposit required" value={money(preview.depositCents)} />');
   expect(editor).toContain('<Row label="Balance on completion" value={money(preview.balanceCents)} />');
-
-  // "Still needed before you can send this" is deliberately NOT part of this
-  // fix: it stays tied to the last saved state, the same value that gates
-  // Send elsewhere on the page.
-  expect(editor).toContain("const missing = missingLabels(pricing.missing);");
 });
 
 test("the editor passes isDelivered and the estimate's own deposit snapshot into the preview", () => {
@@ -589,4 +586,249 @@ test("the editor passes isDelivered and the estimate's own deposit snapshot into
   expect(page).toContain("isDelivered={isDelivered(estimate)}");
   expect(page).toContain("depositPercent={estimate.deposit_percent_snapshot}");
   expect(page).toContain("depositThresholdDollars={estimate.deposit_threshold_snapshot}");
+});
+
+// ── Exact Total formatting (production follow-up: CA$131 vs CA$131.25) ──────
+//
+// commit 4f2b25c ("Simplify estimate currency display") deliberately made
+// every intermediate estimate figure a bare `$` and reserved the explicit
+// `CA$`/`US$` prefix for the one grand Total -- but its own formatCurrency()
+// still defaults `decimals` to 0 when a caller omits it, and the contractor
+// editor's Total row omitted it, so the Total rendered as whole dollars
+// (CA$131) instead of to the cent (CA$131.25) the customer-facing document
+// already shows for the same figure. formatCentsAsCurrency() is now the one
+// place both the customer document and the contractor editor get a cents
+// figure formatted from -- not a third formatting path, a consolidation of
+// the two that already existed (lib/customer-pricing.ts's own private
+// `money`, and the editor's own local `money`).
+
+test("formatCentsAsCurrency renders the exact cents, matching the customer-facing Total", () => {
+  expect(formatCentsAsCurrency(13125, "cad", false)).toBe("CA$131.25");
+  expect(formatCentsAsCurrency(13125, "cad", true)).toBe("$131.25");
+  expect(formatCentsAsCurrency(0, "cad", false)).toBe("CA$0.00");
+});
+
+test("the contractor editor's Total row uses the same shared formatter as the customer document", () => {
+  const editor = readFileSync("app/components/contractor-pricing-editor.tsx", "utf8");
+  expect(editor).toContain("formatCentsAsCurrency");
+  expect(editor).toContain(
+    '<Row label="Total" value={formatCentsAsCurrency(preview.totalCents, currency, false)} strong />'
+  );
+  // The narrow fix: no arithmetic changed, no other formatter reintroduced.
+  expect(editor).not.toContain("formatCurrency(");
+  expect(editor).not.toContain("centsToDollars(");
+
+  const customerPricing = readFileSync("lib/customer-pricing.ts", "utf8");
+  expect(customerPricing).toContain('import { formatCentsAsCurrency as money, type Currency } from "./currency";');
+  // The commit's own local money() duplicate is gone, not a second definition
+  // kept alongside the shared one.
+  expect(customerPricing).not.toContain("function money(");
+});
+
+// ── Draft completeness guidance (production follow-up, then a precedence fix) ─
+//
+// The dollar preview above already reads the live draft; the "Still needed
+// before you can send this" guidance kept reading the last saved
+// `pricing.missing` regardless, so a contractor who had already typed a
+// complete price still saw "Add labour" until they hit Save. A first version
+// of resolveContractorPricingGuidance() checked persisted completeness
+// before draft completeness, which produced its own wrong answer: an
+// estimate saved complete, then edited into an incomplete draft (e.g.
+// labour removed), silently showed no guidance at all -- exactly backwards,
+// since that draft cannot be sent as-is either. The live draft is now
+// checked first for an undelivered estimate; persisted pricing is checked
+// only once the draft itself is complete, to decide between "already fine"
+// and "complete, but not saved yet." Delivered guidance takes an explicit
+// `isDelivered` flag (the same one the pricing preview already carries) and
+// never reads the draft at all, so "save-to-send" -- which would be actively
+// wrong advice once repricing is rejected server-side -- cannot be reached.
+
+const NO_ROWS: ContractorPricingRowInput[] = [];
+
+test("guidance: undelivered, draft incomplete (persisted also incomplete) -> missing-items from the live draft", () => {
+  const persistedPricing = calculateContractorPricing(NO_ROWS, PREVIEW_SNAPSHOTS); // fresh, nothing saved
+  const preview = calculateContractorPricing(NO_ROWS, PREVIEW_SNAPSHOTS); // draft also empty: still incomplete
+
+  const guidance = resolveContractorPricingGuidance({ isDelivered: false, preview, persistedPricing });
+
+  expect(guidance).toEqual({
+    kind: "missing-items",
+    labels: ["Add labour", "Add materials, or enter 0"],
+  });
+});
+
+test("guidance: undelivered, draft complete, persisted still incomplete -> save-to-send, no stale warnings", () => {
+  const persistedPricing = calculateContractorPricing(NO_ROWS, PREVIEW_SNAPSHOTS); // nothing saved yet
+  const draftForm = typedFixedLabourMaterialsForm("100", "20", "25");
+  const preview = resolveContractorPricingPreview(draftForm, {
+    isDelivered: false,
+    persistedPricing,
+    snapshots: PREVIEW_SNAPSHOTS,
+  });
+
+  const guidance = resolveContractorPricingGuidance({ isDelivered: false, preview, persistedPricing });
+
+  expect(guidance).toEqual({ kind: "save-to-send" });
+  // The exact stale warnings the production smoke found must not survive
+  // alongside a complete live preview.
+  expect(guidance).not.toEqual(
+    expect.objectContaining({ labels: expect.arrayContaining(["Add labour"]) })
+  );
+});
+
+test("guidance: undelivered, persisted complete and draft still complete -> none", () => {
+  const persistedRows: ContractorPricingRowInput[] = [
+    { item_type: "labour", unit: null, quantity: 1, unit_price: 100, markup_percent: null, description: "Labour", display_order: 0 },
+    { item_type: "material", unit: null, quantity: 1, unit_price: 20, markup_percent: 25, description: "Materials", display_order: 1 },
+  ];
+  const persistedPricing = calculateContractorPricing(persistedRows, PREVIEW_SNAPSHOTS);
+  const draftForm = typedFixedLabourMaterialsForm("100", "20", "25"); // matches the saved state
+  const preview = resolveContractorPricingPreview(draftForm, {
+    isDelivered: false,
+    persistedPricing,
+    snapshots: PREVIEW_SNAPSHOTS,
+  });
+
+  const guidance = resolveContractorPricingGuidance({ isDelivered: false, preview, persistedPricing });
+
+  expect(guidance).toEqual({ kind: "none" });
+});
+
+test("guidance precedence fix: undelivered, persisted complete but the unsaved draft has since become incomplete -> missing-items from the draft", () => {
+  // The exact bug case: a previously-saved-complete estimate, then edited
+  // (here: labour cleared back to no method) without saving. The old,
+  // persisted-first precedence returned "none" here, silently hiding that
+  // the current unsaved draft cannot be sent.
+  const persistedRows: ContractorPricingRowInput[] = [
+    { item_type: "labour", unit: null, quantity: 1, unit_price: 100, markup_percent: null, description: "Labour", display_order: 0 },
+    { item_type: "material", unit: null, quantity: 1, unit_price: 20, markup_percent: 25, description: "Materials", display_order: 1 },
+  ];
+  const persistedPricing = calculateContractorPricing(persistedRows, PREVIEW_SNAPSHOTS); // complete
+  let form = initContractorPricingForm(persistedRows, GST_5, NO_DEFAULTS);
+  form = { ...form, labourMethod: null, fixedAmount: "", hours: "", hourlyRate: "" }; // labour removed from the draft
+
+  const preview = resolveContractorPricingPreview(form, {
+    isDelivered: false,
+    persistedPricing,
+    snapshots: PREVIEW_SNAPSHOTS,
+  });
+  const guidance = resolveContractorPricingGuidance({ isDelivered: false, preview, persistedPricing });
+
+  expect(preview.missing).toEqual(["labour-missing"]);
+  expect(guidance).toEqual({ kind: "missing-items", labels: ["Add labour"] });
+});
+
+test("guidance: delivered, with a very different unsaved draft -> guidance still reflects persisted pricing only", () => {
+  const persistedRows: ContractorPricingRowInput[] = [
+    { item_type: "labour", unit: null, quantity: 1, unit_price: 100, markup_percent: null, description: "Labour", display_order: 0 },
+    { item_type: "material", unit: null, quantity: 1, unit_price: 20, markup_percent: 25, description: "Materials", display_order: 1 },
+  ];
+  const persistedPricing = calculateContractorPricing(persistedRows, PREVIEW_SNAPSHOTS); // complete
+  const draftForm = initContractorPricingForm(NO_ROWS, GST_5, NO_DEFAULTS); // labourMethod null: incomplete draft
+
+  const preview = resolveContractorPricingPreview(draftForm, {
+    isDelivered: true,
+    persistedPricing,
+    snapshots: PREVIEW_SNAPSHOTS,
+  });
+  const guidance = resolveContractorPricingGuidance({ isDelivered: true, preview, persistedPricing });
+
+  expect(guidance).toEqual({ kind: "none" }); // persisted is complete; the incomplete draft never surfaces
+  expect(preview).toBe(persistedPricing);
+});
+
+test("guidance: delivered, persisted-incomplete contrived case -> persisted missing labels, never draft labels", () => {
+  // Contrived (a delivered estimate should already be complete by
+  // construction, per the invariant below), but proves the rule holds
+  // structurally rather than by coincidence: the delivered branch reads
+  // persistedPricing.missing directly, never the draft's.
+  const persistedPricing = calculateContractorPricing(NO_ROWS, PREVIEW_SNAPSHOTS); // incomplete
+  const draftForm = typedFixedLabourMaterialsForm("100", "20", "25"); // a complete, very different draft
+
+  const preview = resolveContractorPricingPreview(draftForm, {
+    isDelivered: true,
+    persistedPricing,
+    snapshots: PREVIEW_SNAPSHOTS,
+  });
+  const guidance = resolveContractorPricingGuidance({ isDelivered: true, preview, persistedPricing });
+
+  expect(preview).toBe(persistedPricing);
+  expect(guidance).toEqual({
+    kind: "missing-items",
+    labels: ["Add labour", "Add materials, or enter 0"],
+  });
+});
+
+test("guidance: delivered state never returns save-to-send", () => {
+  // Complete and incomplete persisted pricing, each paired with a very
+  // different complete draft -- neither combination may ever suggest saving,
+  // since a delivered estimate cannot be repriced at all.
+  const completeRows: ContractorPricingRowInput[] = [
+    { item_type: "labour", unit: null, quantity: 1, unit_price: 100, markup_percent: null, description: "Labour", display_order: 0 },
+    { item_type: "material", unit: null, quantity: 1, unit_price: 20, markup_percent: 25, description: "Materials", display_order: 1 },
+  ];
+  const completePersisted = calculateContractorPricing(completeRows, PREVIEW_SNAPSHOTS);
+  const incompletePersisted = calculateContractorPricing(NO_ROWS, PREVIEW_SNAPSHOTS);
+  const draftForm = typedFixedLabourMaterialsForm("999", "999", "99");
+
+  for (const persistedPricing of [completePersisted, incompletePersisted]) {
+    const preview = resolveContractorPricingPreview(draftForm, {
+      isDelivered: true,
+      persistedPricing,
+      snapshots: PREVIEW_SNAPSHOTS,
+    });
+    const guidance = resolveContractorPricingGuidance({ isDelivered: true, preview, persistedPricing });
+    expect(guidance.kind).not.toBe("save-to-send");
+  }
+});
+
+test("the editor binds its guidance display to the one derived guidance value, nowhere else", () => {
+  const editor = readFileSync("app/components/contractor-pricing-editor.tsx", "utf8");
+
+  expect(editor).toContain(
+    "const guidance = resolveContractorPricingGuidance({ isDelivered, preview, persistedPricing: pricing });"
+  );
+  expect(editor).toContain('{guidance.kind !== "none" && (');
+  expect(editor).toContain('guidance.kind === "missing-items"');
+  expect(editor).toContain("{guidance.labels.map((reason) => (");
+  expect(editor).toContain("Save pricing to enable sending.");
+
+  // No independent second read of missing/completeness anywhere in the file.
+  expect(editor).not.toContain("pricing.missing");
+  expect(editor).not.toContain("missingLabels(");
+});
+
+test("an unsaved complete draft alone never activates Send: gating still requires the saved PRICING_CHANGE_EVENT", () => {
+  const editor = readFileSync("app/components/contractor-pricing-editor.tsx", "utf8");
+  const actions = readFileSync("app/components/estimate-actions.tsx", "utf8");
+
+  // The dispatch only ever fires from inside save()'s success branch, using
+  // the server response's own `complete` field -- guidance reading the draft
+  // does not add a second path that could fire it from typing alone.
+  const dispatchIndex = editor.indexOf("window.dispatchEvent(");
+  expect(dispatchIndex).toBeGreaterThan(-1);
+  const saveSuccessIndex = editor.indexOf("setPricing(data.pricing);");
+  expect(saveSuccessIndex).toBeGreaterThan(-1);
+  expect(saveSuccessIndex).toBeLessThan(dispatchIndex);
+  expect(editor.slice(saveSuccessIndex, dispatchIndex + 1)).not.toContain("resolveContractorPricingGuidance");
+
+  // Send's own gate is the persisted-driven liveComplete/sendBlocked pair,
+  // unrelated to anything this fix touched.
+  expect(actions).toContain("const sendBlocked = !liveComplete;");
+});
+
+// ── Add Pricing lands on the pricing section, not the top of the page ───────
+
+test("the pricing section carries a stable anchor with a scroll margin", () => {
+  const editor = readFileSync("app/components/contractor-pricing-editor.tsx", "utf8");
+  expect(editor).toContain('<div id="pricing" className="mb-4 flex flex-col gap-6 scroll-mt-6">');
+});
+
+test("every real Add Pricing link on /new targets the pricing anchor", () => {
+  const newPage = readFileSync("app/new/page.tsx", "utf8");
+  const hrefs = [...newPage.matchAll(/href=\{`\/estimates\/\$\{savedEstimateId\}([^`]*)`\}/g)].map((m) => m[1]);
+  expect(hrefs.length).toBeGreaterThan(0);
+  for (const suffix of hrefs) {
+    expect(suffix).toBe("#pricing");
+  }
 });

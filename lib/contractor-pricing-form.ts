@@ -284,6 +284,56 @@ export function missingLabels(missing: readonly PricingGap[]): string[] {
   return missing.map((reason) => MISSING_LABELS[reason]);
 }
 
+/**
+ * What the contractor is told about sending, as one derived value instead of
+ * three independent displays reading three different sources.
+ *
+ * "none": nothing to show; existing Send behaviour continues normally.
+ * "missing-items": specific gaps to fill in, before Save.
+ * "save-to-send": the draft is already complete, but Save has not run yet --
+ * Send stays governed by the last saved state regardless, so this is
+ * guidance, not a promise.
+ */
+export type ContractorPricingGuidance =
+  | { kind: "none" }
+  | { kind: "missing-items"; labels: string[] }
+  | { kind: "save-to-send" };
+
+/**
+ * Delivered: guidance is persisted pricing only, on the same `isDelivered`
+ * flag the pricing flow already carries (no second delivered definition).
+ * An unsaved draft edit can never surface here -- a delivered estimate
+ * cannot be repriced, so "save-to-send" would be actively wrong advice, and
+ * this branch never returns it. A delivered estimate is complete by
+ * construction (every delivery path gates on persisted completeness before
+ * writing delivery state, and repricing after delivery is rejected, so
+ * nothing in the app can un-complete it afterward) -- the missing-items arm
+ * below is defensive against that invariant ever being violated, not a
+ * reachable case today.
+ *
+ * Undelivered: the live draft is checked first. A previously-saved-complete
+ * estimate that has since been edited into an incomplete draft must show
+ * that incompleteness, not silently claim nothing is wrong because the last
+ * save happened to be complete.
+ */
+export function resolveContractorPricingGuidance(options: {
+  isDelivered: boolean;
+  preview: ContractorPricing;
+  persistedPricing: ContractorPricing;
+}): ContractorPricingGuidance {
+  if (options.isDelivered) {
+    return options.persistedPricing.missing.length > 0
+      ? { kind: "missing-items", labels: missingLabels(options.persistedPricing.missing) }
+      : { kind: "none" };
+  }
+
+  if (options.preview.missing.length > 0) {
+    return { kind: "missing-items", labels: missingLabels(options.preview.missing) };
+  }
+  if (options.persistedPricing.missing.length > 0) return { kind: "save-to-send" };
+  return { kind: "none" };
+}
+
 /** Cents to dollars, for display only. No pricing decision is made here. */
 export function centsToDollars(cents: number): number {
   return cents / 100;

@@ -330,7 +330,7 @@ function EstimateView({
                   entered or changed. */}
               {saved && savedEstimateId && !generating && !error && (
                 <Link
-                  href={`/estimates/${savedEstimateId}`}
+                  href={`/estimates/${savedEstimateId}#pricing`}
                   className="mt-4 flex w-full items-center justify-center rounded-xl bg-zinc-900 py-4 text-base font-bold text-white transition-colors hover:bg-zinc-800 min-h-[56px]"
                 >
                   Add Pricing
@@ -363,7 +363,7 @@ function EstimateView({
           )}
           {saved && savedEstimateId ? (
             <Link
-              href={`/estimates/${savedEstimateId}`}
+              href={`/estimates/${savedEstimateId}#pricing`}
               className="w-full flex items-center justify-center bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
             >
               Add Pricing

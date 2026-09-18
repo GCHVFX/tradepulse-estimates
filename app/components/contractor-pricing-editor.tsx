@@ -2,17 +2,16 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { formatCurrency, type Currency } from "@/lib/currency";
+import { formatCentsAsCurrency, type Currency } from "@/lib/currency";
 import type { ContractorPricing } from "@/lib/contractor-pricing";
 import { PRICING_CHANGE_EVENT } from "@/app/components/estimate-actions";
 import {
   addCharge,
-  centsToDollars,
   chooseLabourMethod,
   editTax,
   initContractorPricingForm,
-  missingLabels,
   removeCharge,
+  resolveContractorPricingGuidance,
   resolveContractorPricingPreview,
   toPricingRequestPayload,
   updateCharge,
@@ -79,8 +78,11 @@ export function ContractorPricingEditor({
     snapshots: { taxRatePercent: initialTax.rate, depositPercent, depositThresholdDollars },
   });
 
-  const money = (cents: number, decimals: 0 | 2 = 2) =>
-    formatCurrency(centsToDollars(cents), currency, { decimals, bare: true });
+  // What the contractor is told about sending -- one derived value, bound to
+  // by every guidance display below, never recomputed a second way.
+  const guidance = resolveContractorPricingGuidance({ isDelivered, preview, persistedPricing: pricing });
+
+  const money = (cents: number) => formatCentsAsCurrency(cents, currency, true);
 
   async function save() {
     setStatus("saving");
@@ -126,10 +128,8 @@ export function ContractorPricingEditor({
     }
   }
 
-  const missing = missingLabels(pricing.missing);
-
   return (
-    <div className="mb-4 flex flex-col gap-6">
+    <div id="pricing" className="mb-4 flex flex-col gap-6 scroll-mt-6">
       {/* Labour */}
       <section className="flex flex-col gap-3">
         <h3 className="text-base font-bold text-zinc-900">Labour</h3>
@@ -320,7 +320,7 @@ export function ContractorPricingEditor({
           {preview.chargesCents > 0 && <Row label="Other charges" value={money(preview.chargesCents)} />}
           <Row label="Subtotal" value={money(preview.subtotalCents)} />
           <Row label="Tax" value={money(preview.taxCents)} />
-          <Row label="Total" value={formatCurrency(centsToDollars(preview.totalCents), currency)} strong />
+          <Row label="Total" value={formatCentsAsCurrency(preview.totalCents, currency, false)} strong />
           {preview.depositCents > 0 && (
             <>
               <Row label="Deposit required" value={money(preview.depositCents)} />
@@ -330,14 +330,20 @@ export function ContractorPricingEditor({
         </dl>
       </section>
 
-      {missing.length > 0 && (
+      {guidance.kind !== "none" && (
         <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
-          <p className="text-sm font-medium text-amber-800">Still needed before you can send this:</p>
-          <ul className="mt-1 list-disc pl-5 text-sm text-amber-800">
-            {missing.map((reason) => (
-              <li key={reason}>{reason}</li>
-            ))}
-          </ul>
+          {guidance.kind === "missing-items" ? (
+            <>
+              <p className="text-sm font-medium text-amber-800">Still needed before you can send this:</p>
+              <ul className="mt-1 list-disc pl-5 text-sm text-amber-800">
+                {guidance.labels.map((reason) => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p className="text-sm font-medium text-amber-800">Save pricing to enable sending.</p>
+          )}
         </div>
       )}
 

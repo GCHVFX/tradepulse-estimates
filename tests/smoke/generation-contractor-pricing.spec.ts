@@ -516,7 +516,10 @@ test("the sticky bar's primary action is Add Pricing, linking to the estimate it
   const fixedBar = newPage.slice(fixedBarStart, fixedBarEnd);
 
   expect(fixedBar).toContain("{saved && savedEstimateId ? (");
-  expect(fixedBar).toContain("href={`/estimates/${savedEstimateId}`}");
+  // #pricing lands the contractor on the pricing section directly, not the
+  // top of the estimate page (found on the phone: the button looked like it
+  // did nothing).
+  expect(fixedBar).toContain("href={`/estimates/${savedEstimateId}#pricing`}");
   expect(fixedBar).toContain("Add Pricing");
 });
 

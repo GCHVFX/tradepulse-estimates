@@ -24,7 +24,7 @@ import {
   type PricingRow,
   type PricingSnapshots,
 } from "./contractor-pricing";
-import { formatCurrency, type Currency } from "./currency";
+import { formatCentsAsCurrency as money, type Currency } from "./currency";
 import { stripTitleHeading } from "./estimate-prose";
 
 /** A stored pricing row plus the one text field a charge needs. Server-side only. */
@@ -114,11 +114,6 @@ export function toCustomerPricing(
       balanceCents: pricing.balanceCents,
     },
   };
-}
-
-/** Cents to a display string. Formatting only; the cents are already final. */
-function money(cents: number, currency: Currency, bare: boolean): string {
-  return formatCurrency(cents / 100, currency, { decimals: 2, bare });
 }
 
 /**
