@@ -12,10 +12,38 @@ import { Logo } from "@/app/components/logo";
 import { BottomNav } from "@/app/components/bottom-nav";
 import { PhotoSourceSheet } from "@/app/components/photo-source-sheet";
 import { CustomerDetailsBlock } from "@/app/components/customer-details-block";
+import { ContractorPricingEditor } from "@/app/components/contractor-pricing-editor";
+import { PRICING_CHANGE_EVENT, readPricingComplete } from "@/app/components/estimate-actions";
+import type { ContractorPricing } from "@/lib/contractor-pricing";
+import type { BusinessPricingDefaults, ContractorPricingRowInput, EstimateTaxSnapshot } from "@/lib/contractor-pricing-form";
+import { currencyOrDefault, type Currency } from "@/lib/currency";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { useBusinessProfile } from "@/lib/hooks/use-business-profile";
 import { Spinner } from "@/app/components/spinner";
 import { usePostHog } from "posthog-js/react";
+
+/**
+ * The one authoritative source /new's same-page pricing editor initializes
+ * from: GET /api/estimates/{id}/pricing, the estimate's own persisted rows
+ * and snapshots (specs/contractor-owned-pricing.md's authority rule, the
+ * exact same values the detail page's server component reads). `defaults`
+ * is the only business-level piece here -- an offered starting point for a
+ * still-empty labour or materials row, never a substitute for the
+ * estimate's own currency, tax or deposit. Fetched once per estimate id,
+ * never reconstructed from the current business Rates or from prose.
+ */
+interface PricingInit {
+  currency: Currency;
+  isDelivered: boolean;
+  initialRows: ContractorPricingRowInput[];
+  initialTax: EstimateTaxSnapshot;
+  initialPricing: ContractorPricing;
+  defaults: BusinessPricingDefaults;
+  depositPercent: number | null;
+  depositThresholdDollars: number | null;
+}
+
+type PricingLoadState = "idle" | "loading" | "ready" | "error" | "legacy" | "delivered";
 
 const inputClass =
   "w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3.5 text-white placeholder-zinc-600 text-base focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]";
@@ -151,6 +179,10 @@ interface EstimateViewProps {
   customerEmail: string;
   jobAddress: string;
   jobTitle: string;
+  pricingLoadState: PricingLoadState;
+  pricingInit: PricingInit | null;
+  pricingComplete: boolean;
+  onRetryPricingInit: () => void;
   onBack: () => void;
   onNewEstimate: () => void;
 }
@@ -203,10 +235,25 @@ function EstimateView({
   customerEmail,
   jobAddress,
   jobTitle,
+  pricingLoadState,
+  pricingInit,
+  pricingComplete,
+  onRetryPricingInit,
   onBack,
   onNewEstimate,
 }: EstimateViewProps) {
   const estimateScrollRef = useRef<HTMLElement | null>(null);
+
+  // Same-page pricing: no navigation, so /new can scroll to its own already-
+  // mounted pricing editor synchronously on tap, unlike the detail page's
+  // hash-based fallback (ec57bcb), which exists for a real route transition
+  // and stays untouched -- and is reused below as the exceptional fallback
+  // if this page's own authoritative pricing read fails.
+  function scrollToPricing() {
+    document.getElementById("pricing")?.scrollIntoView({ block: "start" });
+  }
+
+  const pricingReady = saved && savedEstimateId && !generating && !error && pricingLoadState === "ready" && pricingInit;
 
   useEffect(() => {
     if (!generating) return;
@@ -324,17 +371,97 @@ function EstimateView({
                   Estimate saved
                 </p>
               )}
-              {/* Where the contractor goes next. A generated estimate has no
-                  pricing yet by design, and the pricing editor lives on the
-                  saved record, which is the only place pricing can be
-                  entered or changed. */}
-              {saved && savedEstimateId && !generating && !error && (
-                <Link
-                  href={`/estimates/${savedEstimateId}#pricing`}
+              {/* Pricing lives directly below, on this same page -- no
+                  navigation. Once persisted pricing is complete, this jump
+                  link would only duplicate the sticky Continue to Send
+                  action below, so it stops rendering rather than competing
+                  with it. */}
+              {pricingReady && !pricingComplete && (
+                <button
+                  type="button"
+                  onClick={scrollToPricing}
                   className="mt-4 flex w-full items-center justify-center rounded-xl bg-zinc-900 py-4 text-base font-bold text-white transition-colors hover:bg-zinc-800 min-h-[56px]"
                 >
                   Add Pricing
-                </Link>
+                </button>
+              )}
+              {saved && savedEstimateId && !generating && !error && pricingLoadState === "loading" && (
+                <p className="mt-4 text-sm text-zinc-500">Loading pricing...</p>
+              )}
+              {saved && savedEstimateId && !generating && !error && pricingLoadState === "error" && (
+                <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3.5">
+                  <p className="text-sm text-red-700">
+                    Pricing could not be loaded on this page.
+                  </p>
+                  <div className="mt-3 flex flex-col sm:flex-row gap-2">
+                    <button
+                      type="button"
+                      onClick={onRetryPricingInit}
+                      className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 min-h-[44px]"
+                    >
+                      Retry
+                    </button>
+                    {/* The exceptional fallback: a real route transition to
+                        the detail page, kept safe only because pricing
+                        could not be confirmed authoritative here -- never
+                        used on the healthy path. */}
+                    <Link
+                      href={`/estimates/${savedEstimateId}#pricing`}
+                      className="flex items-center justify-center rounded-lg border border-red-300 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100 min-h-[44px]"
+                    >
+                      Add Pricing on the estimate page
+                    </Link>
+                  </div>
+                </div>
+              )}
+              {/* Legacy: not a transient failure, so no Retry -- there is
+                  nothing to retry. This estimate never gets an inline
+                  pricing editor at all. */}
+              {saved && savedEstimateId && !generating && !error && pricingLoadState === "legacy" && (
+                <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3.5">
+                  <p className="text-sm text-zinc-700">
+                    This estimate uses the previous pricing system and cannot be repriced here.
+                  </p>
+                  <Link
+                    href={`/estimates/${savedEstimateId}`}
+                    className="mt-3 flex w-full items-center justify-center rounded-lg border border-zinc-300 px-4 py-2.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-100 min-h-[44px]"
+                  >
+                    View Estimate
+                  </Link>
+                </div>
+              )}
+              {/* Delivered: defensive only. The generate/regenerate route
+                  already refuses a delivered estimate, so this should be
+                  unreachable in normal use -- no new workflow, no repricing
+                  UI, just a way off this page if it is ever reached. */}
+              {saved && savedEstimateId && !generating && !error && pricingLoadState === "delivered" && (
+                <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3.5">
+                  <p className="text-sm text-zinc-700">
+                    This estimate has already gone to the customer and cannot be repriced.
+                  </p>
+                  <Link
+                    href={`/estimates/${savedEstimateId}`}
+                    className="mt-3 flex w-full items-center justify-center rounded-lg border border-zinc-300 px-4 py-2.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-100 min-h-[44px]"
+                  >
+                    View Estimate
+                  </Link>
+                </div>
+              )}
+              {pricingReady && pricingInit && (
+                <div className="mt-6">
+                  <ContractorPricingEditor
+                    key={savedEstimateId}
+                    estimateId={savedEstimateId}
+                    currency={pricingInit.currency}
+                    initialRows={pricingInit.initialRows}
+                    initialTax={pricingInit.initialTax}
+                    initialPricing={pricingInit.initialPricing}
+                    defaults={pricingInit.defaults}
+                    isDelivered={pricingInit.isDelivered}
+                    depositPercent={pricingInit.depositPercent}
+                    depositThresholdDollars={pricingInit.depositThresholdDollars}
+                  />
+                </div>
               )}
             </div>
           </div>
@@ -361,18 +488,62 @@ function EstimateView({
               Back to Description
             </button>
           )}
-          {saved && savedEstimateId ? (
+          {/* One primary action at a time:
+                - not yet saved, or pricing still loading: disabled
+                - authoritative pricing failed to load: the exceptional
+                  route-transition fallback, so the contractor is never
+                  trapped
+                - legacy (previous pricing system) or delivered (already
+                  sent -- defensive only, should be unreachable in normal
+                  use): a plain View Estimate link, no pricing action at all
+                - loaded and incomplete: Add Pricing scrolls to the editor
+                  on this same page (no navigation)
+                - loaded and persisted-complete: Continue to Send, the only
+                  place this screen hands off to the detail page's own Send
+                  flow
+              Never two of these at once. */}
+          {!saved || !savedEstimateId ? (
+            <button
+              type="button"
+              disabled
+              className="w-full bg-amber-500 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+            >
+              Add Pricing
+            </button>
+          ) : pricingLoadState === "loading" ? (
+            <button
+              type="button"
+              disabled
+              className="w-full bg-amber-500 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+            >
+              Loading pricing...
+            </button>
+          ) : pricingLoadState === "error" ? (
             <Link
               href={`/estimates/${savedEstimateId}#pricing`}
               className="w-full flex items-center justify-center bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
             >
               Add Pricing
             </Link>
+          ) : pricingLoadState === "legacy" || pricingLoadState === "delivered" ? (
+            <Link
+              href={`/estimates/${savedEstimateId}`}
+              className="w-full flex items-center justify-center bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+            >
+              View Estimate
+            </Link>
+          ) : pricingComplete ? (
+            <Link
+              href={`/estimates/${savedEstimateId}`}
+              className="w-full flex items-center justify-center bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+            >
+              Continue to Send
+            </Link>
           ) : (
             <button
               type="button"
-              disabled
-              className="w-full bg-amber-500 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+              onClick={scrollToPricing}
+              className="w-full flex items-center justify-center bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
             >
               Add Pricing
             </button>
@@ -945,6 +1116,18 @@ function NewPageInner() {
   const [saved, setSaved] = useState(false);
   const [savedEstimateId, setSavedEstimateId] = useState<string | null>(null);
   const [customerDetailsSaved, setCustomerDetailsSaved] = useState(false);
+  // The estimate's own authoritative pricing state, fetched once per
+  // savedEstimateId from GET /api/estimates/{id}/pricing -- never
+  // reconstructed from current business Rates or from prose.
+  const [pricingLoadState, setPricingLoadState] = useState<PricingLoadState>("idle");
+  const [pricingInit, setPricingInit] = useState<PricingInit | null>(null);
+  const [pricingRetryToken, setPricingRetryToken] = useState(0);
+  // Persisted-pricing completeness for the estimate currently shown.
+  // Initialized from the same authoritative fetch above, then kept current
+  // by a successful ContractorPricingEditor Save (PRICING_CHANGE_EVENT) --
+  // the same authority the detail page's own Send gating uses. Reset
+  // whenever a genuinely new estimate replaces the current one.
+  const [pricingComplete, setPricingComplete] = useState(false);
   const { logoUrl, businessName, showCompanyNameBelowLogo, businessEmail, preparedBy, isPro, aiPhotoEstimatesRemaining, isLoading: profileLoading } = useBusinessProfile();
   const [jobTitle, setJobTitle] = useState("");
   const [isFirstTime, setIsFirstTime] = useState(false);
@@ -987,6 +1170,126 @@ function NewPageInner() {
         }
       })
       .catch(() => {});
+  }, []);
+
+  // The one authoritative read for /new's own-page pricing editor: the
+  // estimate's own persisted rows and snapshots, reused unmodified from
+  // GET /api/estimates/{id}/pricing (the same route PUT already lives on).
+  // Runs once per estimate id -- not on a regenerate, which keeps the same
+  // id and never touches pricing, so the already-loaded state is still
+  // exactly correct -- and again only if pricingRetryToken changes, which
+  // only the contractor's own Retry tap does.
+  //
+  // Stale-response protection: `cancelled` is the smallest structural
+  // guard against a response for a since-replaced estimate id overwriting
+  // the current one (id A's fetch resolving after the id has already moved
+  // to B). This is not exercised by an automated test -- this repo has no
+  // component harness that can drive two overlapping async effects and
+  // observe which one wins; the guard's correctness rests on this being a
+  // standard, well-understood React cleanup pattern, not on test coverage.
+  useEffect(() => {
+    if (!savedEstimateId) {
+      setPricingLoadState("idle");
+      setPricingInit(null);
+      return;
+    }
+
+    let cancelled = false;
+    setPricingLoadState("loading");
+    setPricingInit(null);
+
+    type PricingInitResponse = {
+      estimate?: {
+        currency?: string;
+        isDelivered?: boolean;
+        taxLabel?: string | null;
+        taxRate?: number | null;
+        depositPercent?: number | null;
+        depositThreshold?: number | null;
+      };
+      rows?: ContractorPricingRowInput[];
+      pricing?: ContractorPricing;
+      defaults?: { labourRate?: number; markupPercent?: number };
+    };
+
+    fetch(`/api/estimates/${savedEstimateId}/pricing`)
+      .then(async (res) => {
+        // A legacy (non contractor_pricing) estimate is refused with this
+        // distinct, documented code -- never a transient failure, and never
+        // collapsed into the generic error state below.
+        if (res.status === 409) {
+          const body = (await res.json().catch(() => null)) as { code?: string } | null;
+          if (body?.code === "ESTIMATE_READ_ONLY") return { kind: "legacy" as const };
+        }
+        if (!res.ok) throw new Error(`pricing init failed: ${res.status}`);
+        return { kind: "ok" as const, body: (await res.json()) as PricingInitResponse };
+      })
+      .then((result) => {
+        if (cancelled) return;
+        if (result.kind === "legacy") {
+          setPricingLoadState("legacy");
+          return;
+        }
+
+        const d = result.body;
+        const est = d?.estimate;
+        if (!est || !d.pricing) throw new Error("pricing init: unreadable response");
+
+        // Defensive only: the generate/regenerate route already refuses a
+        // delivered estimate, so this should be unreachable during normal
+        // use. Never pretend isDelivered is false if the estimate's own
+        // authoritative state says otherwise.
+        if (est.isDelivered) {
+          setPricingLoadState("delivered");
+          return;
+        }
+
+        setPricingInit({
+          currency: currencyOrDefault(est.currency),
+          isDelivered: false,
+          initialRows: d.rows ?? [],
+          initialTax: { label: est.taxLabel ?? null, rate: est.taxRate ?? null },
+          initialPricing: d.pricing,
+          defaults: {
+            labourRate: d.defaults?.labourRate ?? 0,
+            markupPercent: d.defaults?.markupPercent ?? 0,
+          },
+          depositPercent: est.depositPercent ?? null,
+          depositThresholdDollars: est.depositThreshold ?? null,
+        });
+        // Initializes from the persisted response itself, not only from a
+        // later Save -- a regenerated estimate that was already saved
+        // complete must show Continue to Send immediately, not wait for
+        // another save.
+        setPricingComplete(d.pricing.complete);
+        setPricingLoadState("ready");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPricingLoadState("error");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [savedEstimateId, pricingRetryToken]);
+
+  function retryPricingInit() {
+    setPricingRetryToken((t) => t + 1);
+  }
+
+  // ContractorPricingEditor dispatches this after every successful pricing
+  // save (app/components/contractor-pricing-editor.tsx's save()), carrying
+  // the server's own calculated `complete` -- the same signal
+  // app/components/estimate-actions.tsx uses to gate Send on the detail
+  // page. Continue to Send below reuses that exact authority rather than a
+  // second completeness definition.
+  useEffect(() => {
+    function handlePricingChange(e: Event) {
+      setPricingComplete(readPricingComplete(e));
+    }
+    window.addEventListener(PRICING_CHANGE_EVENT, handlePricingChange);
+    return () => window.removeEventListener(PRICING_CHANGE_EVENT, handlePricingChange);
   }, []);
 
   const needsProfileSetup = !profileLoading && !logoUrl && !businessName && !preparedBy && !businessEmail;
@@ -1068,7 +1371,12 @@ function NewPageInner() {
     setEstimate("");
     setError("");
     setSaved(false);
-    if (!regenerateId) setSavedEstimateId(null);
+    if (!regenerateId) {
+      setSavedEstimateId(null);
+      // A genuinely new estimate id is coming; the old one's pricing
+      // completeness must never carry over onto it.
+      setPricingComplete(false);
+    }
     setJobTitle("");
 
     try {
@@ -1214,6 +1522,7 @@ function NewPageInner() {
     setError("");
     setSaved(false);
     setSavedEstimateId(null);
+    setPricingComplete(false);
     setJobTitle("");
     setCustomerDetailsSaved(false);
     clearPhotos();
@@ -1239,6 +1548,10 @@ function NewPageInner() {
         customerEmail={customerEmail}
         jobAddress={jobAddress}
         jobTitle={jobTitle}
+        pricingLoadState={pricingLoadState}
+        pricingInit={pricingInit}
+        pricingComplete={pricingComplete}
+        onRetryPricingInit={retryPricingInit}
         onBack={handleBack}
         onNewEstimate={handleNewEstimate}
       />

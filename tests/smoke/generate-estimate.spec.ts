@@ -45,7 +45,7 @@ test("a generated estimate contains no currency figures before contractor input"
     // Add Pricing appears only once the estimate row is saved and the server
     // has handed back the sanitized prose, so what is on screen from here is
     // the saved record rather than the raw stream.
-    await expect(page.getByRole("link", { name: /^add pricing$/i })).toBeVisible({ timeout: 45000 });
+    await expect(page.getByRole("button", { name: /^add pricing$/i }).first()).toBeVisible({ timeout: 45000 });
 
     const bodyText = await page.locator("main").first().innerText();
     expect(bodyText, "no currency figure may appear in generated prose").not.toMatch(/[$]/);
@@ -80,7 +80,7 @@ test("a Canadian (default) business gets Canadian spelling in generated content"
     // stream in -- Add Pricing only appears once the estimate row is saved
     // and the server has returned the sanitized prose, so the text below is
     // the saved record rather than a mid-stream snapshot.
-    await expect(page.getByRole("link", { name: /^add pricing$/i })).toBeVisible({
+    await expect(page.getByRole("button", { name: /^add pricing$/i }).first()).toBeVisible({
       timeout: 45000,
     });
 
@@ -113,7 +113,7 @@ test("a US business gets American spelling in generated content", async ({ page 
     // stream in -- Add Pricing only appears once the estimate row is saved
     // and the server has returned the sanitized prose, so the text below is
     // the saved record rather than a mid-stream snapshot.
-    await expect(page.getByRole("link", { name: /^add pricing$/i })).toBeVisible({
+    await expect(page.getByRole("button", { name: /^add pricing$/i }).first()).toBeVisible({
       timeout: 45000,
     });
 

@@ -3,6 +3,8 @@ import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
 import { validateContentType } from "@/lib/api-utils";
 import { hasSubscriptionAccess, SUBSCRIPTION_ACCESS_COLUMNS } from "@/lib/subscription-access";
 import { isDelivered } from "@/lib/estimate-delivery";
+import { loadContractorPricingRows } from "@/lib/estimate-pricing-server";
+import { loadEstimatePricingInit } from "@/lib/estimate-pricing-init";
 import {
   firstHourlyRateCandidate,
   parseContractorPricingRequest,
@@ -13,6 +15,85 @@ import {
   type PricingRow,
   type PricingSnapshots,
 } from "@/lib/contractor-pricing";
+
+/**
+ * GET returns the one authoritative source /new's same-page pricing editor
+ * initializes from: this estimate's own persisted rows and snapshots, never
+ * the business's current Rates. The business only supplies defaults (labour
+ * rate, markup) that a contractor can still change per estimate; currency,
+ * tax and deposit are the estimate's own immutable, already-written snapshot,
+ * exactly as the detail page itself reads them. No pricing arithmetic here
+ * beyond the one shared calculateContractorPricing() call, the same as PUT.
+ *
+ * Ownership-first, via loadEstimatePricingInit() (lib/estimate-pricing-init.ts,
+ * the same pure-orchestration-over-injected-dependencies shape as
+ * lib/estimate-deletion.ts's deleteOwnedEstimate()): nothing about rows,
+ * currency or snapshots is read for an estimate that does not belong to this
+ * business, and a legacy (non contractor_pricing) estimate is refused with a
+ * distinct, documented 409 before its rows are ever read either.
+ */
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+): Promise<NextResponse> {
+  const { supabase, applyTo } = createApiClient(request);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return applyTo(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
+
+  const { id } = await params;
+
+  const { data: business } = await supabaseAdmin
+    .from("tpe_businesses")
+    .select(`id, ${SUBSCRIPTION_ACCESS_COLUMNS}, labour_rate, markup_percent`)
+    .eq("owner_user_id", user.id)
+    .maybeSingle();
+
+  if (!hasSubscriptionAccess(business)) {
+    return applyTo(NextResponse.json({ error: "Subscription required" }, { status: 403 }));
+  }
+
+  const result = await loadEstimatePricingInit(id, business.id, {
+    async findOwnedEstimate(estimateId, businessId) {
+      // Scoped to this business's own id, the same ownership check PUT
+      // uses. A cross-tenant id simply matches no row here, so it falls
+      // into the exact same not-found response as a typo'd id, exposing no
+      // pricing rows, snapshots or currency for an estimate this business
+      // does not own.
+      const { data } = await supabaseAdmin
+        .from("tpe_estimates")
+        .select(
+          "id, business_id, pricing_source, status, sent_at, copied_at, currency, tax_label_snapshot, tax_rate_snapshot, deposit_percent_snapshot, deposit_threshold_snapshot"
+        )
+        .eq("id", estimateId)
+        .eq("business_id", businessId)
+        .maybeSingle();
+      return data ?? null;
+    },
+    loadRows: loadContractorPricingRows,
+  });
+
+  if (!result.ok) {
+    const body: Record<string, unknown> = { error: result.error };
+    if ("code" in result) body.code = result.code;
+    return applyTo(NextResponse.json(body, { status: result.status }));
+  }
+
+  return applyTo(
+    NextResponse.json({
+      estimate: result.estimate,
+      rows: result.rows,
+      pricing: result.pricing,
+      // Business-level defaults only -- offered to a new/empty labour or
+      // materials row, never a substitute for the estimate's own snapshot.
+      defaults: {
+        labourRate: business!.labour_rate ?? 0,
+        markupPercent: business!.markup_percent ?? 0,
+      },
+    })
+  );
+}
 
 /**
  * The one authoritative contractor-pricing write path

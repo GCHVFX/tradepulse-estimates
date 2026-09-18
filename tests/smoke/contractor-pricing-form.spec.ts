@@ -825,13 +825,18 @@ test("the pricing section carries a stable anchor with a scroll margin", () => {
   expect(editor).toContain('<div id="pricing" ref={pricingRef} className="mb-4 flex flex-col gap-6 scroll-mt-6">');
 });
 
-test("every real Add Pricing link on /new targets the pricing anchor", () => {
+test("the healthy Add Pricing action on /new no longer links to /estimates/{id} -- it scrolls the same page instead", () => {
+  // Superseded by same-page pricing (production found a black route-
+  // transition flash tapping the old #pricing link on Android Chrome): the
+  // healthy-path Add Pricing action is now a same-page scroll button, not a
+  // Link. Six /estimates/${savedEstimateId} hrefs remain on /new: Continue
+  // to Send and the legacy/delivered "View Estimate" links (inline card and
+  // sticky bar each, plain detail-page URL, no hash), and two exceptional
+  // #pricing fallbacks (inline card and sticky bar), shown only if the
+  // authoritative pricing GET fails.
   const newPage = readFileSync("app/new/page.tsx", "utf8");
   const hrefs = [...newPage.matchAll(/href=\{`\/estimates\/\$\{savedEstimateId\}([^`]*)`\}/g)].map((m) => m[1]);
-  expect(hrefs.length).toBeGreaterThan(0);
-  for (const suffix of hrefs) {
-    expect(suffix).toBe("#pricing");
-  }
+  expect(hrefs.sort()).toEqual(["", "", "", "", "#pricing", "#pricing"]);
 });
 
 // ── Add Pricing scroll fallback (production follow-up: Android Chrome) ──────

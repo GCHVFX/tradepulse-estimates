@@ -224,7 +224,12 @@ test("the new-estimate screen confirms before it regenerates, and never re-uploa
   );
   expect(newPage).toContain("estimateId: regenerateId || undefined,");
   expect(newPage).toContain("const regenerateId = saved && savedEstimateId ? savedEstimateId : null;");
-  expect(newPage).toContain("if (!regenerateId) setSavedEstimateId(null);");
+  // A real new estimate also resets pricing completeness, not just the id,
+  // so a second/different generated estimate never inherits the previous
+  // one's Continue to Send state.
+  expect(newPage).toContain("if (!regenerateId) {");
+  expect(newPage).toContain("setSavedEstimateId(null);");
+  expect(newPage).toContain("setPricingComplete(false);");
   expect(newPage).toContain("if (isPro && !regenerateId && createdEstimateId && photos.length > 0) {");
 });
 
@@ -502,10 +507,10 @@ test("the sticky action bar on /new never renders a Send Estimate button", () =>
   expect(newPage).not.toContain("setShowSendSheet");
 });
 
-test("the sticky bar's primary action is Add Pricing, linking to the estimate it just saved", () => {
+test("the sticky bar's primary action is Add Pricing (same-page scroll) once authoritative pricing has loaded and is incomplete", () => {
   const newPage = code("app/new/page.tsx");
 
-  // The fixed bottom bar, not the scrolled-content "Add Pricing" link that
+  // The fixed bottom bar, not the scrolled-content "Add Pricing" action that
   // already existed inside the white estimate card -- scoped to the block
   // that starts at the fixed positioning wrapper and ends where BottomNav is
   // rendered for this view, so this cannot pass by matching the older link.
@@ -515,30 +520,33 @@ test("the sticky bar's primary action is Add Pricing, linking to the estimate it
   expect(fixedBarEnd).toBeGreaterThan(fixedBarStart);
   const fixedBar = newPage.slice(fixedBarStart, fixedBarEnd);
 
-  expect(fixedBar).toContain("{saved && savedEstimateId ? (");
-  // #pricing lands the contractor on the pricing section directly, not the
-  // top of the estimate page (found on the phone: the button looked like it
-  // did nothing).
-  expect(fixedBar).toContain("href={`/estimates/${savedEstimateId}#pricing`}");
+  expect(fixedBar).toContain("pricingComplete ? (");
+  // Same-page scroll for the healthy, loaded-and-incomplete state, not the
+  // old navigate-to-detail-page hotfix this superseded (production found a
+  // black route-transition flash on Android Chrome tapping the old
+  // #pricing link on every state, not just a failure).
+  expect(fixedBar).toContain("onClick={scrollToPricing}");
   expect(fixedBar).toContain("Add Pricing");
 });
 
-test("Add Pricing in the sticky bar is not actionable before a savedEstimateId exists", () => {
+test("Add Pricing in the sticky bar is not actionable before generation is saved", () => {
   const newPage = code("app/new/page.tsx");
 
   const fixedBarStart = newPage.indexOf('<div className="fixed bottom-0 left-0 right-0">');
   const fixedBarEnd = newPage.indexOf("<BottomNav onNewClick={onNewEstimate} />", fixedBarStart);
   const fixedBar = newPage.slice(fixedBarStart, fixedBarEnd);
 
-  // The false branch of the saved && savedEstimateId check is a disabled
-  // button with no href at all, not a Link with a possibly-empty id -- this
-  // is what rules out /estimates/undefined, /estimates/ or any other empty
-  // identifier, rather than a client-side guard that could be skipped.
-  const falseBranch = fixedBar.slice(fixedBar.indexOf(") : ("));
-  expect(falseBranch).toContain("<button");
-  expect(falseBranch).toContain("disabled");
-  expect(falseBranch).not.toContain("href");
-  expect(falseBranch).not.toContain("Link");
+  // The first branch (not saved, or no id yet) is a disabled button with no
+  // href and no onClick at all.
+  const notSavedBranchStart = fixedBar.indexOf("{!saved || !savedEstimateId ? (");
+  const notSavedBranchEnd = fixedBar.indexOf(") : pricingLoadState ===");
+  expect(notSavedBranchStart, "the not-yet-saved disabled Add Pricing branch").toBeGreaterThan(-1);
+  expect(notSavedBranchEnd).toBeGreaterThan(notSavedBranchStart);
+  const notSavedBranch = fixedBar.slice(notSavedBranchStart, notSavedBranchEnd);
+  expect(notSavedBranch).toContain("disabled");
+  expect(notSavedBranch).not.toContain("href");
+  expect(notSavedBranch).not.toContain("Link");
+  expect(notSavedBranch).not.toContain("onClick");
 });
 
 test("EstimateViewProps carries no Send-sheet wiring for /new to accidentally reintroduce", () => {
