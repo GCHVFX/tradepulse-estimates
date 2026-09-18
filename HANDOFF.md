@@ -1,27 +1,277 @@
 # TradePulse handoff
 
-Updated: 2026-09-17 21:51 PT (Production is on commit `f0eebeafbaf2cae83cd4b89f9bda33e82535b742`, deployment
-`dpl_JAwkG7Y821jeVoLeDpBLfD4NsbTB`, READY. This is the culmination of the same-page contractor-pricing work
-on `/new`: pricing now lives on `/new` itself instead of navigating to the detail page, initialized from the
-saved estimate's own authoritative state, not the business's current Rates. Phone-verified PASS. One further
-commit, `73b9d47429a353c5d442ae2948b1e72929a202bb` (smooth-scroll polish for the same-page Add Pricing
-action), is committed locally but **not pushed, not deployed, and not phone-verified in production** --- do
-not treat it as live. Full chronology, cleanup record, and open follow-ups are in "Same-page pricing
-closeout" immediately below, which supersedes this banner's own previous claim that production was on
-`2990e4d` and supersedes the "Phase 1 production merge, hotfix, and smoke" entry's own closing state further
-down this file.)
+Updated: 2026-09-18 09:11 PT (**Application production** is on commit
+`51e152dc74062f143e3bae1abc5d084ec676bdc4` ("Instrument transcription latency without changing behaviour"),
+deployment `dpl_6TH5rs7RuYREfiDJpnz8hdg48Vdy`, READY. Aliases include `tradepulse-estimates.com` and
+`trytradepulse.com`. This deployment's chain is `ec57bcb` (`dpl_BkQwtED6PQSvDtqDMo4WzPDSAuKT`) -> `f0eebea`
+(`dpl_JAwkG7Y821jeVoLeDpBLfD4NsbTB`) -> `51e152d` (`dpl_6TH5rs7RuYREfiDJpnz8hdg48Vdy`, current). Two commits
+this file previously called "local-only, not yet deployed" -- `73b9d47429a353c5d442ae2948b1e72929a202bb`
+(smooth-scroll polish) and `b4795450dd651a25e4959dc033a962e75e414fe1` (this file's own prior closeout entry)
+-- rode into production **inside** the `51e152d` deployment (same pattern as `bddaf3a8` riding in with the
+earlier `64de93e` deployment): neither had a standalone deployment of its own, and both are live now. Greg
+phone-verified the smooth Add Pricing scroll against the production state that includes this chain.
+
+**Four Phase 2 "saved line-item foundation" commits are local-only, unpushed, and not deployed**:
+`1e3618c4` (Slice 1 matcher), `eeea1d4b` (Slice 2 quantity-aware calculator), `c3c8fe55` (Slice 3A confirmed
+line-item request contract), `2b9ab3ce` (Slice 3B taxable rows). See "Phase 2 saved line-item foundation
+closeout" below for the full record. **Important distinction: the Slice 3B Supabase migration
+(`20260918160315_add_taxable_to_contractor_pricing_save_fn`) is already applied to TradePulse production**
+(`fctequqcwxyhmnjgxixg`) even though none of the four application commits are live -- this is an intentional,
+verified-backward-compatible database-ahead-of-code state, not a mistake.
+
+Full same-page-pricing chronology, cleanup record, and open follow-ups are in "Same-page pricing closeout"
+below, which supersedes this banner's own previous claim that production was on `2990e4d` and supersedes the
+"Phase 1 production merge, hotfix, and smoke" entry's own closing state further down this file.)
+
+## Phase 2 saved line-item foundation closeout (2026-09-18 PT)
+
+Four local-only, unpushed, undeployed commits, built as isolated slices per explicit task instructions each
+time. None of this application code is live. See the top banner for the one exception: the Slice 3B database
+migration is already applied to production ahead of the code.
+
+### Slice 1 -- deterministic saved-line-item suggestion matcher
+
+Commit `1e3618c4bde8a31dd9041b73b488ce81a2390b38`. `lib/pricebook-suggestions.ts`, pure and synchronous.
+
+Rules: matcher input carries no money (its type structurally cannot); matcher output carries no money;
+suggestions are inert until the contractor taps one; quantity is always exactly `1`, never inferred; no
+negation parsing; no LLM, no embeddings, no vector search; deterministic ranked suggestions, phrase-weighted
+token scoring with a named minimum score and a max of 5 results. Core invariant: **nothing the matcher
+produces may touch a dollar total until the contractor taps it.**
+
+Reference result for the adversarial faucet job ("replace the kitchen faucet, replace both corroded shutoff
+valves..., replace both braided supply lines..., no toilet work required, no blocked drain"):
+
+- Braided supply line replacement -- 14
+- Quarter-turn shutoff valve replacement -- 11
+- Kitchen faucet replacement -- 5
+- Drain clearing -- 4
+- Toilet replacement labour -- 3
+
+The last two are known, explainable false positives: the job text contains the literal words "drain" and
+"toilet" in a negated context ("no ... required", "... stay in place"), and this matcher deliberately does no
+negation handling. They rank well below the three genuine matches and were **not** special-cased away --
+false positives are acceptable secondary suggestions precisely because no suggestion affects any total until
+the contractor confirms it.
+
+### Slice 2 -- quantity-aware contractor pricing calculator
+
+Commit `eeea1d4bb7b60ea049f05662835b2fbdde5e7209`. `lib/contractor-pricing.ts`.
+
+- Hourly labour: unchanged, `quantity x rate`.
+- Fixed labour: now `quantity x unit price` (was: unit price only, quantity ignored).
+- Materials: now `quantity x unit price x (1 + markup / 100)` (was: quantity ignored).
+- Other charges: unchanged.
+- Every existing Phase 1 row always wrote quantity 1 on fixed labour/materials, so this is a no-op for all
+  production rows at the time -- confirmed, not assumed.
+
+Reference saved-item fixture used throughout Slices 2-3B (the "faucet fixture"):
+
+| Item | Qty | Labour each | Material each |
+|---|---|---|---|
+| Kitchen faucet replacement | 1 | $325 | $0 |
+| Quarter-turn shutoff valve replacement | 2 | $145 | $18 |
+| Braided supply line replacement | 2 | $55 | $15 |
+
+Expected: labour **$725**, materials **$66**, subtotal **$791** before tax.
+
+Production compatibility check at the time of Slice 2: TradePulse production project correctly confirmed as
+`fctequqcwxyhmnjgxixg` (ca-central-1) -- a second, unrelated Supabase project (`hmkkuyznyumhajjqbxpu`, "Web
+Apps") exists on the same account and is **not** TradePulse; never record it as such. Existing production
+fixed-labour/material rows were unaffected by the formula change (0 labour rows, 1 material row at quantity
+1, at the time checked).
+
+### Slice 3A -- confirmed saved-line-item request and canonical row contract
+
+Commit `c3c8fe55e82b94e02443df1bbd580bb1c79b74d6`. `lib/contractor-pricing-request.ts`.
+
+A confirmed line item owns exactly: `description`, `quantity`, `labourUnitPrice`, `materialUnitPrice`. **No
+price-book ID or source relation is persisted** -- once the contractor confirms a suggestion, the estimate
+draft owns the copied values outright; changing the price book tomorrow cannot move an estimate priced today.
+
+Each confirmed item encodes to exactly two adjacent existing `tpe_estimate_items` rows:
+
+- **labour**: same description, `unit = "ea"`, `quantity` = confirmed quantity, `unit_price` = final labour
+  selling price, `markup_percent = null`.
+- **material**: same description, `unit = "ea"`, `quantity` = confirmed quantity, `unit_price` = final
+  material selling price, **`markup_percent = 0`** (load-bearing: the price book stores a final
+  customer-facing selling price, and business material markup must never be applied a second time on top of
+  it).
+
+Zero-value material rows are intentionally retained (a $0 component is a deliberate value, not a missing
+one). Current customer rendering aggregates all labour rows into one Labour total and all material rows into
+one Materials total, so a zero-value paired material row does not appear as a duplicate line item to the
+customer.
+
+**Option C mode rule** (request-contract level, locked): generic Labour/Materials mode and confirmed
+saved-line-item mode may never coexist on one estimate; charges may coexist with either. Mixed mode is
+rejected by `parseContractorPricingRequest()`. The current Phase 1 form (`lib/contractor-pricing-form.ts`)
+explicitly sends `lineItems: []` until UI integration is built -- this keeps the outgoing payload shape
+correct without changing any current behaviour.
+
+### Slice 3B -- taxable contractor pricing rows
+
+Commit `2b9ab3ce9293b5c398e08722eb0f7c46aac2e999`. `lib/contractor-pricing.ts`,
+`lib/contractor-pricing-request.ts`, every read path, and a new production migration.
+
+**Locked rule:** a saved price-book item has **one** taxability flag. Both its labour and material rows
+inherit that one flag together -- there is no separate labour/material taxability today. Future note only, do
+not build now: some US jurisdictions tax labour and materials differently, and per-row
+`tpe_estimate_items.taxable` already preserves a path to support that later if ever required.
+
+Calculator rule after Slice 3B:
+
+```
+tax = tax_rate x taxable_subtotal
+```
+
+where `taxable_subtotal` is the sum of already-rounded line amounts for rows whose `taxable !== false`. A
+non-taxable row still counts toward subtotal, total and the deposit threshold; it simply contributes nothing
+to tax.
+
+Defaults are **intentionally asymmetric**: a missing `PricingRow.taxable` at the pure-calculator backward-
+compatibility boundary means `true` (every pre-Slice-3B caller and row is unaffected); a missing `taxable` on
+a **new** confirmed saved line item is invalid and rejected outright (never silently assumed, to avoid ever
+silently over- or under-charging tax on a new saved-item feature). Generic Phase 1 labour/material/charge
+rows explicitly encode `taxable = true`. Saved-item material rows still explicitly encode `markup_percent =
+0` regardless of their taxable value.
+
+### Production Slice 3B database migration -- already live
+
+**This migration is live in production even though the Phase 2 application code is not pushed.** Production
+Supabase project `fctequqcwxyhmnjgxixg`.
+
+- Migration version: `20260918160315`
+- Migration name: `add_taxable_to_contractor_pricing_save_fn`
+- Committed local filename: `supabase/migrations/20260918160315_add_taxable_to_contractor_pricing_save_fn.sql`
+
+Replaced only `public.tpe_save_contractor_pricing(...)`. No table/schema migration was needed:
+`tpe_estimate_items.taxable boolean not null default true` already existed. The RPC change was deliberately
+backward-compatible with the currently deployed application commit `51e152d`: an old application row that
+omits `taxable` persists `taxable = true`; the RPC now also returns `taxable` in its result, and old
+`51e152d` response-narrowing code ignores the extra returned field.
+
+**RPC safety proof.** Production function owner, both before and after: `postgres`. Production ACL, both
+before and after: `{postgres=X/postgres,service_role=X/postgres}` -- unchanged. The canonical
+`pg_get_functiondef()` diff between the pre-Slice-3B and post-Slice-3B function contained **only** these three
+additions: (1) `taxable` added to the INSERT column list, (2) `coalesce((e ->> 'taxable')::boolean, true)`
+added as its inserted value, (3) `'taxable', taxable` added to each returned row's `jsonb_build_object`.
+Everything else -- the ownership predicate, the estimate `FOR UPDATE` lock, the delivered-estimate guard, the
+business `FOR UPDATE` lock, the replace-not-merge `DELETE`, the inserted-row-count check -- was verified
+unchanged. Post-apply production function definition matched the disposable intended-after canonical
+definition byte-for-byte. Production row count stayed at 59 `tpe_estimate_items` rows throughout; taxability
+stayed at 59 true / 0 false. No estimate/item data was mutated by this DDL-only migration.
+
+**RPC rollback artifacts.** Persistent absolute paths, resolved and verified (byte-identical copies) on
+2026-09-18, outside this repository:
+
+- `C:\Work\tools\tradepulse-rollback-artifacts\slice3b\tradepulse-tpe_save_contractor_pricing-pre-slice3b.sql`
+  -- exact pre-Slice-3B production function definition
+- `C:\Work\tools\tradepulse-rollback-artifacts\slice3b\tradepulse-tpe_save_contractor_pricing-pre-slice3b-metadata.txt`
+  -- pre-change owner/ACL metadata
+- `C:\Work\tools\tradepulse-rollback-artifacts\slice3b\tradepulse-tpe_save_contractor_pricing-intended-slice3b.sql`
+  -- disposable-database intended-after canonical definition
+- `C:\Work\tools\tradepulse-rollback-artifacts\slice3b\tradepulse-tpe_save_contractor_pricing-post-slice3b.sql`
+  -- production post-Slice-3B canonical definition
+
+**Do not delete these artifacts until Phase 2 application deployment and production smoke are complete.**
+
+**Durable rollback source.** The four files above are verification and convenience copies, not the durable
+source. The durable rollback source is the already-committed
+`supabase/migrations/20260916000000_add_contractor_pricing_snapshots_and_save_fn.sql`, which contains the
+pre-Slice-3B `tpe_save_contractor_pricing` function body -- Slice 3B's own verification confirmed the
+production pre-change canonical function matched a disposable function built from exactly that migration file,
+before the taxable replacement was applied. If the scratch artifacts above are ever lost, recovery does not
+depend solely on them.
+
+**Open migration bookkeeping issue, unchanged by this entry.** Local repo file
+`supabase/migrations/20260916000000_add_contractor_pricing_snapshots_and_save_fn.sql` vs. production's
+recorded `20260916041903_add_contractor_pricing_snapshots_and_save_fn`. Still unresolved. Not touched by this
+documentation entry.
+
+**Database-ahead-of-code state.** Intentional. Live in the production database:
+`20260918160315_add_taxable_to_contractor_pricing_save_fn`. Not live in application code: Slices 1, 2, 3A,
+3B (all four remain local-only). Current production application remains `51e152dc74062f143e3bae1abc5d084ec676bdc4`.
+This is safe specifically because the live RPC treats a missing `taxable` as `true`
+(`coalesce((e ->> 'taxable')::boolean, true)`) and returns an extra `taxable` field that older application
+code simply ignores -- every application deployment that predates Slice 3B, including current production and
+any earlier rollback candidate, continues to behave exactly as before against this RPC.
+
+**Rollback consequence:** a Vercel/application rollback does **not** require a database rollback. Earlier
+application deployments remain compatible with the Slice 3B RPC replacement. Do not roll back the database
+merely because application code is rolled back.
+
+### Slice 4 -- not started
+
+Still unbuilt:
+
+1. UI loads relevant price-book items/suggestions.
+2. Contractor taps a suggestion to confirm it.
+3. Confirmed saved item becomes editable estimate draft data.
+4. Quantity adjustment UI.
+5. Saved-line-item labour/material price editing.
+6. Correct taxability passed from the saved price-book item into the confirmed line item.
+7. Mode-switching UX.
+
+**Mode-switching decision still open.** The backend/request invariant is already locked: confirmed saved line
+items cannot coexist with generic Labour/Materials (Option C, Slice 3A). The UI still needs one explicit
+behaviour when the contractor already has generic pricing on screen and confirms their first saved item --
+**Option A**: clear the generic labour/material draft and switch to saved-line-item mode, or **Option B**:
+block the tap and explain that generic pricing must be removed first. Not decided here. This is a Slice 4
+product decision for Greg.
+
+**Price-book customer presentation still unchanged.** The customer document continues to aggregate all
+persisted labour rows into one Labour total, all material rows into one Materials total, and lists only
+`other` charges individually. Saved-line-item rows are currently internal pricing structure only. Whether
+customers should eventually see item-level saved-line-item prices is a separate, later product decision --
+not implied or decided by anything in Slices 1-3B.
+
+### Pricing authority, extended for taxability
+
+The standing rule from "Same-page pricing closeout" below applies unchanged:
+
+**Pricing authority check: for every money or completeness value shown on screen, name the object that owns
+it and confirm the display binds to that object, not to a nearby copy, draft, default, or current business
+setting.**
+
+For persisted contractor pricing, extended to taxability: **estimate rows** own row taxability; the
+**estimate snapshot** owns the tax rate; the **calculator** owns the resulting tax amount. The price book and
+business Rates must never move a persisted estimate's taxability, tax rate, or tax amount.
+
+### Current repo state (Phase 2)
+
+`origin/main`: `51e152dc74062f143e3bae1abc5d084ec676bdc4`. Local `main` before this HANDOFF commit:
+`2b9ab3ce9293b5c398e08722eb0f7c46aac2e999` -- **4** commits ahead of `origin/main`, 0 behind (`1e3618c4`,
+`eeea1d4b`, `c3c8fe55`, `2b9ab3ce`, in that order). After this HANDOFF commit, local `main` will be **5**
+commits ahead of `origin/main`, 0 behind, assuming `origin/main` remains unmoved. **None of the four Phase 2
+application commits have been pushed or deployed.** The same 16 unrelated dirty/untracked paths from this
+session remain preserved byte-identically and untouched by this entry.
 
 ## Same-page pricing closeout (2026-09-17 PT)
 
-**Current production status.** Commit `f0eebeafbaf2cae83cd4b89f9bda33e82535b742`, deployment
-`dpl_JAwkG7Y821jeVoLeDpBLfD4NsbTB`, **READY**. Same-page pricing phone smoke: **PASS**. Runtime check after
-deployment: no Vercel runtime errors found in the checked 30-minute production window.
+**Current production status (as of this section's original writing).** Commit
+`f0eebeafbaf2cae83cd4b89f9bda33e82535b742`, deployment `dpl_JAwkG7Y821jeVoLeDpBLfD4NsbTB`, **READY**.
+Same-page pricing phone smoke: **PASS**. Runtime check after deployment: no Vercel runtime errors found in
+the checked 30-minute production window. **Superseded by the top banner above**: production has since moved
+to `51e152dc74062f143e3bae1abc5d084ec676bdc4`, deployment `dpl_6TH5rs7RuYREfiDJpnz8hdg48Vdy`.
 
-**Local-only, not yet live:** commit `73b9d47429a353c5d442ae2948b1e72929a202bb` is committed on top of the
-above but **not pushed, not deployed, and not phone-verified in production**. It changes the healthy `/new`
-Add Pricing interaction from an instant jump to native smooth scrolling, respecting
-`prefers-reduced-motion`. The existing `/estimates/{id}#pricing` mount/hash fallback remains instant,
-untouched. Do not describe smooth scrolling as live until this commit is pushed, deployed, and verified.
+**Correction, 2026-09-18:** the paragraph below originally called `73b9d47429a353c5d442ae2948b1e72929a202bb`
+"local-only, not yet live." That is now stale. `73b9d47` (smooth-scroll polish) and
+`b4795450dd651a25e4959dc033a962e75e414fe1` (this file's own prior closeout commit) both rode into production
+**inside** the `51e152d` deployment (`dpl_6TH5rs7RuYREfiDJpnz8hdg48Vdy`) -- neither had a standalone
+deployment of its own, the same pattern as `bddaf3a8` riding in with `64de93e`. Greg phone-verified the
+smooth Add Pricing scroll against the production state that includes this chain. Do not describe either
+commit as still local-only, as having its own deployment, or as having reached production before `51e152d`.
+
+<details><summary>Original paragraph (superseded, kept for chronology)</summary>
+
+commit `73b9d47429a353c5d442ae2948b1e72929a202bb` is committed on top of the above but **not pushed, not
+deployed, and not phone-verified in production**. It changes the healthy `/new` Add Pricing interaction from
+an instant jump to native smooth scrolling, respecting `prefers-reduced-motion`. The existing
+`/estimates/{id}#pricing` mount/hash fallback remains instant, untouched. Do not describe smooth scrolling as
+live until this commit is pushed, deployed, and verified.
+
+</details>
 
 ### Chronology since `46a7e97` (all times PT unless noted)
 
@@ -76,12 +326,14 @@ editor appeared on the same page; live totals updated correctly; complete-but-un
 Continue to Send; Save exposed Continue to Send; Continue to Send reached the normal detail page; a second,
 fresh estimate did not carry over labour, materials, markup, totals, or completeness from the first.
 
-**6. `73b9d47429a353c5d442ae2948b1e72929a202bb`** -- **LOCAL ONLY. Not pushed. Not deployed. Not production
-phone-verified.** `/new`'s Add Pricing now requests native smooth scrolling (`prefers-reduced-motion` falls
-back to instant); the existing detail-page `#pricing` fallback remains instant, untouched. Local
-verification: focused test suite 18 passed; `npx tsc --noEmit` clean; `eslint` on changed files clean except
-the same pre-existing `handleSignOut` warning; `git diff --check` clean; `npm run build` passed. Do not
-state or imply this behaviour is live until it is pushed, deployed, and phone-verified.
+**6. `73b9d47429a353c5d442ae2948b1e72929a202bb`** -- **now live in production**, deployed inside `51e152d`'s
+deployment (`dpl_6TH5rs7RuYREfiDJpnz8hdg48Vdy`), not a standalone deployment. (Originally recorded here as
+local-only/not-pushed at the time this entry was first written; corrected 2026-09-18, see the correction note
+above "Chronology since `46a7e97`".) `/new`'s Add Pricing now requests native smooth scrolling
+(`prefers-reduced-motion` falls back to instant); the existing detail-page `#pricing` fallback remains
+instant, untouched. Local verification at the time: focused test suite 18 passed; `npx tsc --noEmit` clean;
+`eslint` on changed files clean except the same pre-existing `handleSignOut` warning; `git diff --check`
+clean; `npm run build` passed. Greg has since phone-verified this behaviour in production.
 
 ### Cleanup record
 
@@ -144,8 +396,12 @@ Apply this as a standing review check for future pricing and Payments work, not 
    `tpe_estimate_photos` row (see "Old Storage orphans" above). Open question: does the app's photo deletion
    path actually remove Storage objects, or were those rows deleted another way? That determines whether
    this is a live bug or historical debris. Do not delete anything before answering it.
+6. Pre-existing ESLint finding observed during Phase 2 Slice 3B, not introduced by it and deliberately not
+   fixed there: `app/estimates/[id]/page.tsx` uses an `<a>` where ESLint's `@next/next/no-html-link-for-pages`
+   wants `<Link />`, at what is now line 182. Confirmed present on the commit before Slice 3B's one-line edit
+   to that file. Not a lint cleanup task for this entry either.
 
-### Repo state (current, not the stale state this banner used to carry)
+### Repo state (superseded by "Phase 2 saved line-item foundation closeout" below)
 
 `origin/main`: `f0eebeafbaf2cae83cd4b89f9bda33e82535b742`. Local `main` before this HANDOFF commit:
 `73b9d47429a353c5d442ae2948b1e72929a202bb`, 1 commit ahead of `origin/main`, 0 behind. After this HANDOFF
@@ -153,7 +409,9 @@ commit, local `main` will be 2 commits ahead of `origin/main`, 0 behind, assumin
 unmoved. The same 16 unrelated dirty/untracked paths from this session (`.ai-control-centre/activity.jsonl`,
 `.ai-control-centre/current-session.json`, `.claude/settings.local.json`, `.gitignore`, `AGENTS.md`, three
 `AGENTS.md.bak-*`/three `CLAUDE.md.bak-*` files, three `public/tradepulse-*` image files, and
-`supabase/.temp/`) remain preserved byte-identically and untouched by this entry.
+`supabase/.temp/`) remain preserved byte-identically and untouched by this entry. (This paragraph is now
+historical: `origin/main` has since moved to `51e152dc74062f143e3bae1abc5d084ec676bdc4`, absorbing `73b9d47`
+and `b479545`. Current repo state is recorded in "Phase 2 saved line-item foundation closeout" below.)
 
 ## Phase 1 production merge, hotfix, and smoke (2026-09-17 PT)
 
