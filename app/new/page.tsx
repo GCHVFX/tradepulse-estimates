@@ -250,7 +250,11 @@ function EstimateView({
   // and stays untouched -- and is reused below as the exceptional fallback
   // if this page's own authoritative pricing read fails.
   function scrollToPricing() {
-    document.getElementById("pricing")?.scrollIntoView({ block: "start" });
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    document.getElementById("pricing")?.scrollIntoView({
+      behavior: prefersReducedMotion ? "auto" : "smooth",
+      block: "start",
+    });
   }
 
   const pricingReady = saved && savedEstimateId && !generating && !error && pricingLoadState === "ready" && pricingInit;

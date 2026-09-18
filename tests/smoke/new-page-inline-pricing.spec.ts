@@ -174,19 +174,31 @@ test("pricingComplete and the authoritative fetch both reset whenever a genuinel
   expect(handleNewEstimateBody).toContain("setPricingComplete(false);");
 });
 
-test("Add Pricing scrolls to the existing #pricing element on this same page, instantly, once ready", () => {
+test("Add Pricing smoothly scrolls to the existing #pricing element on this same page, once ready, honouring reduced motion", () => {
   const newPage = code("app/new/page.tsx");
 
   const fnStart = newPage.indexOf("function scrollToPricing() {");
   expect(fnStart).toBeGreaterThan(-1);
-  const fnEnd = newPage.indexOf("});", fnStart) + "});".length;
+  const fnEnd = newPage.indexOf("});", newPage.indexOf("scrollIntoView", fnStart)) + "});".length;
   const fn = newPage.slice(fnStart, fnEnd);
 
-  expect(fn).toContain('document.getElementById("pricing")?.scrollIntoView({ block: "start" });');
-  // Instant positioning only -- never smooth, unlike this file's own
-  // pre-existing, unrelated generation-progress auto-scroll effects, which
-  // legitimately do use it and are untouched by this change.
-  expect(fn).not.toContain("smooth");
+  expect(fn).toContain('window.matchMedia("(prefers-reduced-motion: reduce)").matches');
+  expect(fn).toContain("document.getElementById(\"pricing\")?.scrollIntoView({");
+  expect(fn).toContain('behavior: prefersReducedMotion ? "auto" : "smooth",');
+  expect(fn).toContain('block: "start",');
+});
+
+test("the detail page's own #pricing mount/hash fallback (ec57bcb) remains instant, untouched by the same-page smooth scroll", () => {
+  const editor = code("app/components/contractor-pricing-editor.tsx");
+
+  const fnStart = editor.indexOf("shouldScrollToPricing(window.location.hash)");
+  const scrollCallStart = editor.indexOf("scrollIntoView", fnStart);
+  const scrollCallEnd = editor.indexOf(");", scrollCallStart) + ");".length;
+  const scrollCall = editor.slice(scrollCallStart, scrollCallEnd);
+
+  expect(scrollCall).toBe('scrollIntoView({ block: "start" });');
+  expect(scrollCall).not.toContain("smooth");
+  expect(scrollCall).not.toContain("prefers-reduced-motion");
 });
 
 test("the sticky primary action has exactly six mutually exclusive states, never two at once", () => {
