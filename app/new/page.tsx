@@ -375,20 +375,6 @@ function EstimateView({
                   Estimate saved
                 </p>
               )}
-              {/* Pricing lives directly below, on this same page -- no
-                  navigation. Once persisted pricing is complete, this jump
-                  link would only duplicate the sticky Continue to Send
-                  action below, so it stops rendering rather than competing
-                  with it. */}
-              {pricingReady && !pricingComplete && (
-                <button
-                  type="button"
-                  onClick={scrollToPricing}
-                  className="mt-4 flex w-full items-center justify-center rounded-xl bg-zinc-900 py-4 text-base font-bold text-white transition-colors hover:bg-zinc-800 min-h-[56px]"
-                >
-                  Add Pricing
-                </button>
-              )}
               {saved && savedEstimateId && !generating && !error && pricingLoadState === "loading" && (
                 <p className="mt-4 text-sm text-zinc-500">Loading pricing...</p>
               )}
