@@ -1,28 +1,26 @@
 # TradePulse handoff
 
-Updated: 2026-09-18 23:00 PT.
+Updated: 2026-09-18 23:20 PT.
 
-## Current production and local state (2026-09-18 23:00 PT)
+## Current production and local state (2026-09-18 23:20 PT)
 
-**Production/`origin/main` is `c36bd17720b72a5267e9c59843d6953c81720f5e`**, deployed as
-`dpl_GxRiXpXzm6THAYXAMDWnVAU84sVy` and production phone-verified (see "c36bd17 hotfix" below).
+**Production/`origin/main` is `f0fac3e082b5309e18b5c91e27a83591d3dab4fa`**, deployed as
+`dpl_3CEFPq9BUmY5W7S7jUrLYUJw5Xmy` and production phone-verified (see "Single sticky primary action on the
+draft detail page" below).
 
 Deployment history, newest first:
 
 | Deployment | Commit | What it shipped |
 | --- | --- | --- |
-| `dpl_GxRiXpXzm6THAYXAMDWnVAU84sVy` (current) | `c36bd17` | Failure A and B hotfix |
-| `dpl_27F41RjL3LPohh22zDnVHXPPnS22` (rollback reference) | `607fc25` | `b7ff124` + `d71ecee` sticky Save Pricing + `607fc25` HANDOFF |
+| `dpl_3CEFPq9BUmY5W7S7jUrLYUJw5Xmy` (current) | `f0fac3e` | `9953a6a` single draft CTA + `a215db8` refresh after first Copy Link, plus their HANDOFF commits |
+| `dpl_GxRiXpXzm6THAYXAMDWnVAU84sVy` (rollback reference) | `c36bd17` | Failure A and B hotfix |
+| `dpl_27F41RjL3LPohh22zDnVHXPPnS22` | `607fc25` | `b7ff124` + `d71ecee` sticky Save Pricing + `607fc25` HANDOFF |
 | `dpl_6tQCKUP9L4RovihAZzg9VunYfP86` | `3d05370` | Phase 2 Slice 4 |
 | `dpl_2smDAv85tPTgeYdDkdsziqc5pM2j` | `beca4999` | earlier Phase 2 state |
 
-**Next change, in commit order on top of `c36bd17`** (see the section below):
-1. Implementation commit `9953a6a6c758262972a98997275a50a114a719bb` exists (single sticky primary action on the
-   contractor_pricing draft detail page); production verification pending.
-2. `038f54e229df831b693d8c6ac578f6ddc7915667`: HANDOFF only.
-3. Implementation commit `a215db8d7f57b6f53aca7adf509e9bf40e671196` exists (refresh the detail page after a
-   first Copy Link delivery); production verification pending.
-4. The HANDOFF commit recording item 3.
+**Next change:** implementation commit `11245ac7ab4576b0a14f19de00bcb30ae7905e35` exists (delivered
+contractor_pricing pricing shown locked on `/estimates/[id]`, see "Delivered pricing shown locked" below);
+production verification pending. The HANDOFF commit recording it sits on top of it.
 
 **Required focused regression set for any shared-editor or `/new` change:** include
 `tests/smoke/generation-contractor-pricing.spec.ts` alongside `contractor-pricing-form.spec.ts`,
@@ -265,10 +263,76 @@ Future hard stops should be worded: "Do not implement. Return findings only."
   Slice 4; fix separately with a tiny isolated commit.
 - 14 June/July orphan Storage objects remain a separate follow-up.
 
-## Single sticky primary action on the draft detail page (implementation commit exists; production verification pending)
+## Delivered pricing shown locked on /estimates/[id] (implementation commit exists; production verification pending)
 
-Implementation commit `9953a6a6c758262972a98997275a50a114a719bb` exists (parent `c36bd17`); production
+Implementation commit `11245ac7ab4576b0a14f19de00bcb30ae7905e35` exists (parent `f0fac3e`); production
 verification pending.
+
+**Defect (pre-existing).** The server already locks pricing once an estimate is delivered, but the detail page
+rendered a delivered contractor_pricing estimate with editable fields, Switch, Add charge, Remove, saved-item
+controls and an inline Save pricing button that the server would refuse.
+
+**Lock predicate parity (checked before implementing).** The page and the server mean the same thing:
+- Page: `app/estimates/[id]/page.tsx` picks the delivered editor with `isDelivered(estimate)` (estimate loaded
+  with `select("*")`); `isDelivered()` in `lib/estimate-delivery.ts` is `sent_at` set OR `copied_at` set OR
+  `status` in (`sent`, `done`).
+- Server: `PUT /api/estimates/[id]/pricing` refuses with 409 on the same `isDelivered()`
+  (`app/api/estimates/[id]/pricing/route.ts`), and `tpe_save_contractor_pricing` re-checks the same three
+  fields under the row lock (`supabase/migrations/20260918160315_add_taxable_to_contractor_pricing_save_fn.sql`,
+  raising `ESTIMATE_DELIVERED`).
+- Per state: `draft` unlocked unless `sent_at` or `copied_at` is set (then locked in both); `sent` locked in
+  both; `done` locked in both; `needs_review` (website quote intake) unlocked in both and never gets the
+  editor. Invoiced/paid is `payment_status`/`invoice_amount`, which neither predicate reads; invoicing only
+  happens on a `done` estimate, which is already locked.
+- The migration file, not the live database, was compared; production records that migration as applied.
+
+**Revise path: none.** No duplicate, clone, revise or version action exists anywhere in `app/`. The only way
+to price the job differently is a new estimate, matching the legacy read-only notice on the same page.
+
+**Now, when `isDelivered` is true** (`app/components/contractor-pricing-editor.tsx`, using only the existing
+prop):
+- Every pricing input (hours, rate, fixed amount, materials cost, markup, charge description and amount, tax
+  label and rate, saved-item description, qty, labour and materials) is `readOnly`, `tabIndex={-1}`, with a
+  full-contrast locked style (no focus ring, not `disabled`).
+- Not rendered: labour method choice, Switch to, Add charge, charge Remove, saved-item Remove, saved-item
+  suggestions, and the inline Save pricing button with its status line. The charges section is omitted when
+  there are none.
+- Totals and the existing missing-items guidance stay. The save row is replaced by: "Pricing is locked because
+  this estimate has been sent. Create a new estimate to change pricing."
+- The readiness publisher returns early, so the delivered editor never dispatches `PRICING_CHANGE_EVENT`.
+  Resend and Mark Job Done render from `localStatus === "sent"` and never read that signal anyway.
+- Undelivered drafts, `/new`, Resend, Mark Job Done and the server lock are unchanged.
+
+**Tests.** `tests/smoke/contractor-pricing-delivery-lock.spec.ts` now server-renders the real editor with
+`react-dom/server` and a stub app router: no DOM, network or database. Playwright's runner compiles JSX in
+imported `.tsx` files into its own component-testing objects, so the spec converts those back into the React
+elements they describe; React still calls the components and runs their hooks. It proves the delivered
+generic and saved-item editors have only read-only inputs with their values, no buttons at all, totals and the
+locked notice; the draft editor is unchanged; the publisher guard; and page, route and SQL predicate parity for
+every status and field combination.
+
+**Verification for `11245ac`:** 11 specs in `playwright.unit.config.ts` -- 320 passed, 0 skipped, 1 failed (the
+known `unit-suite-completeness` guard, same three specs); `generation-contractor-pricing.spec.ts` alone 29/29.
+`npx tsc --noEmit` clean. `eslint` on the 2 changed files clean. `git diff --check` clean. `npm run build` not
+run yet; it belongs in the push gate.
+
+**Phone verification needed after deploy:** open a sent estimate (values visible and not editable, no Save,
+Add charge or Remove, locked notice shown, Resend and Mark Job Done unchanged); open a draft (fully editable,
+one sticky primary action as before); Copy Link a complete draft (lands on the locked view).
+
+## Single sticky primary action on the draft detail page (shipped in `f0fac3e`, production-verified)
+
+`9953a6a6c758262972a98997275a50a114a719bb` (parent `c36bd17`) and its follow-up `a215db8` shipped in
+`f0fac3e082b5309e18b5c91e27a83591d3dab4fa` as `dpl_3CEFPq9BUmY5W7S7jUrLYUJw5Xmy`.
+
+**Production phone verification passed:** one sticky primary action on the editable draft detail page; an
+unsaved edit changes Send Estimate to Save Pricing; a successful re-save restores Send Estimate; Copy Link
+first delivery refreshes into the delivered state; the delivered state shows Resend Estimate; no overlapping
+sticky action bars.
+
+**Cleanup verified:** the disposable sent estimate used for that smoke was deleted through the app, and
+read-only checks returned 0 rows in `tpe_estimates`, `tpe_estimate_items`, `tpe_estimate_line_items` and
+`tpe_payment_reminders` for it.
 
 **Problem.** An undelivered contractor_pricing draft on `/estimates/[id]` showed two orange primary actions
 at once: the editor's inline Save pricing and `EstimateActions`' sticky Send Estimate.
@@ -318,9 +382,8 @@ persisted rows (`app/share/[id]/page.tsx`, `loadContractorPricingRows` + `contra
 customer-facing output is always the persisted saved pricing, never the unsaved draft. The only draft figures
 are the editor's own on-page totals, shown to the contractor.
 
-**First delivery re-reads the page (implementation commit `a215db8`; production verification pending).**
-Implementation commit `a215db8d7f57b6f53aca7adf509e9bf40e671196` exists (parent `038f54e`); production
-verification pending.
+**First delivery re-reads the page (`a215db8`, shipped in `f0fac3e`, production-verified).**
+Commit `a215db8d7f57b6f53aca7adf509e9bf40e671196` (parent `038f54e`).
 - Residual it fixes (found after `9953a6a`): after Copy Link first delivered a draft, `EstimateActions` set its
   local status to `sent` and showed Resend, but `page.tsx` was not re-read. `ContractorPricingDraftEditor`
   stayed mounted as an editable draft, and its Save Pricing bar could sit behind the Resend bar. The server
@@ -349,12 +412,10 @@ verification pending.
   `send-estimate-sheet.tsx`, all present before this change. `git diff --check` clean. `npm run build` not run
   yet; it belongs in the push gate.
 
-**Pre-existing, not changed: a normal load of a sent contractor_pricing estimate shows editable pricing.**
-`page.tsx` renders the plain `ContractorPricingEditor` with `isDelivered` for a delivered estimate. The editor
-uses `isDelivered` only for its preview figures and guidance: its inputs stay editable and its inline "Save
-pricing" button still renders, and the server refuses the save ("This estimate has already gone to the
-customer and cannot be repriced"). After `a215db8`, a first delivery lands on exactly this same view. A
-read-only delivered pricing display is a separate follow-up.
+**Found here, fixed later: a normal load of a sent contractor_pricing estimate showed editable pricing.**
+The editor used `isDelivered` only for its preview figures and guidance, so its inputs stayed editable and its
+inline "Save pricing" still rendered while the server refused the save. Fixed by `11245ac` (see "Delivered
+pricing shown locked" above).
 
 **Tests (safe, unit config only).** `estimate-actions-send-state-sync.spec.ts` drives the whole draft
 lifecycle through the real editor and `EstimateActions` functions with a real `EventTarget`: one primary
@@ -372,12 +433,7 @@ wiring and layout are pinned from source.
 changed files: 1 error, the pre-existing `<a>` to `/estimates` at `app/estimates/[id]/page.tsx:201`
 (present at `c36bd17`). `git diff --check` clean. `npm run build` not run yet; it belongs in the push gate.
 
-**Phone verification needed after deploy:** reopen a complete draft (Send only); edit (Save Pricing only, no
-Send); Save complete (Send returns); save incomplete (Save Pricing); a failed save (Save Pricing, feedback in
-view); Copy Link on a complete draft (confirmation stays visible, the page switches to the delivered view with
-Resend and no Save Pricing bar); SMS or email to Greg's own phone or email only, if tested at all; delivered
-estimate still shows inline Save and Resend; `/new` Add Pricing -> Save Pricing -> Continue to Send
-unchanged.
+**Phone verification:** passed in production on `f0fac3e`; see the summary at the top of this section.
 
 ## c36bd17 hotfix: Failure A and Failure B (shipped, production-verified)
 
