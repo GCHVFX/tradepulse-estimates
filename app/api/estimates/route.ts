@@ -3,7 +3,13 @@ import { createApiClient, supabaseAdmin } from "@/lib/supabase-server";
 import { buildStructuredItemsSyncPlan } from "@/lib/estimate-item-migration";
 import { deleteOwnedEstimate } from "@/lib/estimate-deletion";
 import { classifyEstimate } from "@/lib/estimate-classification";
-import { isDelivered, wouldNewlyDeliver, wouldNewlyUndeliver, type EstimateDeliveryPatch } from "@/lib/estimate-delivery";
+import {
+  isDelivered,
+  violatesDeliveryStatusInvariant,
+  wouldNewlyDeliver,
+  wouldNewlyUndeliver,
+  type EstimateDeliveryPatch,
+} from "@/lib/estimate-delivery";
 import { contractorPricingCompleteness } from "@/lib/estimate-pricing-server";
 
 /**
@@ -223,6 +229,24 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         }
       }
     }
+  }
+
+  // Every estimate, every class: the resulting row must never carry a
+  // delivery marker (sent_at or copied_at) with a status other than "sent" or
+  // "done". Checked on the existing row merged with this request, before
+  // anything below writes. Copy link (copied_at + status "sent"), a re-copy
+  // of a sent or done estimate, Mark Job Done (status "done") and the
+  // website-quote conversion (status "draft", no marker) all satisfy it.
+  const resultingDeliveryPatch: EstimateDeliveryPatch = {};
+  if ("status" in updateFields) resultingDeliveryPatch.status = updateFields.status as string;
+  if ("copied_at" in updateFields) resultingDeliveryPatch.copied_at = updateFields.copied_at as string | null;
+  if (violatesDeliveryStatusInvariant(existing, resultingDeliveryPatch)) {
+    return applyTo(
+      NextResponse.json(
+        { error: "A sent or copied estimate must stay marked as sent or done" },
+        { status: 409 }
+      )
+    );
   }
 
   // A summary update on a structured estimate must keep tpe_estimate_items in

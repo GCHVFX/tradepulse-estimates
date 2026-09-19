@@ -14,13 +14,18 @@ export interface EstimateDeliveryState {
   status: string | null | undefined;
 }
 
+/** A delivery marker is set: SMS/email wrote sent_at, or Copy link wrote copied_at. */
+export function hasDeliveryMarker(estimate: EstimateDeliveryState): boolean {
+  return (estimate.sent_at ?? null) !== null || (estimate.copied_at ?? null) !== null;
+}
+
+/** A status that means the estimate has been delivered. */
+export function isDeliveredStatus(status: string | null | undefined): boolean {
+  return status === "sent" || status === "done";
+}
+
 export function isDelivered(estimate: EstimateDeliveryState): boolean {
-  return (
-    (estimate.sent_at ?? null) !== null ||
-    (estimate.copied_at ?? null) !== null ||
-    estimate.status === "sent" ||
-    estimate.status === "done"
-  );
+  return hasDeliveryMarker(estimate) || isDeliveredStatus(estimate.status);
 }
 
 /** A patch to the two delivery-relevant fields a caller can actually write. */
@@ -45,6 +50,23 @@ function applyDeliveryPatch(
     copied_at: "copied_at" in patch ? patch.copied_at : existing.copied_at,
     status: "status" in patch ? patch.status : existing.status,
   };
+}
+
+/**
+ * Whether applying `patch` would leave a delivery marker (sent_at or
+ * copied_at) on an estimate whose status is not "sent" or "done". Every
+ * delivery path the app uses writes its marker and status "sent" in one
+ * update, so this only catches a request that would split them: copied_at
+ * written without status "sent", or status moved to "draft" (or anything
+ * else) while a marker is set. Checked against the merged resulting state,
+ * so a partial PATCH cannot get round it.
+ */
+export function violatesDeliveryStatusInvariant(
+  existing: EstimateDeliveryState,
+  patch: EstimateDeliveryPatch
+): boolean {
+  const next = applyDeliveryPatch(existing, patch);
+  return hasDeliveryMarker(next) && !isDeliveredStatus(next.status);
 }
 
 /**

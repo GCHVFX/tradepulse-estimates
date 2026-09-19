@@ -21,7 +21,7 @@ import {
 } from "../../lib/contractor-pricing-form";
 import { parseContractorPricingRequest, toCanonicalRows } from "../../lib/contractor-pricing-request";
 import { calculateContractorPricing } from "../../lib/contractor-pricing";
-import { isDelivered, wouldNewlyDeliver, wouldNewlyUndeliver } from "../../lib/estimate-delivery";
+import { isDelivered, violatesDeliveryStatusInvariant, wouldNewlyDeliver, wouldNewlyUndeliver } from "../../lib/estimate-delivery";
 
 /**
  * Phase 1 slice 5C: the isZeroTotal/estimate-total-change staleness
@@ -618,7 +618,7 @@ test("after a first delivery the draft Save Pricing bar cannot coexist with Rese
 // (the app's own UI never does). The page then shows the pricing locked, so
 // EstimateActions must not offer the draft Send Estimate beside it.
 
-test("PATCH /api/estimates can construct draft + delivery marker: copied_at alone as a first delivery, or status moved back to draft while a marker keeps it delivered", () => {
+test("the two draft + delivery marker constructions PATCH /api/estimates used to accept are now refused by its resulting-state invariant", () => {
   const draft = { status: "draft", sent_at: null, copied_at: null };
   // (a) copied_at alone: a first delivery (so it passes the completeness gate
   // when complete), and the route's single UPDATE writes only what was sent.
@@ -630,10 +630,11 @@ test("PATCH /api/estimates can construct draft + delivery marker: copied_at alon
   expect(wouldNewlyUndeliver(sent, { status: "draft" })).toBe(false);
   expect(isDelivered({ ...sent, status: "draft" })).toBe(true);
 
+  // Both are now refused before the UPDATE (see contractor-pricing-delivery-lock.spec.ts).
+  expect(violatesDeliveryStatusInvariant(draft, { copied_at: "2026-09-18T00:00:00Z" })).toBe(true);
+  expect(violatesDeliveryStatusInvariant(sent, { status: "draft" })).toBe(true);
   const route = code("app/api/estimates/route.ts");
-  expect(route).toContain('if ("status" in body && typeof body.status === "string") {');
-  expect(route).toContain('if ("copied_at" in body) {');
-  expect(route).toContain(".update(updateFields)");
+  expect(route).toContain("if (violatesDeliveryStatusInvariant(existing, resultingDeliveryPatch)) {");
 });
 
 test("the app's own delivery paths never create it: each writes its marker and status: \"sent\" in the same single update", () => {

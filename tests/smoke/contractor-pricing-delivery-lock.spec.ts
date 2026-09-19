@@ -1,7 +1,13 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "fs";
 import path from "path";
-import { isDelivered, isDeliveredContractorPricing, wouldNewlyDeliver, wouldNewlyUndeliver } from "../../lib/estimate-delivery";
+import {
+  isDelivered,
+  isDeliveredContractorPricing,
+  violatesDeliveryStatusInvariant,
+  wouldNewlyDeliver,
+  wouldNewlyUndeliver,
+} from "../../lib/estimate-delivery";
 import { Fragment, createElement, forwardRef, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
@@ -609,4 +615,90 @@ test("the page and the server lock on the same predicate: isDelivered in page.ts
       }
     }
   }
+});
+
+// ── PATCH /api/estimates: a delivery marker must come with status sent/done ──
+//
+// The route merges the existing row with the request and refuses (409) any
+// resulting state with sent_at or copied_at set and a status other than
+// "sent" or "done". The decision is violatesDeliveryStatusInvariant(),
+// exercised here for every case; its placement in the route is pinned below.
+
+const AT = "2026-09-18T00:00:00Z";
+const draftRow = { status: "draft", sent_at: null, copied_at: null };
+const copiedSentRow = { status: "sent", sent_at: null, copied_at: AT };
+const smsSentRow = { status: "sent", sent_at: AT, copied_at: null };
+
+test("resulting-state invariant: the ten request shapes", () => {
+  // 1. draft + copied_at only -> rejected.
+  expect(violatesDeliveryStatusInvariant(draftRow, { copied_at: AT })).toBe(true);
+  // 2. draft + copied_at + status "sent" -> accepted.
+  expect(violatesDeliveryStatusInvariant(draftRow, { copied_at: AT, status: "sent" })).toBe(false);
+  // 3. marker already present + status "draft" -> rejected (copied_at and sent_at).
+  expect(violatesDeliveryStatusInvariant(copiedSentRow, { status: "draft" })).toBe(true);
+  expect(violatesDeliveryStatusInvariant(smsSentRow, { status: "draft" })).toBe(true);
+  // 4. sent estimate remaining sent -> accepted.
+  expect(violatesDeliveryStatusInvariant(smsSentRow, { status: "sent" })).toBe(false);
+  expect(violatesDeliveryStatusInvariant(copiedSentRow, {})).toBe(false);
+  // 5. ordinary unrelated draft PATCH (no delivery field in the request) -> accepted.
+  expect(violatesDeliveryStatusInvariant(draftRow, {})).toBe(false);
+  // 6. current Copy Link shapes -> accepted: first delivery, and a re-copy of
+  //    a sent or done estimate (copied_at alone).
+  expect(violatesDeliveryStatusInvariant(draftRow, { copied_at: AT, status: "sent" })).toBe(false);
+  expect(violatesDeliveryStatusInvariant(smsSentRow, { copied_at: AT })).toBe(false);
+  expect(violatesDeliveryStatusInvariant({ status: "done", sent_at: AT, copied_at: null }, { copied_at: AT })).toBe(false);
+  // 7. sent_at cannot be PATCHed (the route has no sent_at field), so its cases
+  //    are an existing sent_at with a status change: covered by 3, 4 and 9.
+  expect(violatesDeliveryStatusInvariant({ status: "sent", sent_at: AT, copied_at: null }, { status: "needs_review" })).toBe(true);
+  // 8. website-quote conversion: status "draft" with no marker -> accepted.
+  expect(violatesDeliveryStatusInvariant({ status: "needs_review", sent_at: null, copied_at: null }, { status: "draft" })).toBe(false);
+  // 9. Mark Job Done: status "done" on an estimate with sent_at or copied_at -> accepted.
+  expect(violatesDeliveryStatusInvariant(smsSentRow, { status: "done" })).toBe(false);
+  expect(violatesDeliveryStatusInvariant(copiedSentRow, { status: "done" })).toBe(false);
+  // 10. marker present + status "needs_review" -> rejected.
+  expect(violatesDeliveryStatusInvariant(copiedSentRow, { status: "needs_review" })).toBe(true);
+  // Any other non-sent/done status too.
+  expect(violatesDeliveryStatusInvariant(smsSentRow, { status: "archived" })).toBe(true);
+  // Clearing copied_at leaves no marker, so the invariant has nothing to say
+  // (contractor_pricing already refuses that clear with its own 400).
+  expect(violatesDeliveryStatusInvariant({ status: "draft", sent_at: null, copied_at: AT }, { copied_at: null })).toBe(false);
+});
+
+test("isDelivered is unchanged by the split into hasDeliveryMarker and isDeliveredStatus", () => {
+  for (const status of ["draft", "sent", "done", "needs_review", null]) {
+    for (const sent_at of [null, AT]) {
+      for (const copied_at of [null, AT]) {
+        const expected = sent_at !== null || copied_at !== null || status === "sent" || status === "done";
+        expect(isDelivered({ status, sent_at, copied_at })).toBe(expected);
+      }
+    }
+  }
+});
+
+test("PATCH /api/estimates enforces the invariant for every estimate class, on the merged request, before anything is written", () => {
+  const route = code("app/api/estimates/route.ts");
+  const patchStart = route.indexOf("export async function PATCH(");
+  const deleteStart = route.indexOf("export async function DELETE(");
+  const patch = route.slice(patchStart, deleteStart);
+
+  const check = patch.indexOf("if (violatesDeliveryStatusInvariant(existing, resultingDeliveryPatch)) {");
+  expect(check, "the check exists in PATCH").toBeGreaterThan(-1);
+  // Built from the request's own status and copied_at, merged onto `existing` by the helper.
+  expect(patch).toContain('if ("status" in updateFields) resultingDeliveryPatch.status = updateFields.status as string;');
+  expect(patch).toContain('if ("copied_at" in updateFields) resultingDeliveryPatch.copied_at = updateFields.copied_at as string | null;');
+  // After the request fields are collected and after the contractor_pricing
+  // gates (whose messages keep priority), outside that class-only block.
+  expect(check).toBeGreaterThan(patch.indexOf('if ("copied_at" in body) {'));
+  const contractorBlockEnd = patch.indexOf("  // Every estimate, every class:");
+  expect(contractorBlockEnd).toBeGreaterThan(patch.indexOf('if (pricingClass === "contractor_pricing") {'));
+  expect(check).toBeGreaterThan(contractorBlockEnd);
+  // Before every write in PATCH.
+  for (const write of ['.from("tpe_estimate_items")\n        .delete()', ".from(\"tpe_estimate_items\").insert(", ".update(updateFields)"]) {
+    const index = patch.indexOf(write);
+    expect(index, write).toBeGreaterThan(check);
+  }
+  // Refused with the route's existing 409 style.
+  const refusal = patch.slice(check, patch.indexOf("\n  }\n", check));
+  expect(refusal).toContain("{ status: 409 }");
+  expect(refusal).toContain("return applyTo(");
 });
