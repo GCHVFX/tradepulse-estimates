@@ -70,6 +70,11 @@ export interface ContractorPricingEditorHandle {
 
 const INPUT =
   "w-full rounded-lg border border-zinc-200 px-3 py-2.5 text-base text-zinc-900 placeholder-zinc-400 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[48px]";
+// A delivered estimate's pricing, shown as the record it now is: full-contrast
+// values on a quiet background, no focus ring, and not tabbable, so nothing
+// suggests a value can still change.
+const INPUT_LOCKED =
+  "w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-base text-zinc-900 focus:outline-none cursor-default min-h-[48px]";
 const LABEL = "text-sm font-medium text-zinc-600";
 
 export interface ContractorPricingEditorProps {
@@ -80,7 +85,9 @@ export interface ContractorPricingEditorProps {
   initialTax: EstimateTaxSnapshot;
   initialPricing: ContractorPricing;
   defaults: BusinessPricingDefaults;
-  /** Once delivered, displayed pricing must stay the persisted figures. */
+  /** Once delivered, displayed pricing must stay the persisted figures, and
+   * nothing that changes pricing is editable or rendered: the server refuses
+   * every pricing write for a delivered estimate. */
   isDelivered: boolean;
   /** The estimate's own deposit snapshot, the same values Save resolves against. */
   depositPercent: number | null;
@@ -250,6 +257,14 @@ export const ContractorPricingEditor = forwardRef<ContractorPricingEditorHandle,
   // by every guidance display below, never recomputed a second way.
   const guidance = resolveContractorPricingGuidance({ isDelivered, preview, persistedPricing: pricing });
 
+  // Delivered: the server refuses every pricing write (the same isDelivered
+  // predicate, in PUT /api/estimates/[id]/pricing and in
+  // tpe_save_contractor_pricing), so every field is read-only and no control
+  // that changes pricing is rendered.
+  const fieldProps = isDelivered
+    ? { readOnly: true, tabIndex: -1, className: INPUT_LOCKED }
+    : { className: INPUT };
+
   const money = (cents: number) => formatCentsAsCurrency(cents, currency, true);
 
   async function save() {
@@ -337,10 +352,13 @@ export const ContractorPricingEditor = forwardRef<ContractorPricingEditorHandle,
   // mount: EstimateActions is already seeded with the same server value.
   const publishedSendReadyRef = useRef(sendReady);
   useEffect(() => {
+    // A delivered estimate has no draft readiness to publish, and must never
+    // flip EstimateActions' Send gating.
+    if (isDelivered) return;
     if (publishedSendReadyRef.current === sendReady) return;
     publishedSendReadyRef.current = sendReady;
     window.dispatchEvent(new CustomEvent(PRICING_CHANGE_EVENT, { detail: { complete: sendReady } }));
-  }, [sendReady]);
+  }, [sendReady, isDelivered]);
 
   // Defensive only (specs/contractor-owned-pricing.md's "defensive reload
   // rule"): persisted 'ea' rows that could not be reliably reconstructed
@@ -366,7 +384,7 @@ export const ContractorPricingEditor = forwardRef<ContractorPricingEditorHandle,
       {/* Saved-item suggestions (Phase 2 slice 4). Independent of mode: shown
           whenever there are candidates left, whether or not the contractor
           has already accepted one -- accepting removes it from this list. */}
-      {suggestions.length > 0 && (
+      {!isDelivered && suggestions.length > 0 && (
         <section className="flex flex-col gap-3">
           <h3 className="text-base font-bold text-zinc-900">Saved items</h3>
           <div className="flex flex-col gap-2">
@@ -427,7 +445,7 @@ export const ContractorPricingEditor = forwardRef<ContractorPricingEditorHandle,
                 <span className={LABEL}>Description</span>
                 <input
                   type="text"
-                  className={INPUT}
+                  {...fieldProps}
                   value={item.description}
                   onChange={(event) =>
                     setForm(updateConfirmedItem(form, item.id, "description", event.target.value))
@@ -440,7 +458,7 @@ export const ContractorPricingEditor = forwardRef<ContractorPricingEditorHandle,
                   <input
                     type="text"
                     inputMode="decimal"
-                    className={INPUT}
+                    {...fieldProps}
                     value={item.quantity}
                     onChange={(event) =>
                       setForm(updateConfirmedItem(form, item.id, "quantity", event.target.value))
@@ -452,7 +470,7 @@ export const ContractorPricingEditor = forwardRef<ContractorPricingEditorHandle,
                   <input
                     type="text"
                     inputMode="decimal"
-                    className={INPUT}
+                    {...fieldProps}
                     value={item.labourUnitPrice}
                     onChange={(event) =>
                       setForm(updateConfirmedItem(form, item.id, "labourUnitPrice", event.target.value))
@@ -464,7 +482,7 @@ export const ContractorPricingEditor = forwardRef<ContractorPricingEditorHandle,
                   <input
                     type="text"
                     inputMode="decimal"
-                    className={INPUT}
+                    {...fieldProps}
                     value={item.materialUnitPrice}
                     onChange={(event) =>
                       setForm(updateConfirmedItem(form, item.id, "materialUnitPrice", event.target.value))
@@ -472,14 +490,16 @@ export const ContractorPricingEditor = forwardRef<ContractorPricingEditorHandle,
                   />
                 </label>
               </div>
-              <button
-                type="button"
-                aria-label={`Remove ${item.description || "line item"}`}
-                onClick={() => setForm(removeConfirmedItem(form, item.id))}
-                className="self-start text-sm font-medium text-red-500 hover:text-red-600 min-h-[44px]"
-              >
-                Remove
-              </button>
+              {!isDelivered && (
+                <button
+                  type="button"
+                  aria-label={`Remove ${item.description || "line item"}`}
+                  onClick={() => setForm(removeConfirmedItem(form, item.id))}
+                  className="self-start text-sm font-medium text-red-500 hover:text-red-600 min-h-[44px]"
+                >
+                  Remove
+                </button>
+              )}
             </div>
           ))}
         </section>
@@ -490,7 +510,7 @@ export const ContractorPricingEditor = forwardRef<ContractorPricingEditorHandle,
         <h3 className="text-base font-bold text-zinc-900">Labour</h3>
 
         {form.labourMethod === null ? (
-          <div className="grid grid-cols-2 gap-3">
+          isDelivered ? null : <div className="grid grid-cols-2 gap-3">
             {(["hourly", "fixed"] as const).map((method) => (
               <button
                 key={method}
@@ -508,15 +528,17 @@ export const ContractorPricingEditor = forwardRef<ContractorPricingEditorHandle,
               <span className="text-sm font-semibold text-zinc-900">
                 {form.labourMethod === "hourly" ? "Hourly" : "Fixed price"}
               </span>
-              <button
-                type="button"
-                onClick={() =>
-                  setForm(chooseLabourMethod(form, form.labourMethod === "hourly" ? "fixed" : "hourly", defaults))
-                }
-                className="text-sm font-medium text-amber-600 hover:text-amber-500 min-h-[44px]"
-              >
-                Switch to {form.labourMethod === "hourly" ? "fixed price" : "hourly"}
-              </button>
+              {!isDelivered && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setForm(chooseLabourMethod(form, form.labourMethod === "hourly" ? "fixed" : "hourly", defaults))
+                  }
+                  className="text-sm font-medium text-amber-600 hover:text-amber-500 min-h-[44px]"
+                >
+                  Switch to {form.labourMethod === "hourly" ? "fixed price" : "hourly"}
+                </button>
+              )}
             </div>
 
             {form.labourMethod === "hourly" ? (
@@ -526,7 +548,7 @@ export const ContractorPricingEditor = forwardRef<ContractorPricingEditorHandle,
                   <input
                     type="text"
                     inputMode="decimal"
-                    className={INPUT}
+                    {...fieldProps}
                     placeholder="8"
                     value={form.hours}
                     onChange={(event) => setForm({ ...form, hours: event.target.value })}
@@ -537,7 +559,7 @@ export const ContractorPricingEditor = forwardRef<ContractorPricingEditorHandle,
                   <input
                     type="text"
                     inputMode="decimal"
-                    className={INPUT}
+                    {...fieldProps}
                     placeholder="95"
                     value={form.hourlyRate}
                     onChange={(event) => setForm({ ...form, hourlyRate: event.target.value })}
@@ -550,7 +572,7 @@ export const ContractorPricingEditor = forwardRef<ContractorPricingEditorHandle,
                 <input
                   type="text"
                   inputMode="decimal"
-                  className={INPUT}
+                  {...fieldProps}
                   placeholder="760"
                   value={form.fixedAmount}
                   onChange={(event) => setForm({ ...form, fixedAmount: event.target.value })}
@@ -570,7 +592,7 @@ export const ContractorPricingEditor = forwardRef<ContractorPricingEditorHandle,
             <input
               type="text"
               inputMode="decimal"
-              className={INPUT}
+              {...fieldProps}
               placeholder="1,150"
               value={form.materialsCost}
               onChange={(event) => setForm({ ...form, materialsCost: event.target.value })}
@@ -581,7 +603,7 @@ export const ContractorPricingEditor = forwardRef<ContractorPricingEditorHandle,
             <input
               type="text"
               inputMode="decimal"
-              className={INPUT}
+              {...fieldProps}
               placeholder="20"
               value={form.markupPercent}
               onChange={(event) => setForm({ ...form, markupPercent: event.target.value })}
@@ -596,6 +618,7 @@ export const ContractorPricingEditor = forwardRef<ContractorPricingEditorHandle,
       )}
 
       {/* Optional charges */}
+      {(!isDelivered || form.charges.length > 0) && (
       <section className="flex flex-col gap-3">
         {form.charges.length > 0 && <h3 className="text-base font-bold text-zinc-900">Other charges</h3>}
         {form.charges.map((charge) => (
@@ -604,7 +627,7 @@ export const ContractorPricingEditor = forwardRef<ContractorPricingEditorHandle,
               <span className={LABEL}>Description</span>
               <input
                 type="text"
-                className={INPUT}
+                {...fieldProps}
                 placeholder="Permit"
                 value={charge.description}
                 onChange={(event) => setForm(updateCharge(form, charge.id, "description", event.target.value))}
@@ -615,30 +638,35 @@ export const ContractorPricingEditor = forwardRef<ContractorPricingEditorHandle,
               <input
                 type="text"
                 inputMode="decimal"
-                className={INPUT}
+                {...fieldProps}
                 placeholder="150"
                 value={charge.amount}
                 onChange={(event) => setForm(updateCharge(form, charge.id, "amount", event.target.value))}
               />
             </label>
-            <button
-              type="button"
-              aria-label={`Remove ${charge.description || "charge"}`}
-              onClick={() => setForm(removeCharge(form, charge.id))}
-              className="min-h-[48px] px-2 text-red-400 hover:text-red-600"
-            >
-              Remove
-            </button>
+            {!isDelivered && (
+              <button
+                type="button"
+                aria-label={`Remove ${charge.description || "charge"}`}
+                onClick={() => setForm(removeCharge(form, charge.id))}
+                className="min-h-[48px] px-2 text-red-400 hover:text-red-600"
+              >
+                Remove
+              </button>
+            )}
           </div>
         ))}
-        <button
-          type="button"
-          onClick={() => setForm(addCharge(form))}
-          className="self-start text-sm font-medium text-amber-600 hover:text-amber-500 min-h-[44px]"
-        >
-          Add charge
-        </button>
+        {!isDelivered && (
+          <button
+            type="button"
+            onClick={() => setForm(addCharge(form))}
+            className="self-start text-sm font-medium text-amber-600 hover:text-amber-500 min-h-[44px]"
+          >
+            Add charge
+          </button>
+        )}
       </section>
+      )}
 
       {/* Tax */}
       <section className="flex flex-col gap-3">
@@ -648,7 +676,7 @@ export const ContractorPricingEditor = forwardRef<ContractorPricingEditorHandle,
             <span className={LABEL}>Label</span>
             <input
               type="text"
-              className={INPUT}
+              {...fieldProps}
               placeholder="GST"
               value={form.taxLabel}
               onChange={(event) => setForm(editTax(form, "taxLabel", event.target.value))}
@@ -659,7 +687,7 @@ export const ContractorPricingEditor = forwardRef<ContractorPricingEditorHandle,
             <input
               type="text"
               inputMode="decimal"
-              className={INPUT}
+              {...fieldProps}
               placeholder="5"
               value={form.taxRate}
               onChange={(event) => setForm(editTax(form, "taxRate", event.target.value))}
@@ -717,6 +745,12 @@ export const ContractorPricingEditor = forwardRef<ContractorPricingEditorHandle,
           layout below the button removes that pressure entirely, and puts
           the message where it reads best next to a full-width mobile
           button: underneath it, not beside it. */}
+      {isDelivered ? (
+        <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3">
+          <p className="text-sm font-medium text-zinc-900">Pricing is locked because this estimate has been sent.</p>
+          <p className="mt-1 text-sm text-zinc-700">Create a new estimate to change pricing.</p>
+        </div>
+      ) : (
       <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
         {!hideInlineSaveButton && (
           <button
@@ -733,6 +767,7 @@ export const ContractorPricingEditor = forwardRef<ContractorPricingEditorHandle,
           {status === "error" && <span className="text-red-600">{errorMessage}</span>}
         </span>
       </div>
+      )}
       </div>
     </div>
   );

@@ -2,6 +2,12 @@ import { expect, test } from "@playwright/test";
 import { readFileSync } from "fs";
 import path from "path";
 import { isDelivered, isDeliveredContractorPricing, wouldNewlyDeliver, wouldNewlyUndeliver } from "../../lib/estimate-delivery";
+import { Fragment, createElement, forwardRef, type ReactNode } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
+import { ContractorPricingEditor } from "../../app/components/contractor-pricing-editor";
+import { calculateContractorPricing } from "../../lib/contractor-pricing";
+import type { ContractorPricingRowInput } from "../../lib/contractor-pricing-form";
 
 /**
  * Phase 1 slice 5B: delivery gating and the customer-document lock
@@ -423,4 +429,184 @@ test("isDelivered's own rule is untouched: sent_at, copied_at or status in (sent
   expect(isDelivered({ sent_at: null, copied_at: "2026-09-16T00:00:00.000Z", status: "draft" })).toBe(true);
   expect(isDelivered({ sent_at: null, copied_at: null, status: "sent" })).toBe(true);
   expect(isDelivered({ sent_at: null, copied_at: null, status: "done" })).toBe(true);
+});
+
+// ── Delivered pricing is shown locked, matching the server lock ─────────────
+//
+// A real server render of ContractorPricingEditor (react-dom/server, with a
+// stub app router in context): no DOM, no network, no database. Effects do
+// not run in a server render, so this checks the markup only; the readiness
+// publisher's delivered guard is pinned from source below.
+
+// Playwright's test runner compiles JSX in imported .tsx files to its own
+// plain objects ({__pw_type: "jsx", type, props, key}; playwright/jsx-runtime),
+// meant for its component-testing mode. This turns them back into the React
+// elements they describe -- same type, props and key -- and wraps function and
+// forwardRef components so what they render is converted too, while React
+// itself still calls them (so their hooks run normally).
+type PwNode = { __pw_type: "jsx"; type: unknown; props: Record<string, unknown>; key?: string | null };
+const isPwNode = (value: unknown): value is PwNode =>
+  typeof value === "object" && value !== null && (value as { __pw_type?: unknown }).__pw_type === "jsx";
+const wrapped = new Map<unknown, unknown>();
+function realType(type: unknown): unknown {
+  if (typeof type === "object" && type !== null && (type as { __pw_jsx_fragment?: boolean }).__pw_jsx_fragment) return Fragment;
+  if (typeof type === "string") return type;
+  if (wrapped.has(type)) return wrapped.get(type);
+  let result: unknown = type;
+  if (typeof type === "function") {
+    const component = type as (props: unknown) => unknown;
+    result = (props: unknown) => realize(component(props));
+  } else if (typeof type === "object" && type !== null && typeof (type as { render?: unknown }).render === "function") {
+    const render = (type as { render: (props: unknown, ref: unknown) => unknown }).render;
+    result = forwardRef(function RealizedForwardRef(props: unknown, ref: unknown) {
+      return realize(render(props, ref)) as never;
+    });
+  }
+  wrapped.set(type, result);
+  return result;
+}
+function realize(node: unknown): ReactNode {
+  if (Array.isArray(node)) return node.map(realize) as ReactNode;
+  if (!isPwNode(node)) return node as ReactNode;
+  const props: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(node.props ?? {})) props[name] = name === "children" ? realize(value) : value;
+  if (node.key !== undefined && node.key !== null) props.key = node.key;
+  return createElement(realType(node.type) as never, props);
+}
+
+function renderEditor(delivered: boolean, rows: ContractorPricingRowInput[]): string {
+  const router = { refresh() {}, push() {}, replace() {}, back() {}, forward() {}, prefetch() {} };
+  const pricing = calculateContractorPricing(rows, { taxRatePercent: 5, depositPercent: 10, depositThresholdDollars: 50 });
+  return renderToStaticMarkup(
+    createElement(
+      AppRouterContext.Provider,
+      { value: router as never },
+      createElement(realType(ContractorPricingEditor) as typeof ContractorPricingEditor, {
+        estimateId: "00000000-0000-0000-0000-000000000000",
+        currency: "cad",
+        initialRows: rows,
+        initialTax: { label: "GST", rate: 5 },
+        initialPricing: pricing,
+        defaults: { labourRate: 95, markupPercent: 20 },
+        isDelivered: delivered,
+        depositPercent: 10,
+        depositThresholdDollars: 50,
+      })
+    )
+  );
+}
+
+const genericRows: ContractorPricingRowInput[] = [
+  { item_type: "labour", unit: "hr", quantity: 2, unit_price: 95, markup_percent: null, description: "Labour", display_order: 0, taxable: true },
+  { item_type: "material", unit: null, quantity: 1, unit_price: 100, markup_percent: 20, description: "Materials", display_order: 1, taxable: true },
+  { item_type: "other", unit: null, quantity: 1, unit_price: 150, markup_percent: null, description: "Permit", display_order: 2, taxable: true },
+];
+const savedItemRows: ContractorPricingRowInput[] = [
+  { item_type: "labour", unit: "ea", quantity: 1, unit_price: 110, markup_percent: null, description: "Kitchen faucet replacement", display_order: 0, taxable: true },
+  { item_type: "material", unit: "ea", quantity: 1, unit_price: 0, markup_percent: 0, description: "Kitchen faucet replacement", display_order: 1, taxable: true },
+];
+
+const inputsOf = (html: string) => [...html.matchAll(/<input\b[^>]*>/g)].map((m) => m[0]);
+
+test("delivered generic pricing: every field is read-only (not disabled), no Save, no Add charge, no Remove, no Switch, totals and the locked notice shown", () => {
+  const html = renderEditor(true, genericRows);
+  const inputs = inputsOf(html);
+  // Hours, rate, materials cost, markup, charge description + amount, tax label + rate.
+  expect(inputs).toHaveLength(8);
+  for (const input of inputs) {
+    expect(input).toMatch(/readOnly=""/i);
+    expect(input).toContain('tabindex="-1"');
+    expect(input).not.toContain("disabled");
+    expect(input).toContain("text-zinc-900");
+    expect(input).not.toContain("focus:ring-amber-500");
+  }
+  // The values stay visible.
+  for (const value of ['value="2"', 'value="95"', 'value="100"', 'value="20"', 'value="Permit"', 'value="150"', 'value="GST"', 'value="5"']) {
+    expect(html).toContain(value);
+  }
+  expect(html).not.toContain("Save pricing");
+  expect(html).not.toContain("Add charge");
+  expect(html).not.toContain(">Remove<");
+  expect(html).not.toContain("Switch to");
+  expect(html).not.toContain("<button");
+  // Totals remain.
+  for (const label of ["Labour", "Materials", "Other charges", "Subtotal", "Tax", "Total"]) {
+    expect(html).toContain(`>${label}</dt>`);
+  }
+  expect(html).toContain("Pricing is locked because this estimate has been sent.");
+  expect(html).toContain("Create a new estimate to change pricing.");
+});
+
+test("delivered saved-item pricing: item fields read-only, no Remove, no suggestions, no Save", () => {
+  const html = renderEditor(true, savedItemRows);
+  const inputs = inputsOf(html);
+  // Description, qty, labour, materials, tax label + rate.
+  expect(inputs).toHaveLength(6);
+  for (const input of inputs) expect(input).toMatch(/readOnly=""/i);
+  expect(html).toContain('value="Kitchen faucet replacement"');
+  expect(html).not.toContain("<button");
+  expect(html).not.toContain("Save pricing");
+  expect(html).toContain("Pricing is locked because this estimate has been sent.");
+});
+
+test("a delivered estimate with no charges renders no empty charges section", () => {
+  const html = renderEditor(true, genericRows.slice(0, 2));
+  expect(html).not.toContain("Other charges");
+  expect(html).not.toContain("Add charge");
+});
+
+test("the undelivered editor is unchanged: editable fields, Switch, Add charge, Remove and Save pricing, and no locked notice", () => {
+  const html = renderEditor(false, genericRows);
+  const inputs = inputsOf(html);
+  expect(inputs).toHaveLength(8);
+  for (const input of inputs) {
+    expect(input).not.toMatch(/readOnly/i);
+    expect(input).not.toContain("tabindex");
+    expect(input).toContain("focus:ring-amber-500");
+  }
+  expect(html).toContain("Save pricing");
+  expect(html).toContain("Add charge");
+  expect(html).toContain(">Remove</button>");
+  expect(html).toContain("Switch to fixed price");
+  expect(html).not.toContain("Pricing is locked");
+
+  const items = renderEditor(false, savedItemRows);
+  expect(items).toContain(">Remove</button>");
+  for (const input of inputsOf(items)) expect(input).not.toMatch(/readOnly/i);
+});
+
+test("delivered mode never publishes send readiness, so Resend, Mark Job Done and Send gating cannot be flipped by the editor", () => {
+  const editor = code("app/components/contractor-pricing-editor.tsx");
+  const start = editor.indexOf("const publishedSendReadyRef = useRef(sendReady);");
+  expect(start).toBeGreaterThan(-1);
+  const effect = editor.slice(start, editor.indexOf("}, [sendReady, isDelivered]);", start));
+  expect(effect).toContain("if (isDelivered) return;");
+  expect(effect.indexOf("if (isDelivered) return;")).toBeLessThan(effect.indexOf("window.dispatchEvent("));
+
+  // And the delivered actions do not read that signal anyway: Resend and
+  // Mark Job Done render from localStatus, and the bar shows for "sent".
+  const actions = code("app/components/estimate-actions.tsx");
+  expect(actions).toContain('return state.isQuoteRequest || state.isDone || state.localStatus === "sent" || !state.sendBlocked;');
+});
+
+test("the page and the server lock on the same predicate: isDelivered in page.tsx and the pricing route, and the same three fields in the save function", () => {
+  const page = code("app/estimates/[id]/page.tsx");
+  expect(page).toContain('import { isDelivered } from "@/lib/estimate-delivery";');
+  expect(page).toContain("{isDelivered(estimate) ? (");
+  const route = code("app/api/estimates/[id]/pricing/route.ts");
+  expect(route).toContain('import { isDelivered } from "@/lib/estimate-delivery";');
+  expect(route).toContain("if (isDelivered(estimate)) {");
+  const migration = code("supabase/migrations/20260918160315_add_taxable_to_contractor_pricing_save_fn.sql");
+  expect(migration).toContain("if v_estimate.sent_at is not null");
+  expect(migration).toContain("or v_estimate.copied_at is not null");
+  expect(migration).toContain("or v_estimate.status in ('sent', 'done') then");
+
+  for (const status of ["draft", "sent", "done", "needs_review"]) {
+    for (const sentAt of [null, "2026-09-18T00:00:00Z"]) {
+      for (const copiedAt of [null, "2026-09-18T00:00:00Z"]) {
+        const sqlLocks = sentAt !== null || copiedAt !== null || status === "sent" || status === "done";
+        expect(isDelivered({ status, sent_at: sentAt, copied_at: copiedAt }), `${status} ${sentAt} ${copiedAt}`).toBe(sqlLocks);
+      }
+    }
+  }
 });
