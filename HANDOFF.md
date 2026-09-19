@@ -1,8 +1,8 @@
 # TradePulse handoff
 
-Updated: 2026-09-18 22:52 PT.
+Updated: 2026-09-18 23:00 PT.
 
-## Current production and local state (2026-09-18 22:52 PT)
+## Current production and local state (2026-09-18 23:00 PT)
 
 **Production/`origin/main` is `c36bd17720b72a5267e9c59843d6953c81720f5e`**, deployed as
 `dpl_GxRiXpXzm6THAYXAMDWnVAU84sVy` and production phone-verified (see "c36bd17 hotfix" below).
@@ -16,9 +16,18 @@ Deployment history, newest first:
 | `dpl_6tQCKUP9L4RovihAZzg9VunYfP86` | `3d05370` | Phase 2 Slice 4 |
 | `dpl_2smDAv85tPTgeYdDkdsziqc5pM2j` | `beca4999` | earlier Phase 2 state |
 
-**Next change:** implementation commit `9953a6a6c758262972a98997275a50a114a719bb` exists (single sticky
-primary action on the contractor_pricing draft detail page, see below); production verification pending. The
-HANDOFF commit recording this sits on top of it.
+**Next change, in commit order on top of `c36bd17`** (see the section below):
+1. Implementation commit `9953a6a6c758262972a98997275a50a114a719bb` exists (single sticky primary action on the
+   contractor_pricing draft detail page); production verification pending.
+2. `038f54e229df831b693d8c6ac578f6ddc7915667`: HANDOFF only.
+3. Implementation commit `a215db8d7f57b6f53aca7adf509e9bf40e671196` exists (refresh the detail page after a
+   first Copy Link delivery); production verification pending.
+4. The HANDOFF commit recording item 3.
+
+**Required focused regression set for any shared-editor or `/new` change:** include
+`tests/smoke/generation-contractor-pricing.spec.ts` alongside `contractor-pricing-form.spec.ts`,
+`new-page-inline-pricing.spec.ts` and `estimate-actions-send-state-sync.spec.ts`. `c36bd17` broke two of its
+source anchors, and that went unnoticed because the spec was left out of that commit's focused run.
 
 ## Phase 2 shipped state (history)
 
@@ -309,10 +318,43 @@ persisted rows (`app/share/[id]/page.tsx`, `loadContractorPricingRows` + `contra
 customer-facing output is always the persisted saved pricing, never the unsaved draft. The only draft figures
 are the editor's own on-page totals, shown to the contractor.
 
-**Known residual, not changed.** After Copy Link on the detail page, `EstimateActions` shows Resend but the
-page is not refreshed, so the editor still treats the estimate as an undelivered draft until reload. Editing
-then would show Save Pricing behind the Resend bar; the server refuses that save (delivered lock), and Resend
-re-sends the persisted, already-delivered pricing.
+**First delivery re-reads the page (implementation commit `a215db8`; production verification pending).**
+Implementation commit `a215db8d7f57b6f53aca7adf509e9bf40e671196` exists (parent `038f54e`); production
+verification pending.
+- Residual it fixes (found after `9953a6a`): after Copy Link first delivered a draft, `EstimateActions` set its
+  local status to `sent` and showed Resend, but `page.tsx` was not re-read. `ContractorPricingDraftEditor`
+  stayed mounted as an editable draft, and its Save Pricing bar could sit behind the Resend bar. The server
+  already refused that save; the screen showed a false editable state and broke the one-action rule.
+- Root cause: `handleCopyLink` (`app/components/send-estimate-sheet.tsx`) PATCHed, called `onSent`, and copied,
+  with no server re-read. SMS and email were already fine: on success they `router.push` to
+  `/estimates/{id}?sent=1`, which re-renders `page.tsx` from the server.
+- Fix: `handleCopyLink` calls `router.refresh()` once, only when this tap's PATCH succeeded as a first delivery,
+  after the copy attempt (a clipboard failure still refreshes). A failed PATCH or network error returns first
+  and never refreshes. The refresh re-renders only; the delivery handlers run only from their buttons.
+- Paths that re-read the page after first delivery: Copy Link (`router.refresh()`, new), SMS and email
+  (`router.push(...?sent=1)`, unchanged).
+- Confirmation survives: `SendEstimateSheet` is rendered by `EstimateActions` outside its sticky bar, and
+  neither re-read remounts it. `router.refresh()` keeps the URL; for the SMS/email push, Next 16.2.1 keys the
+  page segment without search params (`layout-router.js`: `createRouterCacheKey(activeSegment, true)`), so the
+  page is reconciled, not remounted. "Copied!", the copy error and "Estimate sent" are the sheet's own state
+  and stay on screen. A test pins that framework line, so a Next upgrade that changes it will fail.
+- Tests (source-level; no router or React renderer in the safe harness), in
+  `estimate-actions-send-state-sync.spec.ts`: Copy Link refreshes once after success and after the copy;
+  failures return before refresh; SMS and email navigate only after success; no handler is re-invoked by an
+  effect; the sheet stays mounted; the persisted state after each first delivery reads as delivered, so
+  `page.tsx` swaps the draft editor out.
+- Verification for `a215db8`: 11 specs in `playwright.unit.config.ts` -- 314 passed, 0 skipped, 1 failed (the
+  known `unit-suite-completeness` guard, same three specs); `generation-contractor-pricing.spec.ts` alone 29/29.
+  `npx tsc --noEmit` clean. `eslint` on the 2 changed files: 0 errors, 5 unused-variable warnings in
+  `send-estimate-sheet.tsx`, all present before this change. `git diff --check` clean. `npm run build` not run
+  yet; it belongs in the push gate.
+
+**Pre-existing, not changed: a normal load of a sent contractor_pricing estimate shows editable pricing.**
+`page.tsx` renders the plain `ContractorPricingEditor` with `isDelivered` for a delivered estimate. The editor
+uses `isDelivered` only for its preview figures and guidance: its inputs stay editable and its inline "Save
+pricing" button still renders, and the server refuses the save ("This estimate has already gone to the
+customer and cannot be repriced"). After `a215db8`, a first delivery lands on exactly this same view. A
+read-only delivered pricing display is a separate follow-up.
 
 **Tests (safe, unit config only).** `estimate-actions-send-state-sync.spec.ts` drives the whole draft
 lifecycle through the real editor and `EstimateActions` functions with a real `EventTarget`: one primary
@@ -332,8 +374,10 @@ changed files: 1 error, the pre-existing `<a>` to `/estimates` at `app/estimates
 
 **Phone verification needed after deploy:** reopen a complete draft (Send only); edit (Save Pricing only, no
 Send); Save complete (Send returns); save incomplete (Save Pricing); a failed save (Save Pricing, feedback in
-view); delivered estimate still shows inline Save and Resend; `/new` Add Pricing -> Save Pricing -> Continue
-to Send unchanged.
+view); Copy Link on a complete draft (confirmation stays visible, the page switches to the delivered view with
+Resend and no Save Pricing bar); SMS or email to Greg's own phone or email only, if tested at all; delivered
+estimate still shows inline Save and Resend; `/new` Add Pricing -> Save Pricing -> Continue to Send
+unchanged.
 
 ## c36bd17 hotfix: Failure A and Failure B (shipped, production-verified)
 
