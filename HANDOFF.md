@@ -1,33 +1,178 @@
 # TradePulse handoff
 
-Updated: 2026-09-18 09:11 PT (**Application production** is on commit
-`51e152dc74062f143e3bae1abc5d084ec676bdc4` ("Instrument transcription latency without changing behaviour"),
-deployment `dpl_6TH5rs7RuYREfiDJpnz8hdg48Vdy`, READY. Aliases include `tradepulse-estimates.com` and
-`trytradepulse.com`. This deployment's chain is `ec57bcb` (`dpl_BkQwtED6PQSvDtqDMo4WzPDSAuKT`) -> `f0eebea`
-(`dpl_JAwkG7Y821jeVoLeDpBLfD4NsbTB`) -> `51e152d` (`dpl_6TH5rs7RuYREfiDJpnz8hdg48Vdy`, current). Two commits
-this file previously called "local-only, not yet deployed" -- `73b9d47429a353c5d442ae2948b1e72929a202bb`
-(smooth-scroll polish) and `b4795450dd651a25e4959dc033a962e75e414fe1` (this file's own prior closeout entry)
--- rode into production **inside** the `51e152d` deployment (same pattern as `bddaf3a8` riding in with the
-earlier `64de93e` deployment): neither had a standalone deployment of its own, and both are live now. Greg
-phone-verified the smooth Add Pricing scroll against the production state that includes this chain.
+Updated: 2026-09-18 PT.
 
-**Four Phase 2 "saved line-item foundation" commits are local-only, unpushed, and not deployed**:
-`1e3618c4` (Slice 1 matcher), `eeea1d4b` (Slice 2 quantity-aware calculator), `c3c8fe55` (Slice 3A confirmed
-line-item request contract), `2b9ab3ce` (Slice 3B taxable rows). See "Phase 2 saved line-item foundation
-closeout" below for the full record. **Important distinction: the Slice 3B Supabase migration
-(`20260918160315_add_taxable_to_contractor_pricing_save_fn`) is already applied to TradePulse production**
-(`fctequqcwxyhmnjgxixg`) even though none of the four application commits are live -- this is an intentional,
-verified-backward-compatible database-ahead-of-code state, not a mistake.
+**As of this HANDOFF commit, the Slice 4 stack is unpushed and undeployed.** This is a point-in-time
+statement, not a permanent fact -- the post-deploy HANDOFF update (whenever Slice 4 actually ships) is what
+will record the production SHA, deployment id and verification for it. Until then, treat everything under
+"Slice 4 -- saved line-item pricing" below as local-only.
 
-Full same-page-pricing chronology, cleanup record, and open follow-ups are in "Same-page pricing closeout"
-below, which supersedes this banner's own previous claim that production was on `2990e4d` and supersedes the
-"Phase 1 production merge, hotfix, and smoke" entry's own closing state further down this file.)
+## Phase 2 shipped state (production, current)
 
-## Phase 2 saved line-item foundation closeout (2026-09-18 PT)
+**Production/`origin/main` is `beca4999c1a12fc003f1d02095209f9308ac2161`.** Current production deployment /
+rollback reference: `dpl_2smDAv85tPTgeYdDkdsziqc5pM2j`. This supersedes every earlier banner in this file that
+named `51e152d`, `f0eebea`, `2990e4d`, or any other prior commit/deployment as current -- all of those are
+now stale history, not the current state.
 
-Four local-only, unpushed, undeployed commits, built as isolated slices per explicit task instructions each
-time. None of this application code is live. See the top banner for the one exception: the Slice 3B database
-migration is already applied to production ahead of the code.
+Shipped and live, in order: Phase 2 Slices 1 (`1e3618c4`, matcher), 2 (`eeea1d4b`, quantity-aware calculator),
+3A (`c3c8fe55`, confirmed line-item request contract) and 3B (`2b9ab3ce`, taxable rows) -- see "Phase 2
+Slices 1-3B technical record" below for what each one is -- followed by `1d222302561fe8c65272fe9ef40ca5e8dc548996`
+(corrected Rates/Common line-item copy) and `beca4999c1a12fc003f1d02095209f9308ac2161` (removed the duplicate
+black in-flow Add Pricing button; only the sticky orange Add Pricing CTA remains, and it still scrolls
+correctly). The post-deploy Phase 2 pricing regression was completed, and the disposable pricing-regression
+estimate created during that check was deleted and verified clean.
+
+The Slice 3B Supabase migration (`20260918160315_add_taxable_to_contractor_pricing_save_fn`) was applied to
+production ahead of the application code that needed it, and that database-ahead-of-code window is now
+closed: application code caught up when `beca4999` shipped. See "Production Slice 3B database migration"
+below for the verification record of that migration itself, which remains accurate as history.
+
+## Slice 4 -- saved line-item pricing (local only, unpushed, undeployed)
+
+Three local commits, in order, none pushed or deployed:
+
+1. `0229e5ab0fe642b40576d68eb4313bd3a8f38f88` -- Add saved line-item pricing workflow
+2. `350b248f8e8a1c85b89744e801a265061448fde0` -- Slice 4 audit corrections
+3. `d2999f748a2fdf752aed21f2be78e2be431ef659` -- Attention-state delivery guard (current local `HEAD`)
+
+A later parity audit (page readiness vs. server delivery readiness) traced both paths condition-by-condition,
+found no divergence, and made **no code change and no commit** -- `d2999f74` remains `HEAD`.
+
+Slice 4 has been reviewed, focused-tested, typechecked and built (`npm run build` passed both after the
+initial implementation and again after the delivery guard), but remains unpushed and undeployed. Nothing in
+this section is live.
+
+### Slice 4 saved-line-item design
+
+- Saved line-item suggestions are contractor-facing only. Suggestion payloads contain no prices.
+- Exact saved-item pricing is resolved server-side only when the contractor accepts a suggestion.
+- Accepted saved-item values become estimate-owned snapshots. No price-book ID is persisted into estimate
+  pricing rows.
+- Saved-item pricing reuses the existing contractor-owned pricing arithmetic and canonical row
+  representation -- no separate saved-item pricing engine was added.
+- Generic Labour/Materials pricing and confirmed saved items do not coexist in the editable draft. Charges
+  and tax can coexist with confirmed items.
+- Suggesting an item never changes totals before the contractor accepts it.
+
+### Reconstruction / legacy invariant
+
+Saved-item reconstruction applies **only** when `pricing_source = 'contractor_pricing'`. It must never run
+against legacy `structured` or `markdown` estimates.
+
+Verified read-only against production on 2026-09-18: 23 rows with `unit='ea'`, `item_type='other'`,
+`markup_percent=NULL` exist across 7 `structured` estimates (4 of them unsent drafts). At that date, zero
+`contractor_pricing` estimates had `ea` rows. **This legacy shape is valid and must not be interpreted as
+malformed saved-item pricing.**
+
+For `contractor_pricing` saved-item reconstruction: a valid material row requires zero markup; reconstruction
+defensively accepts a runtime numeric `0` or the string `"0"` (the row loader's exact runtime type for
+`markup_percent` could not be verified live, so this was made defensive rather than assumed); `NULL`,
+non-zero, NaN-like, or any other value is treated as malformed. A malformed/ambiguous saved-item row enters
+`pricingAttentionNeeded` -- no editable pricing draft is manufactured from ambiguous rows.
+
+### Delivery-readiness invariant
+
+For `contractor_pricing`, page Send readiness and server delivery readiness use equivalent inputs and the
+same pure decision composition: `calculateContractorPricing(...)` then `withReconstructionGate(...)`. The
+page and all three server delivery paths must remain semantically identical here -- a future change must not
+update one readiness path without the other.
+
+Readiness call sites (traced and confirmed identical, condition-for-condition; keep in sync):
+
+- **Page:** `app/estimates/[id]/page.tsx` (~lines 120-139), `contractorPricing` -> `estimateComplete`.
+- **Server:** `lib/estimate-pricing-server.ts`'s `contractorPricingCompleteness()` (~lines 141-162), used by
+  `PATCH /api/estimates`, `POST /api/send-sms` and `POST /api/send-email` -- all three independently re-check
+  completeness through this one shared server path before delivery, rather than trusting the client.
+
+Both compose `calculateContractorPricing()` then `withReconstructionGate()` over rows from
+`loadContractorPricingRows()`. `withReconstructionGate()` itself lives in `lib/contractor-pricing-form.ts`,
+not `lib/estimate-pricing-server.ts`, specifically because the latter is `import "server-only"` and cannot be
+imported into a plain unit test.
+
+Consequence: a malformed `contractor_pricing` saved-item row set is not considered delivery-ready, does not
+expose Send through the normal page gate, and is rejected by server delivery with the existing
+incomplete-pricing response. Legacy pricing readiness is unchanged.
+
+**Known ungated path, acceptable today, not to copy elsewhere:** `/new`'s "Continue to Send" is gated by
+`pricingComplete` from `app/api/estimates/[id]/pricing/route.ts`, which calls `calculateContractorPricing`
+**without** `withReconstructionGate`. This is acceptable only because `/new` holds an estimate id created in
+that same session (`setSavedEstimateId` is only ever set from the generation stream), which starts with zero
+pricing rows and can only gain rows through the Slice 4 RPC. Server delivery routes still reject a malformed
+estimate regardless. If `/new` ever opens an *existing* estimate, or any other path can write `ea` rows,
+apply the same gate there too.
+
+### Known issue: ungated display total (technical debt, not part of this push)
+
+On `/estimates/[id]`, `estimateTotal` and the customer summary are still derived from **ungated** pricing
+rows (`contractorDocument` / `contractorCustomerDocument()`, which has no knowledge of the reconstruction
+invariant). So if a malformed `contractor_pricing` estimate somehow existed, the editor could show
+`pricingAttentionNeeded` while another part of the same page still displayed a dollar total. Send is blocked
+(see the delivery-readiness invariant above) and current production contains no `contractor_pricing` `ea`
+rows, so **this is not a live production defect today.** Fix this before introducing any path other than the
+controlled Slice 4 pricing RPC that can write saved-item `ea` rows.
+
+### Matching source decision
+
+- Slice 4 suggestions are intentionally available only during the `/new` generation/pricing flow.
+- The contractor's original job description is **not currently persisted** with the estimate. Reopened
+  `/estimates/[id]` therefore gets no new saved-item suggestions.
+- Generated estimate prose and `photoAnalysis` are never used as a fallback match source.
+- `/new` matching uses only the contractor's typed `jobDescription`.
+- `jobText` is capped at 1000 characters before it is placed in the pricing-init GET query string.
+- **GET query-string transport remains known technical debt**: a contractor's job details may appear in
+  request logs. The 1000-character cap reduces URL-size risk but does not solve the privacy issue.
+  Persisting the original contractor job description should be its own explicit future slice if required.
+
+### Suggestion failure / duplicate behaviour
+
+- Suggestion loading failure degrades to zero suggestions and does not break normal generic Labour/Materials
+  pricing.
+- Candidate loading is business-scoped, active-only, and price-free.
+- If a displayed saved item becomes inactive/inaccessible and resolution returns 404: generic pricing is not
+  cleared, no confirmed item is added, totals do not change, and the stale suggestion is removed locally.
+- `/new` currently does not re-fetch pricing-init after a saved item is accepted, under the existing
+  lifecycle. If a future change introduces such a re-fetch, newly fetched suggestions must be filtered
+  against accepted price-book IDs retained in transient client memory -- do not persist those IDs into
+  estimate pricing rows or the save payload.
+
+### Process lesson (workflow note, not a product defect)
+
+During Slice 4 implementation, a stop condition surfaced that the original contractor job text was not
+persisted; implementation continued with the narrower `/new`-only solution instead of literally stopping.
+For future hard-stop instructions, use explicit wording such as "Do not implement. Return findings only." to
+remove the ambiguity.
+
+### Slice 4 verification recorded
+
+- Initial Slice 4 implementation: focused verification passed.
+- Slice 4 audit corrections (`350b248f`): focused verification passed.
+- Attention-state delivery guard (`d2999f74`): 379 directly/adjacently relevant focused tests passed.
+- `npm run build` passed after the initial implementation and again after the delivery guard.
+- `npx tsc --noEmit` passed at every stage.
+- `unit-suite-completeness` remained exactly the three known pre-existing entries (below) at every stage.
+- The 16 unrelated dirty/untracked paths remained untouched at every stage.
+- The later page/server parity trace found no divergence and therefore made no code change and no commit.
+- **Nothing from Slice 4 has been pushed or deployed.**
+
+### Known pre-existing issues / follow-ups (unrelated to Slice 4, confirmed still open)
+
+- `unit-suite-completeness` lists exactly: `nav-wordmark-no-crowding.spec.ts`,
+  `trade-tabs-mobile-overflow.spec.ts`, `trade-tabs-scroll-affordance.spec.ts`.
+- `app/estimates/[id]/page.tsx` has the pre-existing `<a>` vs `<Link>` lint issue.
+- Pre-existing `handleSignOut` unused-var warning.
+- The older `20260916` migration filename/version mismatch (local filename vs. production's recorded
+  migration version) remains open -- see "Open migration bookkeeping issue" under "Production Slice 3B
+  database migration" below.
+- `tests/smoke/contractor-pricing-route.spec.ts` currently fails on a stale migration filename reference
+  (`20260918000000_...` vs. the actual `20260918160315_...`) introduced before Slice 4. Not fixed as part of
+  Slice 4; fix separately with a tiny isolated commit.
+- 14 June/July orphan Storage objects remain a separate follow-up.
+
+## Phase 2 Slices 1-3B technical record (shipped, 2026-09-18 PT)
+
+Built as isolated slices per explicit task instructions each time. All four are now live in production (see
+"Phase 2 shipped state" above). The Slice 3B database migration verification below remains accurate as
+history.
 
 ### Slice 1 -- deterministic saved-line-item suggestion matcher
 
@@ -189,42 +334,28 @@ depend solely on them.
 recorded `20260916041903_add_contractor_pricing_snapshots_and_save_fn`. Still unresolved. Not touched by this
 documentation entry.
 
-**Database-ahead-of-code state.** Intentional. Live in the production database:
-`20260918160315_add_taxable_to_contractor_pricing_save_fn`. Not live in application code: Slices 1, 2, 3A,
-3B (all four remain local-only). Current production application remains `51e152dc74062f143e3bae1abc5d084ec676bdc4`.
-This is safe specifically because the live RPC treats a missing `taxable` as `true`
+**Database-ahead-of-code state -- resolved.** At the time this migration was applied, it was intentionally
+live in the production database (`20260918160315_add_taxable_to_contractor_pricing_save_fn`) before any of
+Slices 1, 2, 3A or 3B were live in application code. That window is now closed: application code caught up
+when `beca4999c1a12fc003f1d02095209f9308ac2161` shipped (see "Phase 2 shipped state" at the top of this
+file), and all four slices are live. Kept here as the historical record of why the migration was safe to
+apply ahead of the code: the RPC treats a missing `taxable` as `true`
 (`coalesce((e ->> 'taxable')::boolean, true)`) and returns an extra `taxable` field that older application
-code simply ignores -- every application deployment that predates Slice 3B, including current production and
-any earlier rollback candidate, continues to behave exactly as before against this RPC.
+code simply ignores -- every application deployment that predated Slice 3B, including the then-current
+production and any earlier rollback candidate, behaved exactly as before against this RPC.
 
 **Rollback consequence:** a Vercel/application rollback does **not** require a database rollback. Earlier
 application deployments remain compatible with the Slice 3B RPC replacement. Do not roll back the database
 merely because application code is rolled back.
 
-### Slice 4 -- not started
-
-Still unbuilt:
-
-1. UI loads relevant price-book items/suggestions.
-2. Contractor taps a suggestion to confirm it.
-3. Confirmed saved item becomes editable estimate draft data.
-4. Quantity adjustment UI.
-5. Saved-line-item labour/material price editing.
-6. Correct taxability passed from the saved price-book item into the confirmed line item.
-7. Mode-switching UX.
-
-**Mode-switching decision still open.** The backend/request invariant is already locked: confirmed saved line
-items cannot coexist with generic Labour/Materials (Option C, Slice 3A). The UI still needs one explicit
-behaviour when the contractor already has generic pricing on screen and confirms their first saved item --
-**Option A**: clear the generic labour/material draft and switch to saved-line-item mode, or **Option B**:
-block the tap and explain that generic pricing must be removed first. Not decided here. This is a Slice 4
-product decision for Greg.
-
-**Price-book customer presentation still unchanged.** The customer document continues to aggregate all
-persisted labour rows into one Labour total, all material rows into one Materials total, and lists only
-`other` charges individually. Saved-line-item rows are currently internal pricing structure only. Whether
-customers should eventually see item-level saved-line-item prices is a separate, later product decision --
-not implied or decided by anything in Slices 1-3B.
+**Slice 4 status.** Built. See "Slice 4 -- saved line-item pricing" near the top of this file for the full
+current record (local commits, design, invariants, known issues, verification). The mode-switching decision
+this section used to describe as open was resolved as **Option A**: confirming the first saved item while
+real generic Labour/Materials values are present clears the generic draft and switches to saved-line-item
+mode, with a confirmation step in the UI. Price-book customer presentation is unchanged from what this
+section originally described: the customer document still aggregates all persisted labour rows into one
+Labour total, all material rows into one Materials total, and lists only `other` charges individually.
+Saved-line-item rows remain internal pricing structure only.
 
 ### Pricing authority, extended for taxability
 
@@ -238,22 +369,18 @@ For persisted contractor pricing, extended to taxability: **estimate rows** own 
 **estimate snapshot** owns the tax rate; the **calculator** owns the resulting tax amount. The price book and
 business Rates must never move a persisted estimate's taxability, tax rate, or tax amount.
 
-### Current repo state (Phase 2)
-
-`origin/main`: `51e152dc74062f143e3bae1abc5d084ec676bdc4`. Local `main` before this HANDOFF commit:
-`2b9ab3ce9293b5c398e08722eb0f7c46aac2e999` -- **4** commits ahead of `origin/main`, 0 behind (`1e3618c4`,
-`eeea1d4b`, `c3c8fe55`, `2b9ab3ce`, in that order). After this HANDOFF commit, local `main` will be **5**
-commits ahead of `origin/main`, 0 behind, assuming `origin/main` remains unmoved. **None of the four Phase 2
-application commits have been pushed or deployed.** The same 16 unrelated dirty/untracked paths from this
-session remain preserved byte-identically and untouched by this entry.
+**Repo state as of this entry (2026-09-18) is superseded.** See "Phase 2 shipped state" and "Slice 4 --
+saved line-item pricing" at the top of this file for the current, authoritative commit/deployment state and
+the current local-commit list.
 
 ## Same-page pricing closeout (2026-09-17 PT)
 
 **Current production status (as of this section's original writing).** Commit
 `f0eebeafbaf2cae83cd4b89f9bda33e82535b742`, deployment `dpl_JAwkG7Y821jeVoLeDpBLfD4NsbTB`, **READY**.
 Same-page pricing phone smoke: **PASS**. Runtime check after deployment: no Vercel runtime errors found in
-the checked 30-minute production window. **Superseded by the top banner above**: production has since moved
-to `51e152dc74062f143e3bae1abc5d084ec676bdc4`, deployment `dpl_6TH5rs7RuYREfiDJpnz8hdg48Vdy`.
+the checked 30-minute production window. **Superseded, several times over, by "Phase 2 shipped state" at the
+top of this file**: production has since moved on through `51e152dc74062f143e3bae1abc5d084ec676bdc4` to its
+current state. Do not treat any commit/deployment named in this section as current.
 
 **Correction, 2026-09-18:** the paragraph below originally called `73b9d47429a353c5d442ae2948b1e72929a202bb`
 "local-only, not yet live." That is now stale. `73b9d47` (smooth-scroll polish) and
