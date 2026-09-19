@@ -1,8 +1,8 @@
 # TradePulse handoff
 
-Updated: 2026-09-18 23:20 PT.
+Updated: 2026-09-18 23:26 PT.
 
-## Current production and local state (2026-09-18 23:20 PT)
+## Current production and local state (2026-09-18 23:26 PT)
 
 **Production/`origin/main` is `f0fac3e082b5309e18b5c91e27a83591d3dab4fa`**, deployed as
 `dpl_3CEFPq9BUmY5W7S7jUrLYUJw5Xmy` and production phone-verified (see "Single sticky primary action on the
@@ -18,9 +18,13 @@ Deployment history, newest first:
 | `dpl_6tQCKUP9L4RovihAZzg9VunYfP86` | `3d05370` | Phase 2 Slice 4 |
 | `dpl_2smDAv85tPTgeYdDkdsziqc5pM2j` | `beca4999` | earlier Phase 2 state |
 
-**Next change:** implementation commit `11245ac7ab4576b0a14f19de00bcb30ae7905e35` exists (delivered
-contractor_pricing pricing shown locked on `/estimates/[id]`, see "Delivered pricing shown locked" below);
-production verification pending. The HANDOFF commit recording it sits on top of it.
+**Next change, in commit order on top of `f0fac3e`** (see "Delivered pricing shown locked" below):
+1. Implementation commit `11245ac7ab4576b0a14f19de00bcb30ae7905e35` exists (delivered contractor_pricing
+   pricing shown locked on `/estimates/[id]`); production verification pending.
+2. `4405ec08e7df60b8f7a72a8e586ccbcee81f19ee`: HANDOFF only.
+3. Implementation commit `38b92c4209df0ca2120167d9f4a2ce1e4c686e62` exists (a draft with a delivery marker
+   gets delivered actions, never draft Send beside locked pricing); production verification pending.
+4. The HANDOFF commit recording item 3 and the test-harness debt.
 
 **Required focused regression set for any shared-editor or `/new` change:** include
 `tests/smoke/generation-contractor-pricing.spec.ts` alongside `contractor-pricing-form.spec.ts`,
@@ -316,9 +320,55 @@ known `unit-suite-completeness` guard, same three specs); `generation-contractor
 `npx tsc --noEmit` clean. `eslint` on the 2 changed files clean. `git diff --check` clean. `npm run build` not
 run yet; it belongs in the push gate.
 
+**Edge state: draft status with a delivery marker (implementation commit `38b92c4`; production verification
+pending).** Implementation commit `38b92c4209df0ca2120167d9f4a2ce1e4c686e62` exists (parent `4405ec0`);
+production verification pending.
+- `11245ac` locks pricing on `isDelivered()`, but `EstimateActions` chose its actions from the stored status
+  alone (`useState(status ?? "")`). For `status = 'draft'` with `copied_at` or `sent_at` set, the page would
+  show locked pricing while `EstimateActions`' draft branch offered Send Estimate (and hid Resend and Mark Job
+  Done). The editor's delivered-mode publisher guard does not affect that choice.
+- Not closed by construction. The app's own delivery paths never create it: Copy Link sends `copied_at` and
+  `status: "sent"` in one `PATCH /api/estimates` body written by one UPDATE, and `send-sms` / `send-email`
+  write `status: "sent"` and `sent_at` in one UPDATE. But `PATCH /api/estimates` itself (owner only) accepts
+  `copied_at` and `status` independently and writes exactly what it was sent (`app/api/estimates/route.ts`,
+  single `.update(updateFields)`), so it can create the state two ways: (a) a first delivery sent as
+  `copied_at` alone (it passes the completeness gate, then leaves status `draft`); (b) `status: "draft"` on an
+  estimate whose `sent_at` or `copied_at` is set (`wouldNewlyUndeliver` is false because the marker keeps it
+  delivered). Other writers: `lib/generated-estimate.ts` inserts `status: "draft"` with no markers; website
+  quote conversion (`handleCreateEstimate`) PATCHes `status: "draft"` on unpriced intake, which is not
+  contractor_pricing. Production had no such rows as of 2026-09-18 (checked read-only by Claude Chat).
+- Fix: `page.tsx` passes the lock it already derives, `pricingLocked={isContractorPricing &&
+  isDelivered(estimate)}` (the exact condition that renders the locked editor), and `EstimateActions` seeds its
+  action status with `initialActionStatus()`: a locked `draft` starts as `sent`, so it gets Resend and Mark Job
+  Done like any delivered estimate. No new delivery predicate; server semantics, Resend, pricing locking,
+  `/new` and legacy estimates are unchanged.
+- Tests in `estimate-actions-send-state-sync.spec.ts`: both route constructions (via the real
+  `wouldNewlyDeliver`/`wouldNewlyUndeliver`), the app's own paths writing marker and status together,
+  `initialActionStatus` for every status, the locked draft reaching the Resend branch even while send-blocked,
+  and the page passing the same lock condition. Focused run: 9 specs, 241 passed, 0 skipped, 1 known
+  `unit-suite-completeness` failure (same three specs), including `generation-contractor-pricing.spec.ts`.
+  `npx tsc --noEmit` clean; `eslint` on the 3 changed files shows only the pre-existing `<a>` to `/estimates`
+  error at `app/estimates/[id]/page.tsx:201`; `git diff --check` clean. `npm run build` belongs in the push
+  gate.
+- Possible follow-up, not done: make `PATCH /api/estimates` refuse these two constructions server-side (for
+  example require `status: "sent"` with a first `copied_at`, and refuse `status: "draft"` once delivered).
+  That changes server delivery semantics, so it was out of scope here.
+
+**Test-harness debt: the real-editor render shim.** `tests/smoke/contractor-pricing-delivery-lock.spec.ts`
+(added in `11245ac`) renders the real `ContractorPricingEditor` with `react-dom/server`. It was written against
+`@playwright/test` and `playwright` 1.61.1. Playwright's test runner compiles JSX in imported `.tsx` files with
+its own `playwright/jsx-runtime`, which returns plain `{__pw_type: "jsx", type, props, key}` objects meant for
+component testing, not React elements, so the spec carries a small shim (`realize`/`realType`) that turns
+those objects back into React elements and wraps function and `forwardRef` components. That depends on
+Playwright internals, not a public API, so a future Playwright upgrade can break these tests while product
+behaviour is unchanged. If they fail after an upgrade (for example "Objects are not valid as a React child",
+or an empty render), diagnose it as test-harness compatibility first, by checking
+`node_modules/playwright/jsx-runtime.js`, before treating it as a product regression.
+
 **Phone verification needed after deploy:** open a sent estimate (values visible and not editable, no Save,
 Add charge or Remove, locked notice shown, Resend and Mark Job Done unchanged); open a draft (fully editable,
-one sticky primary action as before); Copy Link a complete draft (lands on the locked view).
+one sticky primary action as before); Copy Link a complete draft (lands on the locked view). The draft-with-
+marker edge state cannot be produced through the UI, so it is covered by tests only.
 
 ## Single sticky primary action on the draft detail page (shipped in `f0fac3e`, production-verified)
 
