@@ -655,9 +655,10 @@ export function formSnapshot(state: ContractorPricingFormState): string {
 }
 
 /**
- * Whether the draft has changed since `savedSnapshot` was taken. `null`
- * (nothing has been saved yet this mount) is never dirty -- "unsaved changes"
- * only means something once there is an actual save to compare against.
+ * Whether the draft has changed since `savedSnapshot` was taken. `null` is
+ * never dirty. The editor itself no longer passes `null`: it starts from
+ * initContractorPricingEditorState()'s snapshot of the persisted rows it
+ * loaded (see that function for why).
  */
 export function hasUnsavedPricingChanges(
   state: ContractorPricingFormState,
@@ -665,4 +666,38 @@ export function hasUnsavedPricingChanges(
 ): boolean {
   if (savedSnapshot === null) return false;
   return formSnapshot(state) !== savedSnapshot;
+}
+
+/**
+ * The editor's starting point: the form built from the persisted rows it
+ * loaded, and that same form's snapshot as the dirty baseline.
+ *
+ * The loaded rows ARE the last saved state, so they are the baseline. A null
+ * baseline ("nothing saved yet this mount") made every edit on a reopened,
+ * already-complete estimate read as clean, so Send stayed visible on
+ * /estimates/[id] while the screen showed prices the customer would never get.
+ * Both values come from one form object, so the charge and line-item ids
+ * inside the snapshot match the ids the editor then holds in state.
+ */
+export function initContractorPricingEditorState(
+  rows: readonly ContractorPricingRowInput[],
+  tax: EstimateTaxSnapshot,
+  defaults: BusinessPricingDefaults
+): { form: ContractorPricingFormState; savedSnapshot: string } {
+  const form = initContractorPricingForm(rows, tax, defaults);
+  return { form, savedSnapshot: formSnapshot(form) };
+}
+
+/**
+ * Whether a finished save should bring the editor's save feedback into view:
+ * a failed save (its error text), or a save that worked but left pricing
+ * incomplete (the "Still needed before you can send this" guidance, which is
+ * the only explanation there is -- an incomplete save is not an error). A
+ * complete save reveals nothing: Send becoming available is its feedback.
+ */
+export function shouldRevealSaveFeedback(
+  status: "idle" | "saving" | "saved" | "error",
+  persistedComplete: boolean
+): boolean {
+  return status === "error" || (status === "saved" && !persistedComplete);
 }

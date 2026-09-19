@@ -9,6 +9,7 @@ import {
   formSnapshot,
   hasEnteredGenericPricing,
   hasUnsavedPricingChanges,
+  initContractorPricingEditorState,
   initContractorPricingForm,
   missingLabels,
   reconstructConfirmedItems,
@@ -16,6 +17,7 @@ import {
   removeConfirmedItem,
   resolveContractorPricingGuidance,
   resolveContractorPricingPreview,
+  shouldRevealSaveFeedback,
   shouldScrollToPricing,
   toPricingRequestPayload,
   updateCharge,
@@ -1686,6 +1688,108 @@ test("hasUnsavedPricingChanges: null snapshot (nothing saved yet) is never dirty
   expect(hasUnsavedPricingChanges({ ...form, taxEdited: true }, formSnapshot(form))).toBe(false);
 });
 
+// Failure B (production phone smoke on 607fc25): a reopened, already-saved
+// estimate kept Send visible after an unsaved price edit, because the editor
+// started with a null dirty baseline and hasUnsavedPricingChanges(form, null)
+// is always false. The baseline is now the loaded rows themselves.
+
+/** A saved-item pair exactly as toCanonicalRows() persists it. */
+function reopenedSavedItemRows(): ContractorPricingRowInput[] {
+  return [
+    row({ item_type: "labour", unit: "ea", quantity: 1, unit_price: 110, markup_percent: null, description: "Kitchen faucet replacement", display_order: 0 }),
+    row({ item_type: "material", unit: "ea", quantity: 1, unit_price: 0, markup_percent: 0, description: "Kitchen faucet replacement", display_order: 1 }),
+  ];
+}
+
+test("reopen baseline: a reopened saved-item estimate loads clean, with its own snapshot as the dirty baseline, and is complete", () => {
+  const rows = reopenedSavedItemRows();
+  const { form, savedSnapshot } = initContractorPricingEditorState(rows, GST_5, DEFAULTS);
+
+  expect(form.pricingAttentionNeeded).toBe(false);
+  expect(form.confirmedItems).toHaveLength(1);
+  expect(form.confirmedItems[0]).toMatchObject({ quantity: "1", labourUnitPrice: "110", materialUnitPrice: "0", taxable: true });
+  expect(savedSnapshot).toBe(formSnapshot(form));
+  expect(hasUnsavedPricingChanges(form, savedSnapshot)).toBe(false);
+
+  // The same pricing the detail page seeds EstimateActions with: complete, so
+  // Send may show on first load.
+  const persisted = withReconstructionGate(
+    calculateContractorPricing(rows, { taxRatePercent: 5, depositPercent: null, depositThresholdDollars: null }),
+    rows
+  );
+  expect(persisted.complete).toBe(true);
+});
+
+test("reopen baseline survives numeric values arriving as strings: baseline and form come from the same object, so the loaded state is still clean", () => {
+  // Defensive: PostgREST may hand numeric columns back as strings. Whatever
+  // the types, the baseline is the snapshot of this same loaded form.
+  const asStrings = reopenedSavedItemRows().map(
+    (r) =>
+      ({
+        ...r,
+        quantity: String(r.quantity),
+        unit_price: r.unit_price === 110 ? "110.00" : "0",
+        markup_percent: r.markup_percent === null ? null : "0",
+      }) as unknown as ContractorPricingRowInput
+  );
+  const { form, savedSnapshot } = initContractorPricingEditorState(asStrings, GST_5, DEFAULTS);
+  expect(form.pricingAttentionNeeded).toBe(false);
+  expect(hasUnsavedPricingChanges(form, savedSnapshot)).toBe(false);
+  const edited = updateConfirmedItem(form, form.confirmedItems[0].id, "labourUnitPrice", "120");
+  expect(hasUnsavedPricingChanges(edited, savedSnapshot)).toBe(true);
+});
+
+test("reopen baseline: every substantive edit from the loaded state is dirty before any save; only a taxEdited flip is not", () => {
+  // Saved-item mode: edit, remove, accept another item.
+  const items = initContractorPricingEditorState(reopenedSavedItemRows(), GST_5, DEFAULTS);
+  const itemId = items.form.confirmedItems[0].id;
+  const dirtyFromItems = (state: typeof items.form) => hasUnsavedPricingChanges(state, items.savedSnapshot);
+  expect(dirtyFromItems(updateConfirmedItem(items.form, itemId, "labourUnitPrice", "120"))).toBe(true);
+  expect(dirtyFromItems(updateConfirmedItem(items.form, itemId, "materialUnitPrice", "5"))).toBe(true);
+  expect(dirtyFromItems(updateConfirmedItem(items.form, itemId, "quantity", "2"))).toBe(true);
+  expect(dirtyFromItems(updateConfirmedItem(items.form, itemId, "description", "Faucet"))).toBe(true);
+  expect(dirtyFromItems(removeConfirmedItem(items.form, itemId))).toBe(true);
+  expect(
+    dirtyFromItems(
+      acceptSuggestedItem(items.form, { description: "Shutoff valve", labourUnitPrice: 40, materialUnitPrice: 15, taxable: true })
+    )
+  ).toBe(true);
+
+  // Generic mode: labour, materials, markup, charges, tax.
+  const generic = initContractorPricingEditorState(completeGst5(), GST_5, DEFAULTS);
+  const dirty = (state: typeof generic.form) => hasUnsavedPricingChanges(state, generic.savedSnapshot);
+  expect(dirty(generic.form)).toBe(false);
+  expect(dirty({ ...generic.form, hours: "9" })).toBe(true);
+  expect(dirty({ ...generic.form, hourlyRate: "100" })).toBe(true);
+  expect(dirty(chooseLabourMethod(generic.form, "fixed", DEFAULTS))).toBe(true);
+  expect(dirty({ ...generic.form, materialsCost: "1200" })).toBe(true);
+  expect(dirty({ ...generic.form, markupPercent: "25" })).toBe(true);
+  const withCharge = addCharge(generic.form);
+  expect(dirty(withCharge)).toBe(true);
+  expect(dirty(updateCharge(withCharge, withCharge.charges[0].id, "amount", "150"))).toBe(true);
+  expect(dirty(editTax(generic.form, "taxRate", "13"))).toBe(true);
+  expect(dirty(editTax(generic.form, "taxLabel", "HST"))).toBe(true);
+  expect(dirty({ ...generic.form, taxEdited: true })).toBe(false);
+
+  // Removing a charge that was loaded from the database is dirty too.
+  const chargeRows = [...completeGst5(), row({ item_type: "other", description: "Permit", unit_price: 150, display_order: 2 })];
+  const withLoadedCharge = initContractorPricingEditorState(chargeRows, GST_5, DEFAULTS);
+  expect(
+    hasUnsavedPricingChanges(
+      removeCharge(withLoadedCharge.form, withLoadedCharge.form.charges[0].id),
+      withLoadedCharge.savedSnapshot
+    )
+  ).toBe(true);
+});
+
+test("the editor seeds its dirty baseline from initContractorPricingEditorState, never a null 'nothing saved yet' snapshot", () => {
+  const editor = readFileSync("app/components/contractor-pricing-editor.tsx", "utf8");
+  expect(editor).toContain("initContractorPricingEditorState(initialRows, initialTax, defaults)");
+  expect(editor).toContain("useState<string>(initialEditorState.savedSnapshot)");
+  expect(editor).toContain("useState<ContractorPricingFormState>(initialEditorState.form)");
+  expect(editor).not.toMatch(/\[lastSavedSnapshot, setLastSavedSnapshot\] = useState<string \| null>\(null\)/);
+});
+
 test("the editor's imperative save handle reuses the exact same save() identifier the inline button calls -- never a second save implementation", () => {
   const editor = readFileSync("app/components/contractor-pricing-editor.tsx", "utf8");
 
@@ -1710,28 +1814,67 @@ test("a pricing edit after a successful save dispatches PRICING_CHANGE_EVENT(com
   expect(fn).toContain("new CustomEvent(PRICING_CHANGE_EVENT, { detail: { complete: false } })");
 });
 
-test("a failed save scrolls its own status/error element into view, reachable from either the inline or the sticky save path since both call save()", () => {
+test("shouldRevealSaveFeedback: a failed save and an incomplete-but-successful save reveal their feedback; a complete save, idle and saving do not", () => {
+  // Failure A (production phone smoke on 607fc25): tapping the sticky Save
+  // Pricing with incomplete pricing is not an error -- the route accepts
+  // blank labour/materials (parseLabour/parseMaterials take null) and
+  // answers 200 with complete: false. The old scroll lived only in save()'s
+  // catch, so this, the common case, never scrolled at all.
+  expect(shouldRevealSaveFeedback("error", false)).toBe(true);
+  expect(shouldRevealSaveFeedback("error", true)).toBe(true);
+  expect(shouldRevealSaveFeedback("saved", false)).toBe(true);
+  expect(shouldRevealSaveFeedback("saved", true)).toBe(false);
+  expect(shouldRevealSaveFeedback("idle", false)).toBe(false);
+  expect(shouldRevealSaveFeedback("saving", false)).toBe(false);
+
+  // The incomplete-save case really does produce an empty, route-valid
+  // payload (so a 200, not an error): the real parser accepts it.
+  const blank = initContractorPricingForm([], GST_5, DEFAULTS);
+  const parsed = parseContractorPricingRequest(JSON.parse(JSON.stringify(toPricingRequestPayload(blank))));
+  expect(parsed.ok).toBe(true);
+  // ...and the guidance it would then show is the missing-items message.
+  const saved = calculateContractorPricing([], { taxRatePercent: 5, depositPercent: null, depositThresholdDollars: null });
+  expect(saved.complete).toBe(false);
+  const preview = resolveContractorPricingPreview(blank, {
+    isDelivered: false,
+    persistedPricing: saved,
+    snapshots: { taxRatePercent: 5, depositPercent: null, depositThresholdDollars: null },
+  });
+  expect(resolveContractorPricingGuidance({ isDelivered: false, preview, persistedPricing: saved }).kind).toBe("missing-items");
+});
+
+test("the save feedback scroll runs in an effect after React commits the new status, not inside save() before the error text exists", () => {
+  // Structural, not behavioural: this harness has no DOM or React renderer
+  // (see estimate-actions-send-state-sync.spec.ts), so the commit ordering
+  // is pinned from source. The decision itself is tested above.
   const editor = readFileSync("app/components/contractor-pricing-editor.tsx", "utf8");
 
   const saveStart = editor.indexOf("async function save() {");
-  const catchStart = editor.indexOf("} catch (error) {", saveStart);
-  const catchEnd = editor.indexOf("\n  }\n", catchStart);
-  expect(saveStart).toBeGreaterThan(-1);
-  expect(catchStart).toBeGreaterThan(saveStart);
-  const catchBody = editor.slice(catchStart, catchEnd);
+  const saveEnd = editor.indexOf("\n  }\n", editor.indexOf("} catch (error) {", saveStart));
+  const saveBody = editor.slice(saveStart, saveEnd);
+  expect(saveBody).not.toContain("scrollIntoView");
+  expect(saveBody).not.toContain("requestAnimationFrame");
 
-  expect(catchBody).toContain("saveStatusRef.current?.scrollIntoView(");
-  expect(editor).toContain('<span ref={saveStatusRef} aria-live="polite"');
+  const effectStart = editor.indexOf("if (!shouldRevealSaveFeedback(status, pricing.complete)) return;");
+  expect(effectStart, "the reveal effect exists").toBeGreaterThan(-1);
+  const effectBody = editor.slice(effectStart, editor.indexOf("}, [status, pricing]);", effectStart));
+  expect(effectBody).toContain("saveFeedbackRef.current?.scrollIntoView(");
+  expect(effectBody).toContain('block: "start"');
+  expect(editor).toContain("}, [status, pricing]);");
 });
 
-test("the inline Save button is suppressed only by hideInlineSaveButton; the status/error text beside it is never hidden", () => {
+test("the inline Save button is suppressed only by hideInlineSaveButton; the guidance and status/error text in the scrolled feedback block are never hidden", () => {
   const editor = readFileSync("app/components/contractor-pricing-editor.tsx", "utf8");
 
   expect(editor).toContain("{!hideInlineSaveButton && (");
-  // The status span sits outside that conditional block.
-  const buttonBlockStart = editor.indexOf("{!hideInlineSaveButton && (");
+  const feedbackStart = editor.indexOf('<div ref={saveFeedbackRef} className="flex flex-col gap-6 scroll-mt-6">');
+  expect(feedbackStart, "the feedback wrapper is always rendered, unconditionally").toBeGreaterThan(-1);
+  const buttonBlockStart = editor.indexOf("{!hideInlineSaveButton && (", feedbackStart);
   const buttonBlockEnd = editor.indexOf(")}", buttonBlockStart) + 2;
-  const statusSpanIndex = editor.indexOf('<span ref={saveStatusRef}', buttonBlockEnd);
+  const guidanceIndex = editor.indexOf('{guidance.kind !== "none" && (', feedbackStart);
+  const statusSpanIndex = editor.indexOf('<span aria-live="polite" className="text-sm">', buttonBlockEnd);
+  expect(guidanceIndex, "the guidance is inside the feedback wrapper").toBeGreaterThan(feedbackStart);
+  expect(guidanceIndex).toBeLessThan(buttonBlockStart);
   expect(statusSpanIndex, "the status span renders after, and outside, the hideable button block").toBeGreaterThan(buttonBlockEnd);
 });
 

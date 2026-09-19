@@ -6,6 +6,19 @@ import {
   readPricingComplete,
   shouldShowStickyActionBar,
 } from "../../app/components/estimate-actions";
+import {
+  formSnapshot,
+  hasUnsavedPricingChanges,
+  initContractorPricingEditorState,
+  removeConfirmedItem,
+  toPricingRequestPayload,
+  updateConfirmedItem,
+  withReconstructionGate,
+  type ContractorPricingFormState,
+  type ContractorPricingRowInput,
+} from "../../lib/contractor-pricing-form";
+import { parseContractorPricingRequest, toCanonicalRows } from "../../lib/contractor-pricing-request";
+import { calculateContractorPricing } from "../../lib/contractor-pricing";
 
 /**
  * Phase 1 slice 5C: the isZeroTotal/estimate-total-change staleness
@@ -37,6 +50,13 @@ import {
 
 const root = path.join(__dirname, "../..");
 const code = (file: string) => readFileSync(path.join(root, file), "utf8");
+
+/** The draft exactly as the pricing route would accept and store it. */
+function parseSavedPayload(form: ContractorPricingFormState) {
+  const parsed = parseContractorPricingRequest(JSON.parse(JSON.stringify(toPricingRequestPayload(form))));
+  if (!parsed.ok) throw new Error(parsed.error);
+  return parsed.value;
+}
 
 // ── Genuine runtime behaviour, no source matching ───────────────────────────
 
@@ -99,6 +119,81 @@ test("the sticky Send bar is absent while an undelivered contractor_pricing draf
   // 5. Editing back to incomplete and saving again removes it.
   target.dispatchEvent(new CustomEvent(PRICING_CHANGE_EVENT, { detail: { complete: false } }));
   expect(shouldShowStickyActionBar({ ...draftState, sendBlocked: !liveComplete })).toBe(false);
+});
+
+test("reopened complete estimate: the first unsaved price edit hides the visible Send bar before any save, and a complete re-save brings it back", () => {
+  // Failure B (production phone smoke on 607fc25). The visible Send owner on
+  // /estimates/[id] is EstimateActions' sticky bar, seeded from the page's
+  // estimateComplete and changed afterwards only by PRICING_CHANGE_EVENT.
+  // Everything below runs the real exported functions on both sides: the
+  // editor's baseline and dirty check, and EstimateActions' event reader and
+  // bar decision. What is simulated is only React's plumbing: the editor's
+  // isDirty effect (dispatch on the false -> true transition) and
+  // EstimateActions' window listener, with an EventTarget standing in for
+  // `window`. That plumbing is pinned from source in the tests below and in
+  // contractor-pricing-form.spec.ts.
+  const rows: ContractorPricingRowInput[] = [
+    { item_type: "labour", unit: "ea", quantity: 1, unit_price: 110, markup_percent: null, description: "Kitchen faucet replacement", display_order: 0, taxable: true },
+    { item_type: "material", unit: "ea", quantity: 1, unit_price: 0, markup_percent: 0, description: "Kitchen faucet replacement", display_order: 1, taxable: true },
+  ];
+  const snapshots = { taxRatePercent: 5, depositPercent: null, depositThresholdDollars: null };
+  const draftState = { isQuoteRequest: false, isDone: false, localStatus: "draft" };
+
+  // Page load: the server's gated completeness seeds EstimateActions.
+  const estimateComplete = withReconstructionGate(calculateContractorPricing(rows, snapshots), rows).complete;
+  expect(estimateComplete).toBe(true);
+  let liveComplete = estimateComplete;
+  const target = new EventTarget();
+  target.addEventListener(PRICING_CHANGE_EVENT, (e) => {
+    liveComplete = readPricingComplete(e);
+  });
+  const sendBarVisible = () => shouldShowStickyActionBar({ ...draftState, sendBlocked: !liveComplete });
+  expect(sendBarVisible()).toBe(true);
+
+  // Editor mount: clean against the loaded rows, so nothing is dispatched.
+  const editor = initContractorPricingEditorState(rows, { label: "GST", rate: 5 }, { labourRate: 95, markupPercent: 20 });
+  let lastSavedSnapshot = editor.savedSnapshot;
+  let isDirty = hasUnsavedPricingChanges(editor.form, lastSavedSnapshot);
+  expect(isDirty).toBe(false);
+  expect(sendBarVisible()).toBe(true);
+
+  // The editor's dirty effect, exactly: dispatch complete:false when isDirty
+  // turns true.
+  function applyEdit(form: typeof editor.form) {
+    const wasDirty = isDirty;
+    isDirty = hasUnsavedPricingChanges(form, lastSavedSnapshot);
+    if (isDirty && !wasDirty) {
+      target.dispatchEvent(new CustomEvent(PRICING_CHANGE_EVENT, { detail: { complete: false } }));
+    }
+  }
+
+  // First substantive edit, no save: the bar is gone immediately.
+  const edited = updateConfirmedItem(editor.form, editor.form.confirmedItems[0].id, "labourUnitPrice", "120");
+  applyEdit(edited);
+  expect(isDirty).toBe(true);
+  expect(sendBarVisible()).toBe(false);
+
+  // Successful re-save: the snapshot moves to the saved draft, and the
+  // save's own dispatch carries the server's complete for the new rows.
+  const savedRows = toCanonicalRows(parseSavedPayload(edited));
+  lastSavedSnapshot = formSnapshot(edited);
+  isDirty = hasUnsavedPricingChanges(edited, lastSavedSnapshot);
+  expect(isDirty).toBe(false);
+  const serverComplete = calculateContractorPricing(savedRows, snapshots).complete;
+  expect(serverComplete).toBe(true);
+  target.dispatchEvent(new CustomEvent(PRICING_CHANGE_EVENT, { detail: { complete: serverComplete } }));
+  expect(sendBarVisible()).toBe(true);
+
+  // A re-save that leaves pricing incomplete keeps it hidden.
+  const removed = removeConfirmedItem(edited, edited.confirmedItems[0].id);
+  applyEdit(removed);
+  expect(sendBarVisible()).toBe(false);
+  target.dispatchEvent(
+    new CustomEvent(PRICING_CHANGE_EVENT, {
+      detail: { complete: calculateContractorPricing([], snapshots).complete },
+    })
+  );
+  expect(sendBarVisible()).toBe(false);
 });
 
 test("shouldShowStickyActionBar still shows the bar for every other state regardless of sendBlocked", () => {

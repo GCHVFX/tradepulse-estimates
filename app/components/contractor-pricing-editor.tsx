@@ -14,11 +14,12 @@ import {
   formSnapshot,
   hasEnteredGenericPricing,
   hasUnsavedPricingChanges,
-  initContractorPricingForm,
+  initContractorPricingEditorState,
   removeCharge,
   removeConfirmedItem,
   resolveContractorPricingGuidance,
   resolveContractorPricingPreview,
+  shouldRevealSaveFeedback,
   shouldScrollToPricing,
   toPricingRequestPayload,
   updateCharge,
@@ -125,21 +126,27 @@ export const ContractorPricingEditor = forwardRef<ContractorPricingEditorHandle,
     ref
   ) {
   const router = useRouter();
-  const [form, setForm] = useState<ContractorPricingFormState>(() =>
-    initContractorPricingForm(initialRows, initialTax, defaults)
+  // Built once: the form from the persisted rows, and that same form's
+  // snapshot as the dirty baseline, since the loaded rows are the last saved
+  // state (see initContractorPricingEditorState).
+  const [initialEditorState] = useState(() =>
+    initContractorPricingEditorState(initialRows, initialTax, defaults)
   );
+  const [form, setForm] = useState<ContractorPricingFormState>(initialEditorState.form);
   const [pricing, setPricing] = useState<ContractorPricing>(initialPricing);
   const [status, setStatus] = useState<ContractorPricingSaveStatus>("idle");
   const [errorMessage, setErrorMessage] = useState("");
-  // Snapshot of the draft as of the last successful save this mount; null
-  // means nothing has been saved yet. isDirty is fully derived from it, so
-  // there is nothing to reset by hand when a new save succeeds or the form
-  // changes -- see hasUnsavedPricingChanges().
-  const [lastSavedSnapshot, setLastSavedSnapshot] = useState<string | null>(null);
+  // Snapshot of the draft as last persisted: the loaded rows at mount, then
+  // each successful save. isDirty is fully derived from it, so there is
+  // nothing to reset by hand when a new save succeeds or the form changes --
+  // see hasUnsavedPricingChanges().
+  const [lastSavedSnapshot, setLastSavedSnapshot] = useState<string>(initialEditorState.savedSnapshot);
   const isDirty = hasUnsavedPricingChanges(form, lastSavedSnapshot);
-  // Scroll target for a failed save, so the failure is visible even when
-  // save was triggered from a sticky CTA while scrolled elsewhere.
-  const saveStatusRef = useRef<HTMLSpanElement>(null);
+  // Scroll target for a save that did not leave pricing sendable: the
+  // guidance and the status/error text together, so the reason is visible
+  // even when save was triggered from /new's sticky CTA while scrolled
+  // elsewhere.
+  const saveFeedbackRef = useRef<HTMLDivElement>(null);
 
   // Suggestions (Phase 2 slice 4). Local state so an accepted suggestion can
   // be removed from the visible list immediately -- the only mechanism that
@@ -288,14 +295,23 @@ export const ContractorPricingEditor = forwardRef<ContractorPricingEditorHandle,
       // and is told the save failed.
       setStatus("error");
       setErrorMessage(error instanceof Error ? error.message : "Could not save pricing");
-      // Visible even when save was triggered from a sticky CTA while
-      // scrolled elsewhere (e.g. /new) -- deferred a frame so this runs
-      // after the error text above has actually painted.
-      requestAnimationFrame(() => {
-        saveStatusRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-      });
     }
   }
+
+  // Brings the save feedback into view after React has committed it, so the
+  // error text or the missing-items guidance is already in the DOM when the
+  // scroll runs. Keyed on status and pricing: every save attempt changes
+  // status, and a successful one also replaces pricing. block "start" keeps
+  // the feedback clear of a fixed bottom bar (/new's sticky CTA and
+  // BottomNav) instead of centring it behind one.
+  useEffect(() => {
+    if (!shouldRevealSaveFeedback(status, pricing.complete)) return;
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    saveFeedbackRef.current?.scrollIntoView({
+      behavior: prefersReducedMotion ? "auto" : "smooth",
+      block: "start",
+    });
+  }, [status, pricing]);
 
   // The one imperative surface a parent may use: exactly the same save()
   // above a Save button inside this component would call. Never a second
@@ -314,12 +330,14 @@ export const ContractorPricingEditor = forwardRef<ContractorPricingEditorHandle,
     onStateChangeRef.current?.({ status, isDirty, sendReady: pricing.complete && !isDirty });
   }, [status, isDirty, pricing.complete]);
 
-  // A pricing edit after a successful save invalidates that save's
-  // completeness everywhere Send is gated from it -- EstimateActions on
-  // /estimates/[id] (a sibling, listening for this same event) and /new's
-  // own mirrored state both react, with no second implementation. Fires
-  // only on the false -> true transition, not on every further keystroke
-  // while already dirty.
+  // A pricing edit away from the persisted state (the loaded rows, or the
+  // last save this mount) invalidates its completeness everywhere Send is
+  // gated from it -- EstimateActions on /estimates/[id] (a sibling, listening
+  // for this same event) and /new's own mirrored state both react, with no
+  // second implementation. Fires only on the false -> true transition, not on
+  // every further keystroke while already dirty. Editing back to the exact
+  // persisted values does not re-enable Send on the detail page; only a
+  // successful save does.
   useEffect(() => {
     if (!isDirty) return;
     window.dispatchEvent(new CustomEvent(PRICING_CHANGE_EVENT, { detail: { complete: false } }));
@@ -670,6 +688,11 @@ export const ContractorPricingEditor = forwardRef<ContractorPricingEditorHandle,
         </dl>
       </section>
 
+      {/* Save feedback: the guidance and the status/error text, the one
+          element a finished save scrolls into view (see the effect above).
+          Same gap-6 spacing the editor's own column uses, so wrapping them
+          changes nothing on screen. */}
+      <div ref={saveFeedbackRef} className="flex flex-col gap-6 scroll-mt-6">
       {guidance.kind !== "none" && (
         <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
           {guidance.kind === "missing-items" ? (
@@ -706,10 +729,11 @@ export const ContractorPricingEditor = forwardRef<ContractorPricingEditorHandle,
             {status === "saving" ? "Saving..." : "Save pricing"}
           </button>
         )}
-        <span ref={saveStatusRef} aria-live="polite" className="text-sm">
+        <span aria-live="polite" className="text-sm">
           {status === "saved" && <span className="text-zinc-500">Saved</span>}
           {status === "error" && <span className="text-red-600">{errorMessage}</span>}
         </span>
+      </div>
       </div>
     </div>
   );

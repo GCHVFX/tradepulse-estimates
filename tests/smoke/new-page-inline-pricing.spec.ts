@@ -477,6 +477,20 @@ test("8: a failed sticky save scrolls the same status/error element the inline p
   expect(newPage).not.toContain("saveStatusRef");
 });
 
+test("8b: /new reserves the fixed bottom overlay's measured height below the estimate, so the end of the pricing editor can scroll clear of it", () => {
+  // The overlay (Back to Description + sticky CTA + BottomNav) is about
+  // 165px plus BottomNav's 87px or more, taller than main's static pb-52
+  // (208px), so the save status/error text at the editor's end sat under it
+  // even at maximum scroll (production phone smoke on 607fc25). Structural:
+  // this harness cannot lay out a page.
+  const newPage = code("app/new/page.tsx");
+  expect(newPage).toContain('<div ref={fixedBarRef} className="fixed bottom-0 left-0 right-0">');
+  expect(newPage).toContain("new ResizeObserver(update)");
+  expect(newPage).toContain("style={fixedBarHeight !== null ? { paddingBottom: fixedBarHeight + 24 } : undefined}");
+  // Exactly one element carries the measured ref: the estimate view's overlay.
+  expect([...newPage.matchAll(/ref=\{fixedBarRef\}/g)]).toHaveLength(1);
+});
+
 test("9: /new suppresses the editor's inline Save button once the sticky CTA owns Save Pricing", () => {
   const newPage = code("app/new/page.tsx");
 

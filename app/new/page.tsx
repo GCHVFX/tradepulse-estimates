@@ -316,6 +316,25 @@ function EstimateView({
 
   const pricingReady = saved && savedEstimateId && !generating && !error && pricingLoadState === "ready" && pricingInit;
 
+  // The fixed bottom overlay (Back to Description, the sticky CTA, BottomNav)
+  // is taller than main's static pb-52 (208px): roughly 165px of CTA area
+  // plus BottomNav's 87px or more. At maximum scroll the end of the pricing
+  // editor, where the save status/error text sits, stayed under it, so no
+  // scroll could ever reveal a failed save. Measured, not guessed,
+  // the same way the detail page reserves space for its own fixed bars;
+  // pb-52 stays as the fallback before the first measurement.
+  const fixedBarRef = useRef<HTMLDivElement>(null);
+  const [fixedBarHeight, setFixedBarHeight] = useState<number | null>(null);
+  useEffect(() => {
+    const el = fixedBarRef.current;
+    if (!el) return;
+    const update = () => setFixedBarHeight(el.getBoundingClientRect().height);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   useEffect(() => {
     if (!generating) return;
 
@@ -352,7 +371,11 @@ function EstimateView({
     <div className="h-dvh bg-zinc-950 text-white flex flex-col">
       <header className="px-5 pt-10 pb-4 shrink-0" />
 
-      <main ref={estimateScrollRef} className="flex-1 min-h-0 px-5 pb-52 overflow-y-auto">
+      <main
+        ref={estimateScrollRef}
+        className="flex-1 min-h-0 px-5 pb-52 overflow-y-auto"
+        style={fixedBarHeight !== null ? { paddingBottom: fixedBarHeight + 24 } : undefined}
+      >
         {error && (
           <div className="mt-4 bg-red-950 border border-red-800 rounded-xl px-4 py-3.5 text-red-300 text-sm">
             {error}
@@ -519,7 +542,7 @@ function EstimateView({
         )}
       </main>
 
-      <div className="fixed bottom-0 left-0 right-0">
+      <div ref={fixedBarRef} className="fixed bottom-0 left-0 right-0">
         <div className="px-5 pb-6 pt-4 bg-zinc-950 border-t border-zinc-800 flex flex-col gap-3">
           {generating && !estimateStarted && (
             <div className="flex items-center justify-center gap-2 text-zinc-400 text-sm">
