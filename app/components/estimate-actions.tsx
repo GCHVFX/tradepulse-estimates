@@ -49,6 +49,11 @@ interface EstimateActionsProps {
    * whether automated SMS reminders keep going out (enforced server-side
    * in app/api/cron/payment-reminders/route.ts, not here). */
   smsOptedOut?: boolean;
+  /** True when the page is showing this estimate's contractor pricing
+   * locked, i.e. contractor_pricing AND isDelivered(estimate), as
+   * app/estimates/[id]/page.tsx already derives it. Only used to seed the
+   * action status below; never recomputed here. */
+  pricingLocked?: boolean;
 }
 
 /** The event ContractorPricingEditor dispatches whenever its resolved send
@@ -67,6 +72,22 @@ export const PRICING_CHANGE_EVENT = "estimate-total-change";
  */
 export function readPricingComplete(event: Event): boolean {
   return (event as CustomEvent<{ complete: boolean }>).detail.complete;
+}
+
+/**
+ * The status this component's actions start from. Normally the stored
+ * status. The one exception: a stored status of "draft" on an estimate whose
+ * pricing the page is already showing as locked (a delivery marker, sent_at
+ * or copied_at, is set). PATCH /api/estimates can leave that combination --
+ * a first delivery sent as copied_at alone, or status moved back to "draft"
+ * while a marker keeps it delivered -- and the draft branch would then offer
+ * Send Estimate beside locked pricing. Treating it as "sent" gives it the
+ * same actions as any other delivered estimate (Resend, Mark Job Done).
+ * Hook-free and exported so the decision itself is tested.
+ */
+export function initialActionStatus(status: string | null | undefined, pricingLocked: boolean): string {
+  const stored = status ?? "";
+  return pricingLocked && stored === "draft" ? "sent" : stored;
 }
 
 /**
@@ -120,6 +141,7 @@ export function EstimateActions({
   justSent,
   hasPhotos,
   smsOptedOut,
+  pricingLocked = false,
 }: EstimateActionsProps) {
   const router = useRouter();
   const isQuoteRequest = status === "needs_review" && source === "website_quote";
@@ -200,7 +222,7 @@ export function EstimateActions({
   const [showSendSheet, setShowSendSheet] = useState(false);
   const [showDoneSheet, setShowDoneSheet] = useState(false);
   const [doneSheetInitialPanel, setDoneSheetInitialPanel] = useState<"review-ready" | "needs-link">("review-ready");
-  const [localStatus, setLocalStatus] = useState(status ?? "");
+  const [localStatus, setLocalStatus] = useState(() => initialActionStatus(status, pricingLocked));
   const [localCustomerPhone, setLocalCustomerPhone] = useState(customerPhone ?? "");
   const [isDone, setIsDone] = useState(status === "done");
 

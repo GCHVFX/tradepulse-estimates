@@ -3,6 +3,7 @@ import { readFileSync } from "fs";
 import path from "path";
 import {
   PRICING_CHANGE_EVENT,
+  initialActionStatus,
   readPricingComplete,
   shouldShowStickyActionBar,
 } from "../../app/components/estimate-actions";
@@ -20,7 +21,7 @@ import {
 } from "../../lib/contractor-pricing-form";
 import { parseContractorPricingRequest, toCanonicalRows } from "../../lib/contractor-pricing-request";
 import { calculateContractorPricing } from "../../lib/contractor-pricing";
-import { isDelivered } from "../../lib/estimate-delivery";
+import { isDelivered, wouldNewlyDeliver, wouldNewlyUndeliver } from "../../lib/estimate-delivery";
 
 /**
  * Phase 1 slice 5C: the isZeroTotal/estimate-total-change staleness
@@ -609,4 +610,82 @@ test("after a first delivery the draft Save Pricing bar cannot coexist with Rese
   // which that branch unmounts for a delivered estimate.
   expect(code("app/components/contractor-pricing-draft-editor.tsx")).toContain('{saving ? "Saving..." : "Save Pricing"}');
   expect(page).not.toContain('"use client"');
+});
+
+// ── Draft status with a delivery marker: locked pricing never sits beside Send ──
+//
+// PATCH /api/estimates can leave status "draft" with sent_at or copied_at set
+// (the app's own UI never does). The page then shows the pricing locked, so
+// EstimateActions must not offer the draft Send Estimate beside it.
+
+test("PATCH /api/estimates can construct draft + delivery marker: copied_at alone as a first delivery, or status moved back to draft while a marker keeps it delivered", () => {
+  const draft = { status: "draft", sent_at: null, copied_at: null };
+  // (a) copied_at alone: a first delivery (so it passes the completeness gate
+  // when complete), and the route's single UPDATE writes only what was sent.
+  expect(wouldNewlyDeliver(draft, { copied_at: "2026-09-18T00:00:00Z" })).toBe(true);
+  expect(isDelivered({ ...draft, copied_at: "2026-09-18T00:00:00Z" })).toBe(true);
+  // (b) status back to draft on an estimate SMS/email delivered: not refused,
+  // because sent_at alone still makes it delivered.
+  const sent = { status: "sent", sent_at: "2026-09-18T00:00:00Z", copied_at: null };
+  expect(wouldNewlyUndeliver(sent, { status: "draft" })).toBe(false);
+  expect(isDelivered({ ...sent, status: "draft" })).toBe(true);
+
+  const route = code("app/api/estimates/route.ts");
+  expect(route).toContain('if ("status" in body && typeof body.status === "string") {');
+  expect(route).toContain('if ("copied_at" in body) {');
+  expect(route).toContain(".update(updateFields)");
+});
+
+test("the app's own delivery paths never create it: each writes its marker and status: \"sent\" in the same single update", () => {
+  const sheet = code("app/components/send-estimate-sheet.tsx");
+  const copyStart = sheet.indexOf("async function handleCopyLink() {");
+  const copy = sheet.slice(copyStart, sheet.indexOf("\n  }\n", copyStart));
+  expect(copy).toContain("copied_at: new Date().toISOString(),");
+  expect(copy).toContain('body.status = "sent";');
+  expect(copy.indexOf('body.status = "sent";')).toBeLessThan(copy.indexOf("JSON.stringify(body)"));
+
+  for (const file of ["app/api/send-sms/route.ts", "app/api/send-email/route.ts"]) {
+    const route = code(file);
+    const update = route.slice(route.indexOf(".update({"), route.indexOf("})", route.indexOf(".update({")));
+    expect(update, file).toContain('status: "sent",');
+    expect(update, file).toContain("sent_at: new Date().toISOString(),");
+  }
+});
+
+test("initialActionStatus: a locked draft starts as sent; everything else keeps its stored status", () => {
+  expect(initialActionStatus("draft", true)).toBe("sent");
+  expect(initialActionStatus("draft", false)).toBe("draft");
+  expect(initialActionStatus("sent", true)).toBe("sent");
+  expect(initialActionStatus("done", true)).toBe("done");
+  expect(initialActionStatus("needs_review", false)).toBe("needs_review");
+  expect(initialActionStatus(null, false)).toBe("");
+  expect(initialActionStatus(undefined, true)).toBe("");
+});
+
+test("a locked draft gets the delivered actions: the bar shows the Resend branch regardless of send readiness, never the draft Send branch", () => {
+  const localStatus = initialActionStatus("draft", true);
+  // Shown even while sendBlocked (the locked editor publishes nothing).
+  expect(shouldShowStickyActionBar({ isQuoteRequest: false, isDone: false, localStatus, sendBlocked: true })).toBe(true);
+
+  const actions = code("app/components/estimate-actions.tsx");
+  expect(actions).toContain("const [localStatus, setLocalStatus] = useState(() => initialActionStatus(status, pricingLocked));");
+  // localStatus "sent" selects the Resend / Mark Job Done branch; the draft
+  // Send Estimate button is the final else of that same chain.
+  const sentBranch = actions.indexOf(') : localStatus === "sent" ? (');
+  const draftSend = actions.indexOf(">\n            Send Estimate\n          </button>");
+  expect(sentBranch).toBeGreaterThan(-1);
+  expect(draftSend).toBeGreaterThan(sentBranch);
+  expect(actions.slice(sentBranch, draftSend)).toContain("Resend Estimate");
+});
+
+test("the page passes the same lock it shows: pricingLocked is contractor_pricing AND isDelivered(estimate), the exact condition that renders the locked editor", () => {
+  const page = code("app/estimates/[id]/page.tsx");
+  expect(page).toContain("pricingLocked={isContractorPricing && isDelivered(estimate)}");
+  // The locked editor renders only inside the contractor_pricing branch, on isDelivered.
+  const contractorBranch = page.indexOf("{isContractorPricing && contractorPricing ? (");
+  const lockedEditor = page.indexOf("{isDelivered(estimate) ? (", contractorBranch);
+  expect(contractorBranch).toBeGreaterThan(-1);
+  expect(lockedEditor).toBeGreaterThan(contractorBranch);
+  // Legacy estimates never pass a lock.
+  expect([...page.matchAll(/pricingLocked=/g)]).toHaveLength(1);
 });

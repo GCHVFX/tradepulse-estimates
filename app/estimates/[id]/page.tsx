@@ -436,6 +436,7 @@ export default async function EstimatePage({
         businessHasPaymentLink={Boolean(business?.payment_link?.trim())}
         hasPhotos={photoUrls.length > 0}
         smsOptedOut={smsOptedOut}
+        pricingLocked={isContractorPricing && isDelivered(estimate)}
       />
 
       <div className="fixed bottom-0 left-0 right-0 z-40">
