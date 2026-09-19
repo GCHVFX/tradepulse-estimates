@@ -11,6 +11,7 @@ import { ContractorPricingEditor } from "@/app/components/contractor-pricing-edi
 import { EstimateMarkdown } from "@/app/components/estimate-markdown";
 import { stripTitleHeading } from "@/lib/estimate-prose";
 import { calculateContractorPricing } from "@/lib/contractor-pricing";
+import { withReconstructionGate } from "@/lib/contractor-pricing-form";
 import { classifyEstimate } from "@/lib/estimate-classification";
 import { isDelivered } from "@/lib/estimate-delivery";
 import { contractorCustomerDocument } from "@/lib/customer-pricing";
@@ -107,21 +108,33 @@ export default async function EstimatePage({
   const googleReviewLink = business?.google_review_link ?? null;
   const isQuoteRequest = pricingClass === "website_quote_intake";
 
+  // withReconstructionGate applies the pricing editor's own "needs
+  // attention" reload check (lib/contractor-pricing-form.ts's
+  // reconstructConfirmedItems, the single definition) on top of the plain
+  // calculation: a contractor_pricing estimate whose persisted 'ea' rows
+  // cannot be reliably paired must never read as complete/sendable here
+  // either, not just refused editing inside ContractorPricingEditor. Gated
+  // on isContractorPricing the same as the calculation itself -- a
+  // 'structured'/'markdown' estimate's rows (which may legitimately hold
+  // unrelated 'ea' rows) are never passed through this invariant.
   const contractorPricing = isContractorPricing
-    ? calculateContractorPricing(
-        contractorRows.map((row) => ({
-          item_type: row.item_type,
-          unit: row.unit,
-          quantity: row.quantity,
-          unit_price: row.unit_price,
-          markup_percent: row.markup_percent,
-          taxable: row.taxable,
-        })),
-        {
-          taxRatePercent: estimate.tax_rate_snapshot,
-          depositPercent: estimate.deposit_percent_snapshot,
-          depositThresholdDollars: estimate.deposit_threshold_snapshot,
-        }
+    ? withReconstructionGate(
+        calculateContractorPricing(
+          contractorRows.map((row) => ({
+            item_type: row.item_type,
+            unit: row.unit,
+            quantity: row.quantity,
+            unit_price: row.unit_price,
+            markup_percent: row.markup_percent,
+            taxable: row.taxable,
+          })),
+          {
+            taxRatePercent: estimate.tax_rate_snapshot,
+            depositPercent: estimate.deposit_percent_snapshot,
+            depositThresholdDollars: estimate.deposit_threshold_snapshot,
+          }
+        ),
+        contractorRows
       )
     : null;
 
@@ -144,19 +157,24 @@ export default async function EstimatePage({
       : 0
     : legacyPricing?.selected.total ?? 0;
   // The authoritative send-readiness signal EstimateActions seeds its state
-  // from. For contractor pricing this is contractorDocument.ready itself
-  // (calculateContractorPricing's own `complete`, not a total-is-nonzero
-  // guess -- an explicit $0 fixed-labour job is complete and sendable).
-  // Legacy has no completeness concept of its own, so it keeps the same
-  // total-based check EstimateActions has always used for it. The
-  // `estimateTotal > 0` branch is unreachable for a contractor_pricing
-  // estimate: contractorDocument above is set to `null` exactly when
-  // `!isContractorPricing`, and contractorCustomerDocument() never returns
-  // null itself (its type is `{ ready: true, ... } | { ready: false, ... }`),
-  // so `contractorDocument` is truthy for every contractor_pricing estimate
-  // regardless of completeness, and this ternary always takes the `.ready`
-  // branch for one.
-  const estimateComplete = contractorDocument ? contractorDocument.ready : estimateTotal > 0;
+  // from. For contractor pricing this is contractorPricing.complete --
+  // calculateContractorPricing's own `complete`, additionally gated by
+  // withReconstructionGate above (not a total-is-nonzero guess -- an
+  // explicit $0 fixed-labour job is complete and sendable). Deliberately
+  // NOT contractorDocument.ready: contractorCustomerDocument() computes its
+  // own `calculateContractorPricing` independently (lib/customer-pricing.ts,
+  // customer-rendering code this fix does not touch) and has no knowledge of
+  // the reconstruction invariant, so it would still read "ready" for a
+  // malformed 'ea' pairing the editor itself refuses to interpret. Both
+  // calls read the identical persisted rows and the identical estimate
+  // snapshots, so contractorPricing.complete and contractorDocument.ready
+  // agree in every case except that one. Legacy has no completeness concept
+  // of its own, so it keeps the same total-based check EstimateActions has
+  // always used for it. The `estimateTotal > 0` branch is unreachable for a
+  // contractor_pricing estimate: contractorPricing above is set to `null`
+  // exactly when `!isContractorPricing`, the same condition contractorDocument
+  // uses, so this ternary always takes the `.complete` branch for one.
+  const estimateComplete = contractorPricing ? contractorPricing.complete : estimateTotal > 0;
 
   // Only unpaid invoiced estimates need this check -- opting out doesn't
   // matter for an estimate that was never invoiced or is already paid, and

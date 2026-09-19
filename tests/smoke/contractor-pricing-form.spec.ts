@@ -18,6 +18,7 @@ import {
   toPricingRequestPayload,
   updateCharge,
   updateConfirmedItem,
+  withReconstructionGate,
   type BusinessPricingDefaults,
   type ContractorPricingRowInput,
 } from "../../lib/contractor-pricing-form";
@@ -1445,4 +1446,187 @@ test("37: a non-taxable confirmed item excludes both its labour and material amo
 
   expect(pricing.subtotalCents).toBe(37500); // 325 + 50 = 375.00
   expect(pricing.taxCents).toBe(0); // excluded from tax entirely
+});
+
+// ── Pre-push follow-up: the "needs attention" gate reaches every delivery
+// surface, not just the editor (withReconstructionGate) ─────────────────────
+//
+// reconstructConfirmedItems() already refuses to interpret malformed
+// persisted 'ea' rows and puts the client editor into pricingAttentionNeeded
+// -- but app/estimates/[id]/page.tsx independently computed its own
+// completeness/total from the same raw rows via calculateContractorPricing,
+// which has no knowledge of that invariant, so a malformed estimate could
+// still look complete and be sendable. withReconstructionGate() is the one
+// shared function that closes that gap: lib/estimate-pricing-server.ts's
+// contractorPricingCompleteness() (used by all three server delivery
+// routes) and app/estimates/[id]/page.tsx's own SSR completeness
+// computation both call it now, never a second reimplementation.
+//
+// Deliberately kept in this plain module, not lib/estimate-pricing-
+// server.ts, specifically so it can be unit-tested here: that file is
+// `import "server-only"`, which throws when imported outside Next's own
+// bundler (confirmed directly: `Cannot find module 'server-only'` under
+// Playwright's plain Node module resolution), so nothing defined there can
+// be exercised by a spec in this suite.
+
+const DELIVERY_SNAPSHOTS = { taxRatePercent: 5, depositPercent: 10, depositThresholdDollars: 50 };
+
+test("contractor_pricing + malformed 'ea' pair (material markup != 0): not delivery-ready", () => {
+  const malformed = pairRows();
+  malformed[1] = { ...malformed[1], markup_percent: 20 };
+
+  const basePricing = calculateContractorPricing(
+    malformed.map((row) => ({
+      item_type: row.item_type,
+      unit: row.unit,
+      quantity: row.quantity,
+      unit_price: row.unit_price,
+      markup_percent: row.markup_percent,
+      taxable: row.taxable,
+    })),
+    DELIVERY_SNAPSHOTS
+  );
+  // The plain calculator has no knowledge of the pairing invariant: a
+  // labour-type row and a material-type row are present, so it reports
+  // complete on its own -- this is the exact gap the gate closes.
+  expect(basePricing.complete).toBe(true);
+
+  const gated = withReconstructionGate(basePricing, malformed);
+  expect(gated.complete).toBe(false);
+});
+
+test("contractor_pricing + valid saved-item pair: delivery-ready", () => {
+  const valid = pairRows();
+  const basePricing = calculateContractorPricing(
+    valid.map((row) => ({
+      item_type: row.item_type,
+      unit: row.unit,
+      quantity: row.quantity,
+      unit_price: row.unit_price,
+      markup_percent: row.markup_percent,
+      taxable: row.taxable,
+    })),
+    DELIVERY_SNAPSHOTS
+  );
+  expect(basePricing.complete).toBe(true);
+
+  const gated = withReconstructionGate(basePricing, valid);
+  expect(gated.complete).toBe(true);
+  expect(gated).toEqual(basePricing); // unchanged object shape, not just the flag
+});
+
+test("contractor_pricing + valid generic Labour/Materials with charges and tax: delivery-ready", () => {
+  const genericRows: ContractorPricingRowInput[] = [
+    HOURLY_ROW,
+    MATERIALS_ROW,
+    row({ item_type: "other", description: "Permit", unit: null, unit_price: 150, markup_percent: null, display_order: 2 }),
+  ];
+  const basePricing = calculateContractorPricing(
+    genericRows.map((r) => ({
+      item_type: r.item_type,
+      unit: r.unit,
+      quantity: r.quantity,
+      unit_price: r.unit_price,
+      markup_percent: r.markup_percent,
+      taxable: r.taxable,
+    })),
+    DELIVERY_SNAPSHOTS
+  );
+  expect(basePricing.complete).toBe(true);
+
+  const gated = withReconstructionGate(basePricing, genericRows);
+  expect(gated.complete).toBe(true);
+});
+
+test("structured + 'ea' rows with item_type 'other' and markup_percent null (real production shape): the gate is never reached, and would misfire if it were", () => {
+  // The exact shape the production trace found: 23 rows across 7 structured
+  // estimates, unit='ea', item_type='other', markup_percent NULL. Proven
+  // here as a fact about this function (it is not this invariant's shape at
+  // all -- item_type 'other' can never satisfy the labour/material pairing
+  // check), to justify why every call site below must classify first.
+  const structuredEaRows: ContractorPricingRowInput[] = [
+    row({ item_type: "other", unit: "ea", quantity: 1, unit_price: 50, markup_percent: null, description: "Add-on", display_order: 0 }),
+  ];
+  expect(reconstructConfirmedItems(structuredEaRows)).toEqual({ ok: false });
+
+  // Every real call site classifies pricing_source first and only calls
+  // withReconstructionGate for 'contractor_pricing' -- so this shape, which
+  // only ever occurs on 'structured' estimates per the verified production
+  // read, is never actually passed to it.
+  const server = readFileSync("lib/estimate-pricing-server.ts", "utf8");
+  const completenessStart = server.indexOf("export async function contractorPricingCompleteness(");
+  expect(completenessStart).toBeGreaterThan(-1);
+  expect(server.slice(completenessStart)).toContain("withReconstructionGate(pricing, rows)");
+
+  for (const routePath of ["app/api/send-sms/route.ts", "app/api/send-email/route.ts", "app/api/estimates/route.ts"]) {
+    const route = readFileSync(routePath, "utf8");
+    expect(route).toContain("classifyEstimate(");
+    expect(route).toContain("contractorPricingCompleteness(");
+    // Classification runs before the completeness call reaches it -- the
+    // completeness call must be textually inside the contractor_pricing
+    // branch, not a plain top-level call.
+    const classifyIndex = route.indexOf('=== "contractor_pricing"');
+    const completenessIndex = route.indexOf("contractorPricingCompleteness(", classifyIndex);
+    expect(classifyIndex, `${routePath} classifies before completeness`).toBeGreaterThan(-1);
+    expect(completenessIndex, `${routePath} calls completeness after classification`).toBeGreaterThan(classifyIndex);
+  }
+
+  const page = readFileSync("app/estimates/[id]/page.tsx", "utf8");
+  expect(page).toContain("import { withReconstructionGate } from \"@/lib/contractor-pricing-form\";");
+  const gateCallIndex = page.indexOf("withReconstructionGate(");
+  const isContractorPricingTernary = page.indexOf("const contractorPricing = isContractorPricing");
+  expect(isContractorPricingTernary).toBeGreaterThan(-1);
+  expect(gateCallIndex).toBeGreaterThan(isContractorPricingTernary);
+  expect(gateCallIndex).toBeLessThan(page.indexOf(": null;", isContractorPricingTernary));
+});
+
+test("already-delivered estimate: readiness is unchanged (no 'ea' rows means the gate is a no-op, exactly today's behaviour)", () => {
+  // Per the verified production read, zero contractor_pricing estimates
+  // currently have any 'ea' rows -- this proves that fact holds structurally
+  // for the ordinary delivered shape (generic labour/materials, no saved
+  // items), not just as an observation about today's data.
+  const deliveredRows: ContractorPricingRowInput[] = [HOURLY_ROW, MATERIALS_ROW];
+  const basePricing = calculateContractorPricing(
+    deliveredRows.map((r) => ({
+      item_type: r.item_type,
+      unit: r.unit,
+      quantity: r.quantity,
+      unit_price: r.unit_price,
+      markup_percent: r.markup_percent,
+      taxable: r.taxable,
+    })),
+    DELIVERY_SNAPSHOTS
+  );
+
+  const gated = withReconstructionGate(basePricing, deliveredRows);
+  expect(gated).toEqual(basePricing);
+
+  // The resend path (already delivered) still calls the exact same shared
+  // completeness check as first delivery -- not a second, delivered-only
+  // code path that could disagree with it.
+  const sendSms = readFileSync("app/api/send-sms/route.ts", "utf8");
+  expect(sendSms).not.toContain("isDelivered(estimate)) {\n    return");
+  const completenessCallIndex = sendSms.indexOf("contractorPricingCompleteness(");
+  expect(completenessCallIndex).toBeGreaterThan(-1);
+});
+
+test("app/estimates/[id]/page.tsx's estimateComplete now binds to the gated contractorPricing, not the ungated contractorDocument.ready", () => {
+  const page = readFileSync("app/estimates/[id]/page.tsx", "utf8");
+
+  expect(page).toContain(
+    "const estimateComplete = contractorPricing ? contractorPricing.complete : estimateTotal > 0;"
+  );
+  expect(page).not.toContain(
+    "const estimateComplete = contractorDocument ? contractorDocument.ready : estimateTotal > 0;"
+  );
+
+  // Customer rendering (the document, PDF and total shown) is untouched:
+  // customerSummary and estimateTotal still bind to contractorDocument
+  // exactly as before -- only the send-readiness signal moved.
+  expect(page).toContain(
+    'const customerSummary = contractorDocument\n    ? contractorDocument.ready\n      ? contractorDocument.document'
+  );
+  expect(page).toContain(
+    'const estimateTotal = contractorDocument\n    ? contractorDocument.ready\n      ? contractorDocument.totalCents / 100'
+  );
 });

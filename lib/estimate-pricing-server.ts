@@ -3,6 +3,7 @@ import "server-only";
 import type { Database } from "./database.types";
 import { estimateCurrencyOf } from "./currency-db";
 import { calculateContractorPricing, type ContractorPricing } from "./contractor-pricing";
+import { withReconstructionGate } from "./contractor-pricing-form";
 import type { EstimateTax } from "./estimate-tax";
 import { isGroupedPricingEnabled } from "./estimate-groups";
 import {
@@ -142,7 +143,7 @@ export async function contractorPricingCompleteness(
   snapshots: ContractorPricingSnapshotSource
 ): Promise<ContractorPricing> {
   const rows = await loadContractorPricingRows(estimateId);
-  return calculateContractorPricing(
+  const pricing = calculateContractorPricing(
     rows.map((row) => ({
       item_type: row.item_type,
       unit: row.unit,
@@ -157,6 +158,7 @@ export async function contractorPricingCompleteness(
       depositThresholdDollars: snapshots.deposit_threshold_snapshot,
     }
   );
+  return withReconstructionGate(pricing, rows);
 }
 
 export async function loadCustomerPricingView(

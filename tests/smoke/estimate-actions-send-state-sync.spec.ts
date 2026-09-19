@@ -188,21 +188,29 @@ test("the missing-inputs guidance is not duplicated: it exists exactly once, inl
   expect(editor).not.toMatch(/className="[^"]*\bfixed\b/);
 });
 
-test("the estimate detail page computes estimateComplete from the same authority the share page uses, not a total guess", () => {
+test("the estimate detail page computes estimateComplete from the gated contractorPricing, not a total guess", () => {
   const page = code("app/estimates/[id]/page.tsx");
 
   const totalIndex = page.indexOf("const estimateTotal = contractorDocument");
-  const completeIndex = page.indexOf("const estimateComplete = contractorDocument");
+  const completeIndex = page.indexOf("const estimateComplete = contractorPricing");
   expect(totalIndex).toBeGreaterThan(-1);
   expect(completeIndex).toBeGreaterThan(totalIndex);
-  expect(page).toContain("const estimateComplete = contractorDocument ? contractorDocument.ready : estimateTotal > 0;");
+  expect(page).toContain("const estimateComplete = contractorPricing ? contractorPricing.complete : estimateTotal > 0;");
   expect(page).toContain("estimateComplete={estimateComplete}");
 
-  // contractorDocument.ready is itself sourced from
-  // calculateContractorPricing's `complete` (lib/customer-pricing.ts's
-  // toCustomerPricing: `ready: pricing.complete && ...`), not recomputed
-  // here -- this page never imports calculateContractorPricing's `missing`
-  // or `complete` fields directly for this purpose.
+  // Pre-push follow-up (post-350b248): estimateComplete now deliberately
+  // reads contractorPricing.complete, not contractorDocument.ready --
+  // contractorPricing is additionally passed through withReconstructionGate
+  // (lib/contractor-pricing-form.ts), which contractorDocument's own
+  // independent calculateContractorPricing call inside
+  // contractorCustomerDocument() has no knowledge of. Both read the
+  // identical rows and snapshots and agree in every case except a malformed
+  // 'ea' pairing, where contractorPricing.complete is correctly false and
+  // contractorDocument.ready is not.
+  expect(page).toContain("const contractorPricing = isContractorPricing\n    ? withReconstructionGate(");
+  expect(page).not.toContain("const estimateComplete = contractorDocument ? contractorDocument.ready : estimateTotal > 0;");
+
+  // Still not recomputed from `.missing` directly at this call site.
   expect(page).not.toMatch(/estimateComplete[^;]*\.missing/);
 });
 
@@ -228,8 +236,9 @@ test("the estimateTotal>0 fallback in estimateComplete is unreachable for a cont
 
 test("legacy's send-gating is unchanged: still total > 0, no completeness concept introduced for it", () => {
   const page = code("app/estimates/[id]/page.tsx");
-  // For a legacy estimate contractorDocument is null, so the ternary's
-  // false branch -- estimateTotal > 0 -- is exactly the same check
-  // EstimateActions used to compute inline as isZeroTotal.
-  expect(page).toContain("contractorDocument ? contractorDocument.ready : estimateTotal > 0");
+  // For a legacy estimate contractorPricing is null (set together with
+  // contractorDocument, both exactly when isContractorPricing), so the
+  // ternary's false branch -- estimateTotal > 0 -- is exactly the same
+  // check EstimateActions used to compute inline as isZeroTotal.
+  expect(page).toContain("contractorPricing ? contractorPricing.complete : estimateTotal > 0");
 });

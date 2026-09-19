@@ -186,8 +186,22 @@ export function reconstructConfirmedItems(
     // tpe_pricebook_items.material_price is already a final selling price.
     // Anything else here (null, NaN, or a real markup) is not a row this
     // feature wrote, so it is not a valid pair, not a value to silently
-    // zero out. `!== 0` alone also catches NaN, which is never `=== 0`.
-    if (materialRow.markup_percent !== 0) return { ok: false };
+    // zero out.
+    //
+    // Compared defensively against both a JS number 0 and the numeric
+    // string "0": ContractorPricingRowInput declares markup_percent as
+    // `number | null`, matching the generated Supabase schema type for this
+    // `numeric` column, but that generated type describes the declared
+    // Postgres column type, not a runtime guarantee about what the
+    // supabase-js/PostgREST JSON response actually deserializes it as for
+    // every caller of this pure function -- this module has no network
+    // layer of its own to verify that against. A plain `!== 0` would
+    // wrongly flag every legitimate saved-item material row as malformed if
+    // it ever arrives as the string "0" instead of the number 0. `null` is
+    // deliberately NOT included as an accepted value: unlike the numeric
+    // string case, a missing value is never coerced into a valid zero.
+    const materialMarkup: unknown = materialRow.markup_percent;
+    if (materialMarkup !== 0 && materialMarkup !== "0") return { ok: false };
 
     items.push({
       id: nextLineItemId(),
@@ -200,6 +214,38 @@ export function reconstructConfirmedItems(
   }
 
   return { ok: true, items };
+}
+
+/**
+ * Applies this same reconstruction result to an already-computed
+ * completeness/pricing result -- the single definition of "needs attention"
+ * used both by this editor (via pricingAttentionNeeded, above) and by every
+ * server-side delivery/completeness check (lib/estimate-pricing-server.ts's
+ * contractorPricingCompleteness() and app/estimates/[id]/page.tsx's own
+ * SSR completeness computation). A contractor_pricing estimate whose
+ * persisted 'ea' rows cannot be reliably paired into confirmed items must
+ * never be reported complete or sendable anywhere, not just refused editing
+ * here.
+ *
+ * Deliberately kept in this plain module rather than lib/estimate-pricing-
+ * server.ts (which is `import "server-only"`-flagged and therefore cannot be
+ * imported into a plain unit test): this function itself does no I/O, so it
+ * belongs wherever reconstructConfirmedItems does, not wherever its callers
+ * happen to also fetch rows from.
+ *
+ * Callers must only ever call this for a `contractor_pricing` estimate --
+ * every current call site is already gated behind that classification before
+ * this runs. `rows` for a 'structured' or 'markdown' estimate may
+ * legitimately hold unrelated 'ea' rows (e.g. item_type='other',
+ * markup_percent=null) this invariant was never meant to apply to, and this
+ * function must not be called with those.
+ */
+export function withReconstructionGate(
+  pricing: ContractorPricing,
+  rows: readonly ContractorPricingRowInput[]
+): ContractorPricing {
+  if (reconstructConfirmedItems(rows).ok) return pricing;
+  return { ...pricing, complete: false };
 }
 
 /**
