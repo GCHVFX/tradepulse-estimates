@@ -1,19 +1,31 @@
 # TradePulse handoff
 
-Updated: 2026-09-18 21:00 PT.
+Updated: 2026-09-18 22:52 PT.
 
-## Phase 2 shipped state (production, current)
+## Current production and local state (2026-09-18 22:52 PT)
 
-**Production/`origin/main` is `3d05370d60d451df88d312e9aa2380c30b5d617b`.** Current production deployment:
-`dpl_6tQCKUP9L4RovihAZzg9VunYfP86` -- target production, branch `main`, commit
-`3d05370d60d451df88d312e9aa2380c30b5d617b`, state **READY**, confirmed as current production. No runtime
-errors were found after deployment. The observed `401 /api/profile` entries match the known signed-out
-baseline behaviour and are **not** a Slice 4 regression. This supersedes every earlier banner in this file
-that named `beca4999`, `51e152d`, `f0eebea`, `2990e4d`, or any other prior commit/deployment as current -- all
-of those are now stale history, not the current state.
+**Production/`origin/main` is `c36bd17720b72a5267e9c59843d6953c81720f5e`**, deployed as
+`dpl_GxRiXpXzm6THAYXAMDWnVAU84sVy` and production phone-verified (see "c36bd17 hotfix" below).
 
-**Previous known-good rollback reference:** deployment `dpl_2smDAv85tPTgeYdDkdsziqc5pM2j`, commit
-`beca4999c1a12fc003f1d02095209f9308ac2161`.
+Deployment history, newest first:
+
+| Deployment | Commit | What it shipped |
+| --- | --- | --- |
+| `dpl_GxRiXpXzm6THAYXAMDWnVAU84sVy` (current) | `c36bd17` | Failure A and B hotfix |
+| `dpl_27F41RjL3LPohh22zDnVHXPPnS22` (rollback reference) | `607fc25` | `b7ff124` + `d71ecee` sticky Save Pricing + `607fc25` HANDOFF |
+| `dpl_6tQCKUP9L4RovihAZzg9VunYfP86` | `3d05370` | Phase 2 Slice 4 |
+| `dpl_2smDAv85tPTgeYdDkdsziqc5pM2j` | `beca4999` | earlier Phase 2 state |
+
+**Next change:** implementation commit `9953a6a6c758262972a98997275a50a114a719bb` exists (single sticky
+primary action on the contractor_pricing draft detail page, see below); production verification pending. The
+HANDOFF commit recording this sits on top of it.
+
+## Phase 2 shipped state (history)
+
+Production was `3d05370d60d451df88d312e9aa2380c30b5d617b` (`dpl_6tQCKUP9L4RovihAZzg9VunYfP86`) until
+`607fc25` shipped on 2026-09-18; see the table above for what is current. At that deployment no runtime
+errors were found. The observed `401 /api/profile` entries match the known signed-out baseline behaviour and
+are **not** a Slice 4 regression.
 
 Shipped and live, in order: Phase 2 Slices 1 (`1e3618c4`, matcher), 2 (`eeea1d4b`, quantity-aware calculator),
 3A (`c3c8fe55`, confirmed line-item request contract) and 3B (`2b9ab3ce`, taxable rows) -- see "Phase 2
@@ -244,11 +256,120 @@ Future hard stops should be worded: "Do not implement. Return findings only."
   Slice 4; fix separately with a tiny isolated commit.
 - 14 June/July orphan Storage objects remain a separate follow-up.
 
-## Sticky Save Pricing CTA and dirty-after-save fix (local only, not pushed or deployed)
+## Single sticky primary action on the draft detail page (implementation commit exists; production verification pending)
 
-Commit `d71ecee6b55738f0dbdb466d59546429f72f8721` on top of `b7ff1243caef93328db02dec37b8329dccd97385`, which
-is itself on top of the pushed/deployed Slice 4 stack. `origin/main` is still `3d05370d60d451df88d312e9aa2380c30b5d617b`.
-Local `main` is currently 2 commits ahead of `origin/main`.
+Implementation commit `9953a6a6c758262972a98997275a50a114a719bb` exists (parent `c36bd17`); production
+verification pending.
+
+**Problem.** An undelivered contractor_pricing draft on `/estimates/[id]` showed two orange primary actions
+at once: the editor's inline Save pricing and `EstimateActions`' sticky Send Estimate.
+
+**Now:** exactly one sticky primary action, the same pattern as `/new`:
+
+| Pricing state | Sticky primary action |
+| --- | --- |
+| clean + complete (as reopened, or after a complete save) | Send Estimate (`EstimateActions`) |
+| dirty (first substantive edit onward) | Save Pricing |
+| saving | Save Pricing, disabled, "Saving..." |
+| saved but incomplete / never priced | Save Pricing |
+| failed save | Save Pricing (existing feedback reveal) |
+| edited back to exactly the persisted values | Send Estimate |
+
+**Wiring.** `app/estimates/[id]/page.tsx` is a server component, so it cannot hand the editor's ref to a
+sibling. The new client `ContractorPricingDraftEditor` (`app/components/contractor-pricing-draft-editor.tsx`)
+is used only for an undelivered contractor_pricing draft. It owns the editor ref, renders
+`ContractorPricingEditor` with `hideInlineSaveButton`, stores only the `onStateChange` projection, and its
+Save Pricing bar awaits the editor's own `save()` (handle type is now `() => Promise<void>`). No save-request
+event exists. A delivered estimate still renders the plain editor with its inline Save, unchanged. The Save
+bar publishes `--tp-pricing-action-bar-height`, and the page's bottom padding adds it to
+`--tp-estimate-action-bar-height` (the two bars never show together).
+
+**Send readiness: one definition, one publisher.** `isPricingSendReady()` in `lib/contractor-pricing-form.ts`
+(persisted complete AND not dirty AND not saving) is the editor's `sendReady`. An editor effect dispatches
+`PRICING_CHANGE_EVENT {complete: sendReady}` whenever it changes, in both directions, and not on mount.
+`save()` no longer dispatches the server's `complete` itself: that direct dispatch re-enabled Send over edits
+typed while a save was in flight (found while tracing this task).
+
+**Delivery entry point audit (`/estimates/[id]`, undelivered draft).** Every control that can reach
+`PATCH /api/estimates` delivery, `POST /api/send-sms` or `POST /api/send-email` sits inside `EstimateActions`'
+sticky bar (`{showStickyActionBar && (`), whose draft branch is hidden while `sendBlocked`:
+- Send Estimate (`estimate-actions.tsx`, draft branch) opens `SendEstimateSheet`: Copy Link (PATCH
+  `copied_at` + `status: "sent"`), SMS (`/api/send-sms`), Email (`/api/send-email`).
+- Resend Estimate and Mark Job Done (PATCH `status: "done"`) render only once `localStatus` is `sent`.
+- Email Customer (SMS opt-out banner) renders only with an unpaid invoice, which a draft cannot have in normal
+  use.
+- Before `c36bd17`, Send was reachable on a reopened draft while dirty (Failure B); before this commit, also
+  briefly while a save from a dirty state was in flight if the contractor kept typing. The server gates are
+  unchanged and still refuse incomplete pricing.
+
+**Customer preview / PDF when dirty (report only, not changed).** The detail page has no customer preview or
+PDF control: `SendEstimateSheet` imports `generateEstimatePDF` but never calls it, and its `summary` prop is
+unused. What the customer receives is the share link, whose page and PDF are built server-side from the
+persisted rows (`app/share/[id]/page.tsx`, `loadContractorPricingRows` + `contractorCustomerDocument`). So
+customer-facing output is always the persisted saved pricing, never the unsaved draft. The only draft figures
+are the editor's own on-page totals, shown to the contractor.
+
+**Known residual, not changed.** After Copy Link on the detail page, `EstimateActions` shows Resend but the
+page is not refreshed, so the editor still treats the estimate as an undelivered draft until reload. Editing
+then would show Save Pricing behind the Resend bar; the server refuses that save (delivered lock), and Resend
+re-sends the persisted, already-delivered pricing.
+
+**Tests (safe, unit config only).** `estimate-actions-send-state-sync.spec.ts` drives the whole draft
+lifecycle through the real editor and `EstimateActions` functions with a real `EventTarget`: one primary
+action at every step, a clean incomplete draft opening on Save Pricing, typing during a save, reverting to
+persisted values, a saved-item estimate, the delivery-entry-point audit, and the wrapper's wiring.
+`contractor-pricing-form.spec.ts` and `estimate-action-bar-safe-area-spacing.spec.ts` pins were updated to
+the new wiring. Two `/new` tests in `generation-contractor-pricing.spec.ts` were re-anchored: `c36bd17`'s
+`fixedBarRef` on `/new`'s overlay broke their source anchor (test-only; `/new` behaviour unchanged, and that
+spec was not in `c36bd17`'s focused run). No DOM or React renderer exists in the safe harness, so React
+wiring and layout are pinned from source.
+
+**Verification run for `9953a6a`:** 11 specs in `playwright.unit.config.ts` -- 307 passed, 0 skipped,
+1 failed (the known `unit-suite-completeness` guard naming only `nav-wordmark-no-crowding`,
+`trade-tabs-mobile-overflow`, `trade-tabs-scroll-affordance`). `npx tsc --noEmit` clean. `eslint` on the 9
+changed files: 1 error, the pre-existing `<a>` to `/estimates` at `app/estimates/[id]/page.tsx:201`
+(present at `c36bd17`). `git diff --check` clean. `npm run build` not run yet; it belongs in the push gate.
+
+**Phone verification needed after deploy:** reopen a complete draft (Send only); edit (Save Pricing only, no
+Send); Save complete (Send returns); save incomplete (Save Pricing); a failed save (Save Pricing, feedback in
+view); delivered estimate still shows inline Save and Resend; `/new` Add Pricing -> Save Pricing -> Continue
+to Send unchanged.
+
+## c36bd17 hotfix: Failure A and Failure B (shipped, production-verified)
+
+`c36bd17720b72a5267e9c59843d6953c81720f5e` (parent `607fc25`) shipped as `dpl_GxRiXpXzm6THAYXAMDWnVAU84sVy`.
+Both defects were found by the real-phone smoke of `607fc25`.
+
+**Failure A: incomplete Save feedback did not come into view on `/new`.**
+- An incomplete Save is not an error: blank labour/materials serialize to `null`, the route accepts them, and
+  it returns 200 with `complete: false`. The old scroll (in `save()`'s `catch`, via `requestAnimationFrame`)
+  only ran on the error path, so the common case never scrolled.
+- `/new`'s scroll area had `pb-52` (208px) bottom padding, smaller than the fixed overlay (about 165px of CTA
+  area plus BottomNav's 87px or more), so the end of the editor stayed under it even at maximum scroll.
+- Fix: a post-commit effect keyed on `[status, pricing]` reveals the guidance plus status/error block
+  (`shouldRevealSaveFeedback`) for a failed or incomplete save; `/new` reserves the overlay's measured height.
+- Production phone verification passed: incomplete Save feedback scrolls into view, and typing afterward does
+  not repeatedly jump.
+
+**Failure B: Send stayed visible over unsaved pricing on a reopened estimate.**
+- Pre-existing before `d71ecee` (at `3d05370` the editor had no dirty tracking at all); `d71ecee` only covered
+  edits made after a save in the same mount.
+- The reopened editor initialized `lastSavedSnapshot` as `null`, and `hasUnsavedPricingChanges(form, null)`
+  is always false, so the dirty false -> true transition never occurred and `{complete: false}` was never
+  dispatched. Send could stay visible while the screen showed unsaved prices, and Send would deliver the old
+  persisted pricing.
+- Fix: `initContractorPricingEditorState()` makes the loaded rows' snapshot the baseline.
+- Production phone verification confirmed Send disappears immediately after an edit and returns after a
+  successful re-save. (No saved-item `ea` rows remain in production; the smoke used generic labour/material
+  pricing.)
+
+## Sticky Save Pricing CTA and dirty-after-save fix (shipped in `607fc25`)
+
+Commit `d71ecee6b55738f0dbdb466d59546429f72f8721` on top of `b7ff1243caef93328db02dec37b8329dccd97385`. It is no
+longer local: it shipped to production as part of `607fc25652296a81fbe142917132abf3db957d98`
+(`dpl_27F41RjL3LPohh22zDnVHXPPnS22`), and its two follow-up defects were fixed by `c36bd17` (see above).
+Statements below about `/estimates/[id]` keeping its inline Save and about the `PRICING_CHANGE_EVENT` source
+are superseded by `9953a6a` (see the section at the top).
 
 ### Sticky pricing CTA
 
@@ -298,23 +419,7 @@ Local `main` is currently 2 commits ahead of `origin/main`.
   `<FormView>` and `<EstimateView>`), so the pricing-entry CTA state (`pricingEntered`, and the editor's own
   local state) resets naturally to Add Pricing with no explicit reset code required.
 
-### Production status
-
-- This CTA and dirty-after-save fix has **not** been deployed or phone-verified yet. Treat it as local only,
-  awaiting push, deploy, and a real-phone production smoke test. Do not claim it as shipped or verified in
-  production until that smoke test has actually run.
-
-### Pre-push smoke still required (real phone, after deployment)
-
-1. Add Pricing -> Save Pricing appears.
-2. Tap Save with incomplete pricing -> error scrolls into view.
-3. Enter valid pricing -> Save -> Send appears.
-4. Edit a price -> Send disappears and Save Pricing returns.
-5. Save again -> Send returns.
-6. Back to Description -> Add Pricing returns.
-7. `/estimates/[id]` still retains and successfully uses its inline Save action.
-
-### Verification actually run (local, before this commit)
+### Verification actually run (local, before `d71ecee` was committed)
 
 - `npx playwright test --config=playwright.unit.config.ts tests/smoke/new-page-inline-pricing.spec.ts
   tests/smoke/contractor-pricing-form.spec.ts` -- 120 passed (29 + 91).
