@@ -639,3 +639,30 @@ export function centsToDollars(cents: number): number {
 export function shouldScrollToPricing(hash: string | undefined): boolean {
   return hash === "#pricing";
 }
+
+/**
+ * A stable snapshot of every field that matters for detecting unsaved
+ * changes -- everything except `taxEdited`. `taxEdited` is a meta flag that
+ * `save()` itself resets to `false` immediately after every successful save
+ * (see that function's own comment: "tax is no longer a pending edit"), so
+ * including it here would make the very next render after a successful tax
+ * edit read as "changed" even though no field value actually moved.
+ */
+export function formSnapshot(state: ContractorPricingFormState): string {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- deliberately discarded below
+  const { taxEdited, ...rest } = state;
+  return JSON.stringify(rest);
+}
+
+/**
+ * Whether the draft has changed since `savedSnapshot` was taken. `null`
+ * (nothing has been saved yet this mount) is never dirty -- "unsaved changes"
+ * only means something once there is an actual save to compare against.
+ */
+export function hasUnsavedPricingChanges(
+  state: ContractorPricingFormState,
+  savedSnapshot: string | null
+): boolean {
+  if (savedSnapshot === null) return false;
+  return formSnapshot(state) !== savedSnapshot;
+}

@@ -45,7 +45,11 @@ test("the healthy Add Pricing path never navigates; #pricing exists only in the 
 test("/new renders the existing ContractorPricingEditor, not a second pricing implementation", () => {
   const newPage = code("app/new/page.tsx");
 
-  expect(newPage).toContain('import { ContractorPricingEditor } from "@/app/components/contractor-pricing-editor";');
+  // Multi-line since the sticky CTA follow-up also imports the handle/state
+  // types from the same module -- still the one existing component, not a
+  // second implementation.
+  expect(newPage).toContain("ContractorPricingEditor,");
+  expect(newPage).toContain('} from "@/app/components/contractor-pricing-editor";');
   expect(newPage).toContain("<ContractorPricingEditor");
 
   // Gated on the estimate being saved and the authoritative fetch having
@@ -133,7 +137,7 @@ test("stale-response protection: a cancelled flag prevents an old estimate's res
   // one applies. That is unverified by any automated test here.
 });
 
-test("pricingComplete initializes from the persisted GET response, and updates again only via the reused PRICING_CHANGE_EVENT authority", () => {
+test("pricingComplete initializes from the persisted GET response, and updates again only via the editor's own mirrored sendReady", () => {
   const newPage = code("app/new/page.tsx");
 
   // Initialized from the fetch itself -- an existing/regenerated estimate
@@ -141,11 +145,14 @@ test("pricingComplete initializes from the persisted GET response, and updates a
   // not wait for another Save.
   expect(newPage).toContain("setPricingComplete(d.pricing.complete);");
 
-  expect(newPage).toContain(
-    'import { PRICING_CHANGE_EVENT, readPricingComplete } from "@/app/components/estimate-actions";'
-  );
-  expect(newPage).toContain("setPricingComplete(readPricingComplete(e));");
-  expect(newPage).toContain("window.addEventListener(PRICING_CHANGE_EVENT, handlePricingChange);");
+  // Sticky-CTA follow-up: /new no longer listens for the PRICING_CHANGE_EVENT
+  // window event itself (EstimateActions on /estimates/[id] still does --
+  // unchanged there). /new is a direct parent of ContractorPricingEditor, so
+  // it reads sendReady straight from the editor's onStateChange callback via
+  // EstimateView instead, never a second completeness definition.
+  expect(newPage).not.toContain("PRICING_CHANGE_EVENT");
+  expect(newPage).not.toContain("readPricingComplete");
+  expect(newPage).toContain("onPricingCompleteChange={setPricingComplete}");
 
   // No second completeness definition: /new never reads a draft/preview
   // pricing object's own .missing/.complete to decide Continue to Send.
@@ -206,7 +213,7 @@ test("the detail page's own #pricing mount/hash fallback (ec57bcb) remains insta
   expect(scrollCall).not.toContain("prefers-reduced-motion");
 });
 
-test("the sticky primary action has exactly six mutually exclusive states, never two at once", () => {
+test("the sticky primary action has exactly seven mutually exclusive states, never two at once", () => {
   const newPage = code("app/new/page.tsx");
 
   const stickyBarStart = newPage.indexOf("{!saved || !savedEstimateId ? (");
@@ -226,21 +233,28 @@ test("the sticky primary action has exactly six mutually exclusive states, never
   // Legacy or delivered -> a plain View Estimate link, no pricing action.
   expect(stickyBar).toContain('pricingLoadState === "legacy" || pricingLoadState === "delivered" ? (');
   expect(stickyBar).toContain("View Estimate");
-  // Complete -> Continue to Send, to the plain detail-page URL, no hash.
+  // sendReady (saved, complete, not dirty since) -> Continue to Send, to the
+  // plain detail-page URL, no hash.
   expect(stickyBar).toContain("pricingComplete ? (");
   expect(stickyBar).toContain("Continue to Send");
   expect(stickyBar).toContain("href={`/estimates/${savedEstimateId}`}");
-  // Otherwise (ready, incomplete) -> same-page scroll.
+  // Entered but not yet sendReady -> sticky Save Pricing, invoking the
+  // editor's own save() through its imperative handle.
+  expect(stickyBar).toContain("pricingEntered ? (");
+  expect(stickyBar).toContain("onClick={handleStickySavePricing}");
+  expect(stickyBar).toContain("Save Pricing");
+  // Otherwise (ready, not yet entered) -> same-page scroll.
   expect(stickyBar).toContain("onClick={scrollToPricing}");
 
-  // Exactly six ternary branch points chaining the six mutually exclusive
-  // states together as one single expression, never two independent
-  // conditions that could both render at once.
+  // Exactly seven ternary branch points chaining the seven mutually
+  // exclusive states together as one single expression, never two
+  // independent conditions that could both render at once.
   expect(stickyBar).toContain('{!saved || !savedEstimateId ? (');
   expect(stickyBar).toContain(') : pricingLoadState === "loading" ? (');
   expect(stickyBar).toContain(') : pricingLoadState === "error" ? (');
   expect(stickyBar).toContain(') : pricingLoadState === "legacy" || pricingLoadState === "delivered" ? (');
   expect(stickyBar).toContain(") : pricingComplete ? (");
+  expect(stickyBar).toContain(") : pricingEntered ? (");
   expect(stickyBar).toContain(") : (");
 });
 
@@ -358,4 +372,133 @@ test("jobText is capped client-side at 1000 characters before it enters the quer
   );
   expect(newPage).toContain("encodeURIComponent(matchJobText)");
   expect(newPage).not.toContain("encodeURIComponent(generationJobText.trim())");
+});
+
+// ── Sticky Save Pricing CTA (Add Pricing -> Save Pricing -> Continue to Send) ──
+
+test("1: the sticky CTA starts as Add Pricing -- pricingEntered defaults to false", () => {
+  const newPage = code("app/new/page.tsx");
+  expect(newPage).toContain('const [pricingEntered, setPricingEntered] = useState(false);');
+});
+
+test("2: entering pricing (tapping Add Pricing / scrollToPricing) flips the sticky CTA to Save Pricing", () => {
+  const newPage = code("app/new/page.tsx");
+
+  const fnStart = newPage.indexOf("function scrollToPricing() {");
+  const fnEnd = newPage.indexOf("}", newPage.indexOf("scrollIntoView", fnStart));
+  expect(fnStart).toBeGreaterThan(-1);
+  const fn = newPage.slice(fnStart, fnEnd);
+  expect(fn).toContain("setPricingEntered(true);");
+});
+
+test("3: sticky Save invokes the editor's own save() through its imperative handle -- not a second implementation", () => {
+  const newPage = code("app/new/page.tsx");
+
+  expect(newPage).toContain(
+    "const pricingEditorRef = useRef<ContractorPricingEditorHandle>(null);"
+  );
+  expect(newPage).toContain("function handleStickySavePricing() {");
+  const fnStart = newPage.indexOf("function handleStickySavePricing() {");
+  const fnEnd = newPage.indexOf("}", fnStart);
+  expect(newPage.slice(fnStart, fnEnd)).toContain("pricingEditorRef.current?.save();");
+
+  // The ref is actually attached to the mounted editor.
+  expect(newPage).toContain("ref={pricingEditorRef}");
+});
+
+test("4 and 5: pricingComplete (send-readiness) has exactly one write path once the editor has mounted -- the mirrored onPricingCompleteChange callback -- so a complete save exposes Send and an incomplete one does not", () => {
+  const newPage = code("app/new/page.tsx");
+
+  expect(newPage).toContain("onPricingCompleteChange={setPricingComplete}");
+  expect(newPage).toContain("onPricingCompleteChange(state.sendReady);");
+  // No second, independent completeness computation on this page: /new
+  // never imports the pure dirty-tracking helpers itself -- the editor
+  // already resolved sendReady = pricing.complete && !isDirty before this
+  // page ever sees it (the one legitimate `d.pricing.complete` read below is
+  // the fetch's own initial value, from before anything could be dirty, not
+  // a second combination of complete and dirty on this page).
+  expect(newPage).not.toContain("hasUnsavedPricingChanges");
+  expect(newPage).not.toContain("formSnapshot");
+  expect(newPage).toContain("setPricingComplete(d.pricing.complete);");
+});
+
+test("6: any pricing edit after a successful save clears pricingComplete and returns the sticky CTA to Save Pricing", () => {
+  const newPage = code("app/new/page.tsx");
+
+  // handlePricingEditorStateChange is the only place pricingComplete
+  // changes post-mount, and it is called on every reported state change
+  // (including isDirty flipping true), forwarding the editor's own
+  // sendReady = pricing.complete && !isDirty untouched.
+  expect(newPage).toContain(
+    "function handlePricingEditorStateChange(state: ContractorPricingEditorState) {"
+  );
+  expect(newPage).toContain("onPricingCompleteChange(state.sendReady);");
+
+  // The editor's own dirty-detection is pure lib logic, covered directly in
+  // tests/smoke/contractor-pricing-form.spec.ts (hasUnsavedPricingChanges);
+  // this proves only that /new forwards whatever the editor reports.
+});
+
+test("7: Back to Description restores Add Pricing -- pricingEntered and editor state are local to EstimateView, which fully unmounts when the view toggles to FormView", () => {
+  const newPage = code("app/new/page.tsx");
+
+  // pricingEntered/pricingEditorState are declared inside EstimateView, not
+  // NewPageInner -- they cease to exist (and are freshly false/idle on any
+  // later remount) the moment view becomes "form", with no explicit reset
+  // needed. pricingComplete, by contrast, is declared in NewPageInner and
+  // deliberately survives (see its own prop comment).
+  const estimateViewStart = newPage.indexOf("function EstimateView({");
+  const newPageInnerStart = newPage.indexOf("function NewPageInner() {");
+  expect(estimateViewStart).toBeGreaterThan(-1);
+  expect(newPageInnerStart).toBeGreaterThan(estimateViewStart);
+  const estimateViewBody = newPage.slice(estimateViewStart, newPageInnerStart);
+  const newPageInnerBody = newPage.slice(newPageInnerStart);
+
+  expect(estimateViewBody).toContain("const [pricingEntered, setPricingEntered] = useState(false);");
+  expect(newPageInnerBody).not.toContain("pricingEntered");
+
+  // NewPageInner really does swap to a different top-level component
+  // (destroying EstimateView) rather than toggling a flag inside it.
+  expect(newPage).toContain('if (view === "estimate") {');
+  expect(newPage).toContain("<EstimateView");
+  expect(newPage).toContain("<FormView");
+});
+
+test("8: a failed sticky save scrolls the same status/error element the inline path uses -- proven once, in contractor-pricing-editor.tsx, reused by both", () => {
+  const newPage = code("app/new/page.tsx");
+  // /new adds no error-display or scroll logic of its own for a failed
+  // save: the only scrollIntoView on this page is scrollToPricing's
+  // existing Add-Pricing scroll. The editor's own save() (invoked
+  // identically by the sticky CTA and the -- now hidden -- inline button)
+  // already scrolls its own status span into view on failure
+  // (tests/smoke/contractor-pricing-form.spec.ts covers that directly).
+  const scrollCalls = [...newPage.matchAll(/scrollIntoView/g)];
+  expect(scrollCalls).toHaveLength(1);
+  expect(newPage).not.toContain("saveStatusRef");
+});
+
+test("9: /new suppresses the editor's inline Save button once the sticky CTA owns Save Pricing", () => {
+  const newPage = code("app/new/page.tsx");
+
+  // Anchored on the ref attribute rather than the "<ContractorPricingEditor"
+  // tag name: that substring also matches the unrelated generic type usage
+  // `useRef<ContractorPricingEditorHandle>`, which is not the JSX element.
+  const editorStart = newPage.indexOf("ref={pricingEditorRef}");
+  expect(editorStart, "the mounted editor's ref attribute").toBeGreaterThan(-1);
+  const editorEnd = newPage.indexOf("/>", editorStart);
+  expect(newPage.slice(editorStart, editorEnd)).toContain("hideInlineSaveButton");
+});
+
+test("11: /new never owns a competing save pending/error/dirty flag -- it only mirrors what the editor's onStateChange callback reports", () => {
+  const newPage = code("app/new/page.tsx");
+
+  expect(newPage).toContain(
+    "function handlePricingEditorStateChange(state: ContractorPricingEditorState) {"
+  );
+  // Exactly a mirror: both writes read directly off the reported `state`,
+  // nothing recomputed from separate signals.
+  expect(newPage).toContain("setPricingEditorState({ status: state.status, isDirty: state.isDirty });");
+  expect(newPage).toContain("onPricingCompleteChange(state.sendReady);");
+
+  expect(newPage).toContain("onStateChange={handlePricingEditorStateChange}");
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatCentsAsCurrency, type Currency } from "@/lib/currency";
 import type { ContractorPricing } from "@/lib/contractor-pricing";
@@ -11,7 +11,9 @@ import {
   addCharge,
   chooseLabourMethod,
   editTax,
+  formSnapshot,
   hasEnteredGenericPricing,
+  hasUnsavedPricingChanges,
   initContractorPricingForm,
   removeCharge,
   removeConfirmedItem,
@@ -26,6 +28,30 @@ import {
   type ContractorPricingRowInput,
   type EstimateTaxSnapshot,
 } from "@/lib/contractor-pricing-form";
+
+/** What save() is doing right now. Owned here; a caller never sets this. */
+export type ContractorPricingSaveStatus = "idle" | "saving" | "saved" | "error";
+
+/**
+ * The read-only projection a parent (today: /new) may mirror to decide its
+ * own sticky call-to-action. The editor computes every field itself -- a
+ * parent must never derive `sendReady` from a combination of other signals
+ * on its own, so there is exactly one place this logic lives.
+ */
+export interface ContractorPricingEditorState {
+  status: ContractorPricingSaveStatus;
+  /** True once the draft has changed since the last successful save this mount. */
+  isDirty: boolean;
+  /** Persisted pricing is complete AND nothing has been edited since that
+   * save -- the fully-resolved "safe to hand off to Send" signal. */
+  sendReady: boolean;
+}
+
+/** Imperative handle so a parent can trigger the exact same save() a Save
+ * button inside this component would -- never a second save implementation. */
+export interface ContractorPricingEditorHandle {
+  save: () => void;
+}
 
 /**
  * The contractor pricing editor (specs/contractor-owned-pricing.md sections 5
@@ -42,18 +68,7 @@ const INPUT =
   "w-full rounded-lg border border-zinc-200 px-3 py-2.5 text-base text-zinc-900 placeholder-zinc-400 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[48px]";
 const LABEL = "text-sm font-medium text-zinc-600";
 
-export function ContractorPricingEditor({
-  estimateId,
-  currency,
-  initialRows,
-  initialTax,
-  initialPricing,
-  defaults,
-  isDelivered,
-  depositPercent,
-  depositThresholdDollars,
-  suggestions: initialSuggestions,
-}: {
+export interface ContractorPricingEditorProps {
   estimateId: string;
   /** The estimate's own snapshot, never the business setting. */
   currency: Currency;
@@ -74,14 +89,57 @@ export function ContractorPricingEditor({
    * empty is the same valid "no suggestions" state either way.
    */
   suggestions?: PriceBookSuggestion[];
-}) {
+  /**
+   * A read-only projection of save status, dirty and send-readiness,
+   * reported after every change so a parent (/new) can choose its own
+   * sticky call-to-action without owning any of this state itself. Never
+   * called with a value this component has not itself computed.
+   */
+  onStateChange?: (state: ContractorPricingEditorState) => void;
+  /**
+   * /new owns a sticky Save Pricing action once the contractor has scrolled
+   * here, so this hides the otherwise-duplicate inline Save button. The
+   * status/error text beside it still renders -- this only ever hides the
+   * button. Omitted (default false) on /estimates/[id], where the inline
+   * button remains the only Save action, unchanged.
+   */
+  hideInlineSaveButton?: boolean;
+}
+
+export const ContractorPricingEditor = forwardRef<ContractorPricingEditorHandle, ContractorPricingEditorProps>(
+  function ContractorPricingEditor(
+    {
+      estimateId,
+      currency,
+      initialRows,
+      initialTax,
+      initialPricing,
+      defaults,
+      isDelivered,
+      depositPercent,
+      depositThresholdDollars,
+      suggestions: initialSuggestions,
+      onStateChange,
+      hideInlineSaveButton,
+    },
+    ref
+  ) {
   const router = useRouter();
   const [form, setForm] = useState<ContractorPricingFormState>(() =>
     initContractorPricingForm(initialRows, initialTax, defaults)
   );
   const [pricing, setPricing] = useState<ContractorPricing>(initialPricing);
-  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [status, setStatus] = useState<ContractorPricingSaveStatus>("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  // Snapshot of the draft as of the last successful save this mount; null
+  // means nothing has been saved yet. isDirty is fully derived from it, so
+  // there is nothing to reset by hand when a new save succeeds or the form
+  // changes -- see hasUnsavedPricingChanges().
+  const [lastSavedSnapshot, setLastSavedSnapshot] = useState<string | null>(null);
+  const isDirty = hasUnsavedPricingChanges(form, lastSavedSnapshot);
+  // Scroll target for a failed save, so the failure is visible even when
+  // save was triggered from a sticky CTA while scrolled elsewhere.
+  const saveStatusRef = useRef<HTMLSpanElement>(null);
 
   // Suggestions (Phase 2 slice 4). Local state so an accepted suggestion can
   // be removed from the visible list immediately -- the only mechanism that
@@ -206,6 +264,11 @@ export function ContractorPricingEditor({
       setPricing(data.pricing);
       setForm((current) => ({ ...current, taxEdited: false }));
       setStatus("saved");
+      // The draft just sent is, by definition, no longer dirty. Captured
+      // from `form` (pre-taxEdited-reset) rather than after the setForm
+      // above: formSnapshot() already excludes taxEdited, so the two are
+      // equivalent, and this avoids waiting on a second render.
+      setLastSavedSnapshot(formSnapshot(form));
 
       // EstimateActions lives as a sibling on this same page, not a parent,
       // so its Send button learns about a save through this event rather
@@ -225,8 +288,42 @@ export function ContractorPricingEditor({
       // and is told the save failed.
       setStatus("error");
       setErrorMessage(error instanceof Error ? error.message : "Could not save pricing");
+      // Visible even when save was triggered from a sticky CTA while
+      // scrolled elsewhere (e.g. /new) -- deferred a frame so this runs
+      // after the error text above has actually painted.
+      requestAnimationFrame(() => {
+        saveStatusRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
     }
   }
+
+  // The one imperative surface a parent may use: exactly the same save()
+  // above a Save button inside this component would call. Never a second
+  // save implementation.
+  useImperativeHandle(ref, () => ({ save }));
+
+  // Reports status/isDirty/sendReady to a parent after every change, via a
+  // ref so an inline arrow function passed as onStateChange does not retrigger
+  // this effect on every render. sendReady is fully resolved here (complete
+  // AND not dirty) so a parent never combines these two signals itself.
+  const onStateChangeRef = useRef(onStateChange);
+  useEffect(() => {
+    onStateChangeRef.current = onStateChange;
+  });
+  useEffect(() => {
+    onStateChangeRef.current?.({ status, isDirty, sendReady: pricing.complete && !isDirty });
+  }, [status, isDirty, pricing.complete]);
+
+  // A pricing edit after a successful save invalidates that save's
+  // completeness everywhere Send is gated from it -- EstimateActions on
+  // /estimates/[id] (a sibling, listening for this same event) and /new's
+  // own mirrored state both react, with no second implementation. Fires
+  // only on the false -> true transition, not on every further keystroke
+  // while already dirty.
+  useEffect(() => {
+    if (!isDirty) return;
+    window.dispatchEvent(new CustomEvent(PRICING_CHANGE_EVENT, { detail: { complete: false } }));
+  }, [isDirty]);
 
   // Defensive only (specs/contractor-owned-pricing.md's "defensive reload
   // rule"): persisted 'ea' rows that could not be reliably reconstructed
@@ -599,22 +696,25 @@ export function ContractorPricingEditor({
           the message where it reads best next to a full-width mobile
           button: underneath it, not beside it. */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-        <button
-          type="button"
-          onClick={save}
-          disabled={status === "saving"}
-          className="min-h-[48px] shrink-0 whitespace-nowrap rounded-xl bg-amber-500 px-5 text-base font-bold text-zinc-950 hover:bg-amber-400 disabled:opacity-50"
-        >
-          {status === "saving" ? "Saving..." : "Save pricing"}
-        </button>
-        <span aria-live="polite" className="text-sm">
+        {!hideInlineSaveButton && (
+          <button
+            type="button"
+            onClick={save}
+            disabled={status === "saving"}
+            className="min-h-[48px] shrink-0 whitespace-nowrap rounded-xl bg-amber-500 px-5 text-base font-bold text-zinc-950 hover:bg-amber-400 disabled:opacity-50"
+          >
+            {status === "saving" ? "Saving..." : "Save pricing"}
+          </button>
+        )}
+        <span ref={saveStatusRef} aria-live="polite" className="text-sm">
           {status === "saved" && <span className="text-zinc-500">Saved</span>}
           {status === "error" && <span className="text-red-600">{errorMessage}</span>}
         </span>
       </div>
     </div>
   );
-}
+  }
+);
 
 function Row({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
   return (

@@ -6,7 +6,9 @@ import {
   chooseLabourMethod,
   centsToDollars,
   editTax,
+  formSnapshot,
   hasEnteredGenericPricing,
+  hasUnsavedPricingChanges,
   initContractorPricingForm,
   missingLabels,
   reconstructConfirmedItems,
@@ -450,9 +452,15 @@ test("a long rejection message (e.g. the delivery-lock error) does not squeeze t
   // no shrink protection squeezed it into a narrow, wrapped-text shape.
   // Column below sm, row at sm+ keeps the desktop look and puts the message
   // under a full-width mobile button instead of squeezing it.
-  const containerMatch = editor.match(/<div className="flex[^"]*">\s*<button[\s\S]*?Save pricing/);
-  expect(containerMatch, "the Save pricing button's wrapping div").not.toBeNull();
-  const container = containerMatch![0];
+  // The button is now wrapped in {!hideInlineSaveButton && (...)} (Phase 2
+  // slice 4 follow-up: /new suppresses the duplicate inline button), so
+  // this anchors directly on the wrapping div's own distinctive className
+  // rather than a generic "nearest div before a button" search, which would
+  // otherwise also match the unrelated guidance box above it (its own
+  // "Save pricing to enable sending." text also contains "Save pricing").
+  const containerStart = editor.indexOf('<div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">');
+  expect(containerStart, "the Save pricing button's wrapping div").toBeGreaterThan(-1);
+  const container = editor.slice(containerStart, editor.indexOf("Save pricing", containerStart));
   expect(container).toContain("flex-col sm:flex-row");
 
   // The button itself no longer relies solely on the row layout to keep its
@@ -1629,4 +1637,106 @@ test("app/estimates/[id]/page.tsx's estimateComplete now binds to the gated cont
   expect(page).toContain(
     'const estimateTotal = contractorDocument\n    ? contractorDocument.ready\n      ? contractorDocument.totalCents / 100'
   );
+});
+
+// ── /new sticky Save Pricing CTA (dirty-after-save tracking) ───────────────
+//
+// specs behind this block: reconstructConfirmedItems and the reconstruction
+// gate are unaffected -- this is purely about the editor's own save
+// pending/error/dirty state and how /new mirrors a read-only projection of
+// it to choose its sticky call-to-action, without ever computing that
+// projection itself.
+
+function completeGst5(): ContractorPricingRowInput[] {
+  return [HOURLY_ROW, MATERIALS_ROW];
+}
+
+test("formSnapshot excludes taxEdited: an edit that only flips taxEdited from true to false is not a change", () => {
+  const before = { ...initContractorPricingForm(completeGst5(), GST_5, DEFAULTS), taxEdited: true };
+  const after = { ...before, taxEdited: false };
+  expect(formSnapshot(before)).toBe(formSnapshot(after));
+});
+
+test("formSnapshot changes when any real field changes (labour, materials, charges, tax value, confirmedItems)", () => {
+  const base = initContractorPricingForm(completeGst5(), GST_5, DEFAULTS);
+  expect(formSnapshot({ ...base, hours: "9" })).not.toBe(formSnapshot(base));
+  expect(formSnapshot({ ...base, materialsCost: "999" })).not.toBe(formSnapshot(base));
+  expect(formSnapshot(addCharge(base))).not.toBe(formSnapshot(base));
+  expect(formSnapshot({ ...base, taxRate: "13" })).not.toBe(formSnapshot(base));
+
+  const withItem = acceptSuggestedItem(initContractorPricingForm([], GST_5, DEFAULTS), {
+    description: "Kitchen faucet replacement",
+    labourUnitPrice: 325,
+    materialUnitPrice: 0,
+    taxable: true,
+  });
+  const withEditedItem = updateConfirmedItem(withItem, withItem.confirmedItems[0].id, "quantity", "2");
+  expect(formSnapshot(withEditedItem)).not.toBe(formSnapshot(withItem));
+});
+
+test("hasUnsavedPricingChanges: null snapshot (nothing saved yet) is never dirty; a real edit after a snapshot is dirty; the identical state is not", () => {
+  const form = initContractorPricingForm(completeGst5(), GST_5, DEFAULTS);
+  expect(hasUnsavedPricingChanges(form, null)).toBe(false);
+
+  const snapshot = formSnapshot(form);
+  expect(hasUnsavedPricingChanges(form, snapshot)).toBe(false);
+  expect(hasUnsavedPricingChanges({ ...form, hours: "9" }, snapshot)).toBe(true);
+  // A taxEdited-only flip (what save() does right after a successful save)
+  // must never itself read as dirty.
+  expect(hasUnsavedPricingChanges({ ...form, taxEdited: true }, formSnapshot(form))).toBe(false);
+});
+
+test("the editor's imperative save handle reuses the exact same save() identifier the inline button calls -- never a second save implementation", () => {
+  const editor = readFileSync("app/components/contractor-pricing-editor.tsx", "utf8");
+
+  expect(editor).toContain("useImperativeHandle(ref, () => ({ save }));");
+  expect(editor).toContain("onClick={save}");
+  // Only one function named save is declared in this file.
+  expect([...editor.matchAll(/\basync function save\(/g)]).toHaveLength(1);
+});
+
+test("sendReady is fully resolved inside the editor (complete AND not dirty) -- the callback never hands a parent raw ingredients to combine itself", () => {
+  const editor = readFileSync("app/components/contractor-pricing-editor.tsx", "utf8");
+  expect(editor).toContain("sendReady: pricing.complete && !isDirty");
+});
+
+test("a pricing edit after a successful save dispatches PRICING_CHANGE_EVENT(complete: false) on the dirty transition -- the same shared signal EstimateActions and /new both already consume", () => {
+  const editor = readFileSync("app/components/contractor-pricing-editor.tsx", "utf8");
+
+  const fnStart = editor.indexOf("useEffect(() => {\n    if (!isDirty) return;");
+  expect(fnStart, "the dirty-transition effect exists").toBeGreaterThan(-1);
+  const fnEnd = editor.indexOf("}, [isDirty]);", fnStart);
+  const fn = editor.slice(fnStart, fnEnd);
+  expect(fn).toContain("new CustomEvent(PRICING_CHANGE_EVENT, { detail: { complete: false } })");
+});
+
+test("a failed save scrolls its own status/error element into view, reachable from either the inline or the sticky save path since both call save()", () => {
+  const editor = readFileSync("app/components/contractor-pricing-editor.tsx", "utf8");
+
+  const saveStart = editor.indexOf("async function save() {");
+  const catchStart = editor.indexOf("} catch (error) {", saveStart);
+  const catchEnd = editor.indexOf("\n  }\n", catchStart);
+  expect(saveStart).toBeGreaterThan(-1);
+  expect(catchStart).toBeGreaterThan(saveStart);
+  const catchBody = editor.slice(catchStart, catchEnd);
+
+  expect(catchBody).toContain("saveStatusRef.current?.scrollIntoView(");
+  expect(editor).toContain('<span ref={saveStatusRef} aria-live="polite"');
+});
+
+test("the inline Save button is suppressed only by hideInlineSaveButton; the status/error text beside it is never hidden", () => {
+  const editor = readFileSync("app/components/contractor-pricing-editor.tsx", "utf8");
+
+  expect(editor).toContain("{!hideInlineSaveButton && (");
+  // The status span sits outside that conditional block.
+  const buttonBlockStart = editor.indexOf("{!hideInlineSaveButton && (");
+  const buttonBlockEnd = editor.indexOf(")}", buttonBlockStart) + 2;
+  const statusSpanIndex = editor.indexOf('<span ref={saveStatusRef}', buttonBlockEnd);
+  expect(statusSpanIndex, "the status span renders after, and outside, the hideable button block").toBeGreaterThan(buttonBlockEnd);
+});
+
+test("app/estimates/[id]/page.tsx does not pass hideInlineSaveButton -- its inline Save action is unchanged", () => {
+  const detailPage = readFileSync("app/estimates/[id]/page.tsx", "utf8");
+  expect(detailPage).not.toContain("hideInlineSaveButton");
+  expect(detailPage).not.toContain("onStateChange=");
 });

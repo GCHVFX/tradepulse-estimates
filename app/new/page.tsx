@@ -12,8 +12,12 @@ import { Logo } from "@/app/components/logo";
 import { BottomNav } from "@/app/components/bottom-nav";
 import { PhotoSourceSheet } from "@/app/components/photo-source-sheet";
 import { CustomerDetailsBlock } from "@/app/components/customer-details-block";
-import { ContractorPricingEditor } from "@/app/components/contractor-pricing-editor";
-import { PRICING_CHANGE_EVENT, readPricingComplete } from "@/app/components/estimate-actions";
+import {
+  ContractorPricingEditor,
+  type ContractorPricingEditorHandle,
+  type ContractorPricingEditorState,
+  type ContractorPricingSaveStatus,
+} from "@/app/components/contractor-pricing-editor";
 import type { ContractorPricing } from "@/lib/contractor-pricing";
 import type { BusinessPricingDefaults, ContractorPricingRowInput, EstimateTaxSnapshot } from "@/lib/contractor-pricing-form";
 import type { PriceBookSuggestion } from "@/lib/pricebook-suggestions";
@@ -197,6 +201,14 @@ interface EstimateViewProps {
   pricingLoadState: PricingLoadState;
   pricingInit: PricingInit | null;
   pricingComplete: boolean;
+  /**
+   * Called with the editor's own resolved send-readiness (pricing.complete
+   * AND not dirty since that save) after every change. This is the one
+   * write path for pricingComplete once the editor has mounted -- a pure
+   * mirror of what the editor reports, never a value this page infers on
+   * its own from separate signals.
+   */
+  onPricingCompleteChange: (complete: boolean) => void;
   onRetryPricingInit: () => void;
   onBack: () => void;
   onNewEstimate: () => void;
@@ -253,11 +265,40 @@ function EstimateView({
   pricingLoadState,
   pricingInit,
   pricingComplete,
+  onPricingCompleteChange,
   onRetryPricingInit,
   onBack,
   onNewEstimate,
 }: EstimateViewProps) {
   const estimateScrollRef = useRef<HTMLElement | null>(null);
+  // The editor's own imperative handle, so the sticky Save Pricing CTA can
+  // call the exact same save() its (now hidden) inline button would.
+  const pricingEditorRef = useRef<ContractorPricingEditorHandle>(null);
+  // True once the contractor has explicitly entered pricing this mount
+  // (tapped Add Pricing). Local to this component on purpose: EstimateView
+  // itself fully unmounts on "Back to Description" (NewPageInner renders a
+  // different top-level component, FormView, in its place) and on every
+  // generate/regenerate cycle (which always starts from FormView), so this
+  // resets to false for free on both without any explicit reset call.
+  const [pricingEntered, setPricingEntered] = useState(false);
+  // Mirrors only what ContractorPricingEditor reports via onStateChange --
+  // never independently inferred. pricingComplete (sendReady) is reported
+  // through the same callback but owned one level up in NewPageInner, since
+  // it must survive this component's own unmount/remount (see its prop
+  // comment above).
+  const [pricingEditorState, setPricingEditorState] = useState<{
+    status: ContractorPricingSaveStatus;
+    isDirty: boolean;
+  }>({ status: "idle", isDirty: false });
+
+  function handlePricingEditorStateChange(state: ContractorPricingEditorState) {
+    setPricingEditorState({ status: state.status, isDirty: state.isDirty });
+    onPricingCompleteChange(state.sendReady);
+  }
+
+  function handleStickySavePricing() {
+    pricingEditorRef.current?.save();
+  }
 
   // Same-page pricing: no navigation, so /new can scroll to its own already-
   // mounted pricing editor synchronously on tap, unlike the detail page's
@@ -265,6 +306,7 @@ function EstimateView({
   // and stays untouched -- and is reused below as the exceptional fallback
   // if this page's own authoritative pricing read fails.
   function scrollToPricing() {
+    setPricingEntered(true);
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     document.getElementById("pricing")?.scrollIntoView({
       behavior: prefersReducedMotion ? "auto" : "smooth",
@@ -455,6 +497,7 @@ function EstimateView({
               {pricingReady && pricingInit && (
                 <div className="mt-6">
                   <ContractorPricingEditor
+                    ref={pricingEditorRef}
                     key={savedEstimateId}
                     estimateId={savedEstimateId}
                     currency={pricingInit.currency}
@@ -466,6 +509,8 @@ function EstimateView({
                     depositPercent={pricingInit.depositPercent}
                     depositThresholdDollars={pricingInit.depositThresholdDollars}
                     suggestions={pricingInit.suggestions}
+                    onStateChange={handlePricingEditorStateChange}
+                    hideInlineSaveButton
                   />
                 </div>
               )}
@@ -502,11 +547,15 @@ function EstimateView({
                 - legacy (previous pricing system) or delivered (already
                   sent -- defensive only, should be unreachable in normal
                   use): a plain View Estimate link, no pricing action at all
-                - loaded and incomplete: Add Pricing scrolls to the editor
-                  on this same page (no navigation)
-                - loaded and persisted-complete: Continue to Send, the only
-                  place this screen hands off to the detail page's own Send
-                  flow
+                - loaded, not yet entered: Add Pricing scrolls to the editor
+                  on this same page (no navigation) and marks pricing entered
+                - loaded, entered, not yet sendReady (never saved, saved but
+                  incomplete, or dirty since the last save): Save Pricing
+                  invokes the editor's own save() through its imperative
+                  handle -- never a second save implementation
+                - loaded and sendReady (saved, complete, and no edit since):
+                  Continue to Send, the only place this screen hands off to
+                  the detail page's own Send flow
               Never two of these at once. */}
           {!saved || !savedEstimateId ? (
             <button
@@ -545,6 +594,15 @@ function EstimateView({
             >
               Continue to Send
             </Link>
+          ) : pricingEntered ? (
+            <button
+              type="button"
+              onClick={handleStickySavePricing}
+              disabled={pricingEditorState.status === "saving"}
+              className="w-full flex items-center justify-center bg-amber-500 hover:bg-amber-400 active:bg-amber-600 disabled:opacity-50 text-zinc-950 font-bold text-base rounded-xl py-4 transition-colors min-h-[56px]"
+            >
+              {pricingEditorState.status === "saving" ? "Saving..." : "Save Pricing"}
+            </button>
           ) : (
             <button
               type="button"
@@ -1137,11 +1195,14 @@ function NewPageInner() {
   // once pricing loads. Used only to ask for suggestions on the pricing-init
   // fetch below; never displayed and never sent anywhere else.
   const [generationJobText, setGenerationJobText] = useState("");
-  // Persisted-pricing completeness for the estimate currently shown.
-  // Initialized from the same authoritative fetch above, then kept current
-  // by a successful ContractorPricingEditor Save (PRICING_CHANGE_EVENT) --
-  // the same authority the detail page's own Send gating uses. Reset
-  // whenever a genuinely new estimate replaces the current one.
+  // Persisted-pricing completeness (send-readiness) for the estimate
+  // currently shown. Initialized from the same authoritative fetch below,
+  // then kept current exclusively through EstimateView's
+  // onPricingCompleteChange prop, which forwards ContractorPricingEditor's
+  // own resolved `sendReady` after every change (complete AND not dirty
+  // since the last save) -- never a value this page infers from separate
+  // signals on its own. Reset whenever a genuinely new estimate replaces
+  // the current one.
   const [pricingComplete, setPricingComplete] = useState(false);
   const { logoUrl, businessName, showCompanyNameBelowLogo, businessEmail, preparedBy, isPro, aiPhotoEstimatesRemaining, isLoading: profileLoading } = useBusinessProfile();
   const [jobTitle, setJobTitle] = useState("");
@@ -1311,20 +1372,6 @@ function NewPageInner() {
   function retryPricingInit() {
     setPricingRetryToken((t) => t + 1);
   }
-
-  // ContractorPricingEditor dispatches this after every successful pricing
-  // save (app/components/contractor-pricing-editor.tsx's save()), carrying
-  // the server's own calculated `complete` -- the same signal
-  // app/components/estimate-actions.tsx uses to gate Send on the detail
-  // page. Continue to Send below reuses that exact authority rather than a
-  // second completeness definition.
-  useEffect(() => {
-    function handlePricingChange(e: Event) {
-      setPricingComplete(readPricingComplete(e));
-    }
-    window.addEventListener(PRICING_CHANGE_EVENT, handlePricingChange);
-    return () => window.removeEventListener(PRICING_CHANGE_EVENT, handlePricingChange);
-  }, []);
 
   const needsProfileSetup = !profileLoading && !logoUrl && !businessName && !preparedBy && !businessEmail;
 
@@ -1589,6 +1636,7 @@ function NewPageInner() {
         pricingLoadState={pricingLoadState}
         pricingInit={pricingInit}
         pricingComplete={pricingComplete}
+        onPricingCompleteChange={setPricingComplete}
         onRetryPricingInit={retryPricingInit}
         onBack={handleBack}
         onNewEstimate={handleNewEstimate}
