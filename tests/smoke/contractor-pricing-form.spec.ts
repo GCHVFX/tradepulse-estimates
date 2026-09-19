@@ -619,7 +619,10 @@ test("the editor passes isDelivered and the estimate's own deposit snapshot into
   // The exact same resolved snapshot values the page already uses to compute
   // the server-side initialPricing -- not a second, independently-guessed
   // source of the deposit settings.
-  expect(page).toContain("isDelivered={isDelivered(estimate)}");
+  // isDelivered picks the editor: a delivered estimate gets the plain editor
+  // (isDelivered true), an undelivered draft gets ContractorPricingDraftEditor,
+  // which always renders the editor with isDelivered={false}.
+  expect(page).toContain("{isDelivered(estimate) ? (");
   expect(page).toContain("depositPercent={estimate.deposit_percent_snapshot}");
   expect(page).toContain("depositThresholdDollars={estimate.deposit_threshold_snapshot}");
 });
@@ -1799,19 +1802,28 @@ test("the editor's imperative save handle reuses the exact same save() identifie
   expect([...editor.matchAll(/\basync function save\(/g)]).toHaveLength(1);
 });
 
-test("sendReady is fully resolved inside the editor (complete AND not dirty) -- the callback never hands a parent raw ingredients to combine itself", () => {
+test("sendReady is fully resolved inside the editor through isPricingSendReady -- the callback never hands a parent raw ingredients to combine itself", () => {
   const editor = readFileSync("app/components/contractor-pricing-editor.tsx", "utf8");
-  expect(editor).toContain("sendReady: pricing.complete && !isDirty");
+  expect(editor).toContain("const sendReady = isPricingSendReady({ status, isDirty, persistedComplete: pricing.complete });");
+  expect(editor).toContain("onStateChangeRef.current?.({ status, isDirty, sendReady });");
 });
 
-test("a pricing edit after a successful save dispatches PRICING_CHANGE_EVENT(complete: false) on the dirty transition -- the same shared signal EstimateActions and /new both already consume", () => {
+test("the editor publishes its resolved sendReady to EstimateActions whenever it changes, in both directions, and save() dispatches nothing itself", () => {
   const editor = readFileSync("app/components/contractor-pricing-editor.tsx", "utf8");
 
-  const fnStart = editor.indexOf("useEffect(() => {\n    if (!isDirty) return;");
-  expect(fnStart, "the dirty-transition effect exists").toBeGreaterThan(-1);
-  const fnEnd = editor.indexOf("}, [isDirty]);", fnStart);
-  const fn = editor.slice(fnStart, fnEnd);
-  expect(fn).toContain("new CustomEvent(PRICING_CHANGE_EVENT, { detail: { complete: false } })");
+  const effectStart = editor.indexOf("const publishedSendReadyRef = useRef(sendReady);");
+  expect(effectStart, "the readiness publisher exists").toBeGreaterThan(-1);
+  const effect = editor.slice(effectStart, editor.indexOf("}, [sendReady]);", effectStart));
+  expect(effect).toContain("if (publishedSendReadyRef.current === sendReady) return;");
+  expect(effect).toContain("new CustomEvent(PRICING_CHANGE_EVENT, { detail: { complete: sendReady } })");
+  // Exactly one dispatch of the event in the editor: this one.
+  expect([...editor.matchAll(/new CustomEvent\(PRICING_CHANGE_EVENT/g)]).toHaveLength(1);
+
+  // save() no longer dispatches: a direct dispatch of the server's complete
+  // re-enabled Send over edits typed while the save was in flight.
+  const saveStart = editor.indexOf("async function save() {");
+  const saveBody = editor.slice(saveStart, editor.indexOf("\n  }\n", editor.indexOf("} catch (error) {", saveStart)));
+  expect(saveBody).not.toContain("dispatchEvent");
 });
 
 test("shouldRevealSaveFeedback: a failed save and an incomplete-but-successful save reveal their feedback; a complete save, idle and saving do not", () => {
@@ -1878,8 +1890,16 @@ test("the inline Save button is suppressed only by hideInlineSaveButton; the gui
   expect(statusSpanIndex, "the status span renders after, and outside, the hideable button block").toBeGreaterThan(buttonBlockEnd);
 });
 
-test("app/estimates/[id]/page.tsx does not pass hideInlineSaveButton -- its inline Save action is unchanged", () => {
+test("app/estimates/[id]/page.tsx never passes hideInlineSaveButton or onStateChange itself: a delivered estimate keeps the plain editor and its inline Save", () => {
   const detailPage = readFileSync("app/estimates/[id]/page.tsx", "utf8");
   expect(detailPage).not.toContain("hideInlineSaveButton");
   expect(detailPage).not.toContain("onStateChange=");
+  // The delivered branch renders ContractorPricingEditor directly, with isDelivered.
+  const deliveredStart = detailPage.indexOf("{isDelivered(estimate) ? (");
+  const draftStart = detailPage.indexOf("<ContractorPricingDraftEditor", deliveredStart);
+  expect(deliveredStart).toBeGreaterThan(-1);
+  expect(draftStart).toBeGreaterThan(deliveredStart);
+  const deliveredBranch = detailPage.slice(deliveredStart, draftStart);
+  expect(deliveredBranch).toContain("<ContractorPricingEditor");
+  expect(deliveredBranch).toMatch(/\n\s+isDelivered\n/);
 });

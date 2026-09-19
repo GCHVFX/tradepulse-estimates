@@ -514,7 +514,7 @@ test("the sticky bar's primary action is Add Pricing (same-page scroll) once aut
   // already existed inside the white estimate card -- scoped to the block
   // that starts at the fixed positioning wrapper and ends where BottomNav is
   // rendered for this view, so this cannot pass by matching the older link.
-  const fixedBarStart = newPage.indexOf('<div className="fixed bottom-0 left-0 right-0">');
+  const fixedBarStart = newPage.indexOf('<div ref={fixedBarRef} className="fixed bottom-0 left-0 right-0">');
   const fixedBarEnd = newPage.indexOf("<BottomNav onNewClick={onNewEstimate} />", fixedBarStart);
   expect(fixedBarStart).toBeGreaterThan(-1);
   expect(fixedBarEnd).toBeGreaterThan(fixedBarStart);
@@ -532,7 +532,7 @@ test("the sticky bar's primary action is Add Pricing (same-page scroll) once aut
 test("Add Pricing in the sticky bar is not actionable before generation is saved", () => {
   const newPage = code("app/new/page.tsx");
 
-  const fixedBarStart = newPage.indexOf('<div className="fixed bottom-0 left-0 right-0">');
+  const fixedBarStart = newPage.indexOf('<div ref={fixedBarRef} className="fixed bottom-0 left-0 right-0">');
   const fixedBarEnd = newPage.indexOf("<BottomNav onNewClick={onNewEstimate} />", fixedBarStart);
   const fixedBar = newPage.slice(fixedBarStart, fixedBarEnd);
 

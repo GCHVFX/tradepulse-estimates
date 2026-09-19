@@ -15,6 +15,7 @@ import {
   hasEnteredGenericPricing,
   hasUnsavedPricingChanges,
   initContractorPricingEditorState,
+  isPricingSendReady,
   removeCharge,
   removeConfirmedItem,
   resolveContractorPricingGuidance,
@@ -34,24 +35,26 @@ import {
 export type ContractorPricingSaveStatus = "idle" | "saving" | "saved" | "error";
 
 /**
- * The read-only projection a parent (today: /new) may mirror to decide its
- * own sticky call-to-action. The editor computes every field itself -- a
- * parent must never derive `sendReady` from a combination of other signals
- * on its own, so there is exactly one place this logic lives.
+ * The read-only projection a parent (/new, and ContractorPricingDraftEditor on
+ * /estimates/[id]) may mirror to decide its own sticky call-to-action. The
+ * editor computes every field itself -- a parent must never derive
+ * `sendReady` from a combination of other signals on its own, so there is
+ * exactly one place this logic lives.
  */
 export interface ContractorPricingEditorState {
   status: ContractorPricingSaveStatus;
-  /** True once the draft has changed since the last successful save this mount. */
+  /** True while the draft differs from the persisted pricing (the loaded rows, or the last save this mount). */
   isDirty: boolean;
-  /** Persisted pricing is complete AND nothing has been edited since that
-   * save -- the fully-resolved "safe to hand off to Send" signal. */
+  /** Persisted pricing is complete, nothing has been edited since, and no
+   * save is in flight -- the fully-resolved "safe to hand off to Send"
+   * signal (isPricingSendReady). */
   sendReady: boolean;
 }
 
 /** Imperative handle so a parent can trigger the exact same save() a Save
  * button inside this component would -- never a second save implementation. */
 export interface ContractorPricingEditorHandle {
-  save: () => void;
+  save: () => Promise<void>;
 }
 
 /**
@@ -98,11 +101,11 @@ export interface ContractorPricingEditorProps {
    */
   onStateChange?: (state: ContractorPricingEditorState) => void;
   /**
-   * /new owns a sticky Save Pricing action once the contractor has scrolled
-   * here, so this hides the otherwise-duplicate inline Save button. The
-   * status/error text beside it still renders -- this only ever hides the
-   * button. Omitted (default false) on /estimates/[id], where the inline
-   * button remains the only Save action, unchanged.
+   * Set where a sticky Save Pricing action owns Save -- /new, and
+   * ContractorPricingDraftEditor for an undelivered draft on /estimates/[id]
+   * -- so the inline button would be a duplicate. The status/error text
+   * beside it still renders -- this only ever hides the button. Omitted
+   * (default false) for a delivered estimate on /estimates/[id], unchanged.
    */
   hideInlineSaveButton?: boolean;
 }
@@ -274,21 +277,13 @@ export const ContractorPricingEditor = forwardRef<ContractorPricingEditorHandle,
       // The draft just sent is, by definition, no longer dirty. Captured
       // from `form` (pre-taxEdited-reset) rather than after the setForm
       // above: formSnapshot() already excludes taxEdited, so the two are
-      // equivalent, and this avoids waiting on a second render.
+      // equivalent, and this avoids waiting on a second render. Anything
+      // typed while this request was in flight differs from it, so it
+      // correctly stays dirty.
       setLastSavedSnapshot(formSnapshot(form));
-
-      // EstimateActions lives as a sibling on this same page, not a parent,
-      // so its Send button learns about a save through this event rather
-      // than a prop -- and only ever this event: router.refresh() below
-      // re-renders the server components with fresh data, but a mounted
-      // client component's own state does not reinitialize from a changed
-      // prop without remounting, so EstimateActions would otherwise keep
-      // showing the send-gating state from before this save. `complete`
-      // here is the server's own field from this exact response, not a
-      // value recomputed from the total.
-      window.dispatchEvent(
-        new CustomEvent(PRICING_CHANGE_EVENT, { detail: { complete: data.pricing.complete } })
-      );
+      // Send readiness is published by the effect below from the committed
+      // state, not dispatched from here: a direct dispatch of the server's
+      // `complete` would re-enable Send over edits typed during the save.
       router.refresh();
     } catch (error) {
       // Nothing is marked saved here: the contractor keeps their typed values
@@ -318,30 +313,34 @@ export const ContractorPricingEditor = forwardRef<ContractorPricingEditorHandle,
   // save implementation.
   useImperativeHandle(ref, () => ({ save }));
 
+  // Fully resolved here (persisted complete, not dirty, not saving) so a
+  // parent never combines these signals itself -- see isPricingSendReady().
+  const sendReady = isPricingSendReady({ status, isDirty, persistedComplete: pricing.complete });
+
   // Reports status/isDirty/sendReady to a parent after every change, via a
   // ref so an inline arrow function passed as onStateChange does not retrigger
-  // this effect on every render. sendReady is fully resolved here (complete
-  // AND not dirty) so a parent never combines these two signals itself.
+  // this effect on every render.
   const onStateChangeRef = useRef(onStateChange);
   useEffect(() => {
     onStateChangeRef.current = onStateChange;
   });
   useEffect(() => {
-    onStateChangeRef.current?.({ status, isDirty, sendReady: pricing.complete && !isDirty });
-  }, [status, isDirty, pricing.complete]);
+    onStateChangeRef.current?.({ status, isDirty, sendReady });
+  }, [status, isDirty, sendReady]);
 
-  // A pricing edit away from the persisted state (the loaded rows, or the
-  // last save this mount) invalidates its completeness everywhere Send is
-  // gated from it -- EstimateActions on /estimates/[id] (a sibling, listening
-  // for this same event) and /new's own mirrored state both react, with no
-  // second implementation. Fires only on the false -> true transition, not on
-  // every further keystroke while already dirty. Editing back to the exact
-  // persisted values does not re-enable Send on the detail page; only a
-  // successful save does.
+  // The one publisher of send readiness to EstimateActions, a sibling on
+  // /estimates/[id] that can only hear this through a window event (a mounted
+  // client component does not reinitialize from a changed server prop, even
+  // after router.refresh()). Fires whenever sendReady changes, in both
+  // directions: the first edit, a save starting, a save finishing complete
+  // or incomplete, and an edit back to exactly the persisted values. Not on
+  // mount: EstimateActions is already seeded with the same server value.
+  const publishedSendReadyRef = useRef(sendReady);
   useEffect(() => {
-    if (!isDirty) return;
-    window.dispatchEvent(new CustomEvent(PRICING_CHANGE_EVENT, { detail: { complete: false } }));
-  }, [isDirty]);
+    if (publishedSendReadyRef.current === sendReady) return;
+    publishedSendReadyRef.current = sendReady;
+    window.dispatchEvent(new CustomEvent(PRICING_CHANGE_EVENT, { detail: { complete: sendReady } }));
+  }, [sendReady]);
 
   // Defensive only (specs/contractor-owned-pricing.md's "defensive reload
   // rule"): persisted 'ea' rows that could not be reliably reconstructed

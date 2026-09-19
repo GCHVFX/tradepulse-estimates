@@ -8,6 +8,7 @@ import { BottomNav } from "@/app/components/bottom-nav";
 import { loadContractorPricingRows, loadCustomerPricingView } from "@/lib/estimate-pricing-server";
 import { businessTax } from "@/lib/estimate-tax";
 import { ContractorPricingEditor } from "@/app/components/contractor-pricing-editor";
+import { ContractorPricingDraftEditor } from "@/app/components/contractor-pricing-draft-editor";
 import { EstimateMarkdown } from "@/app/components/estimate-markdown";
 import { stripTitleHeading } from "@/lib/estimate-prose";
 import { calculateContractorPricing } from "@/lib/contractor-pricing";
@@ -235,7 +236,7 @@ export default async function EstimatePage({
         className="flex-1 px-4 sm:px-5"
         style={{
           paddingBottom:
-            "calc(var(--tp-estimate-action-bar-height, 200px) + var(--tp-bottom-nav-height, 87px) - 3px + 24px)",
+            "calc(var(--tp-estimate-action-bar-height, 200px) + var(--tp-pricing-action-bar-height, 0px) + var(--tp-bottom-nav-height, 87px) - 3px + 24px)",
         }}
       >
         {isQuoteRequest ? (
@@ -336,24 +337,48 @@ export default async function EstimatePage({
                       rows, never from this text. The H1 is stripped because
                       the title is already shown above. */}
                   <EstimateMarkdown content={stripTitleHeading(estimate.summary ?? "")} />
-                  <ContractorPricingEditor
-                    key={estimate.id}
-                    estimateId={estimate.id}
-                    currency={estimateCurrency}
-                    initialRows={contractorRows}
-                    initialTax={{
-                      label: estimate.tax_label_snapshot,
-                      rate: estimate.tax_rate_snapshot,
-                    }}
-                    initialPricing={contractorPricing}
-                    defaults={{
-                      labourRate: business.labour_rate,
-                      markupPercent: business.markup_percent,
-                    }}
-                    isDelivered={isDelivered(estimate)}
-                    depositPercent={estimate.deposit_percent_snapshot}
-                    depositThresholdDollars={estimate.deposit_threshold_snapshot}
-                  />
+                  {/* An undelivered draft gets the one sticky primary action
+                      (Save Pricing until ready, then EstimateActions' Send);
+                      a delivered estimate keeps the plain editor with its
+                      inline Save, unchanged. */}
+                  {isDelivered(estimate) ? (
+                    <ContractorPricingEditor
+                      key={estimate.id}
+                      estimateId={estimate.id}
+                      currency={estimateCurrency}
+                      initialRows={contractorRows}
+                      initialTax={{
+                        label: estimate.tax_label_snapshot,
+                        rate: estimate.tax_rate_snapshot,
+                      }}
+                      initialPricing={contractorPricing}
+                      defaults={{
+                        labourRate: business.labour_rate,
+                        markupPercent: business.markup_percent,
+                      }}
+                      isDelivered
+                      depositPercent={estimate.deposit_percent_snapshot}
+                      depositThresholdDollars={estimate.deposit_threshold_snapshot}
+                    />
+                  ) : (
+                    <ContractorPricingDraftEditor
+                      key={estimate.id}
+                      estimateId={estimate.id}
+                      currency={estimateCurrency}
+                      initialRows={contractorRows}
+                      initialTax={{
+                        label: estimate.tax_label_snapshot,
+                        rate: estimate.tax_rate_snapshot,
+                      }}
+                      initialPricing={contractorPricing}
+                      defaults={{
+                        labourRate: business.labour_rate,
+                        markupPercent: business.markup_percent,
+                      }}
+                      depositPercent={estimate.deposit_percent_snapshot}
+                      depositThresholdDollars={estimate.deposit_threshold_snapshot}
+                    />
+                  )}
                 </>
               ) : (
                 // Legacy, read-only (specs/contractor-owned-pricing.md section

@@ -689,6 +689,22 @@ export function initContractorPricingEditorState(
 }
 
 /**
+ * The one definition of "safe to hand this estimate to Send" for an
+ * undelivered contractor_pricing draft: the persisted pricing is complete,
+ * nothing has been edited since it was persisted, and no save is in flight.
+ * The editor reports this to /new (Continue to Send vs Save Pricing) and
+ * publishes it to EstimateActions on /estimates/[id] (Send vs the draft
+ * editor's Save Pricing), so the two primary actions can never both show.
+ */
+export function isPricingSendReady(state: {
+  status: "idle" | "saving" | "saved" | "error";
+  isDirty: boolean;
+  persistedComplete: boolean;
+}): boolean {
+  return state.persistedComplete && !state.isDirty && state.status !== "saving";
+}
+
+/**
  * Whether a finished save should bring the editor's save feedback into view:
  * a failed save (its error text), or a save that worked but left pricing
  * incomplete (the "Still needed before you can send this" guidance, which is

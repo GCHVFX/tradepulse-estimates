@@ -10,6 +10,7 @@ import {
   formSnapshot,
   hasUnsavedPricingChanges,
   initContractorPricingEditorState,
+  isPricingSendReady,
   removeConfirmedItem,
   toPricingRequestPayload,
   updateConfirmedItem,
@@ -121,79 +122,226 @@ test("the sticky Send bar is absent while an undelivered contractor_pricing draf
   expect(shouldShowStickyActionBar({ ...draftState, sendBlocked: !liveComplete })).toBe(false);
 });
 
-test("reopened complete estimate: the first unsaved price edit hides the visible Send bar before any save, and a complete re-save brings it back", () => {
-  // Failure B (production phone smoke on 607fc25). The visible Send owner on
-  // /estimates/[id] is EstimateActions' sticky bar, seeded from the page's
-  // estimateComplete and changed afterwards only by PRICING_CHANGE_EVENT.
-  // Everything below runs the real exported functions on both sides: the
-  // editor's baseline and dirty check, and EstimateActions' event reader and
-  // bar decision. What is simulated is only React's plumbing: the editor's
-  // isDirty effect (dispatch on the false -> true transition) and
-  // EstimateActions' window listener, with an EventTarget standing in for
-  // `window`. That plumbing is pinned from source in the tests below and in
-  // contractor-pricing-form.spec.ts.
-  const rows: ContractorPricingRowInput[] = [
-    { item_type: "labour", unit: "ea", quantity: 1, unit_price: 110, markup_percent: null, description: "Kitchen faucet replacement", display_order: 0, taxable: true },
-    { item_type: "material", unit: "ea", quantity: 1, unit_price: 0, markup_percent: 0, description: "Kitchen faucet replacement", display_order: 1, taxable: true },
-  ];
+/**
+ * The /estimates/[id] draft lifecycle, driven through the real functions on
+ * both sides of the server/client boundary:
+ *
+ * - ContractorPricingEditor: initContractorPricingEditorState,
+ *   hasUnsavedPricingChanges, isPricingSendReady, and its readiness publisher
+ *   (dispatch PRICING_CHANGE_EVENT {complete: sendReady} whenever sendReady
+ *   changes, not on mount).
+ * - ContractorPricingDraftEditor: Save Pricing bar while the reported
+ *   sendReady is false.
+ * - EstimateActions: liveComplete seeded from the page's estimateComplete,
+ *   updated by readPricingComplete from that event, and its sticky bar
+ *   decision shouldShowStickyActionBar. That bar is the only place Send (and
+ *   so Copy Link, SMS and email, which live in the sheet it opens) is
+ *   reachable for an undelivered draft.
+ *
+ * Simulated: only React itself (state commits and effects) and `window`,
+ * which a real EventTarget stands in for. No DOM, no network, no database.
+ */
+function detailPageDraft(rows: ContractorPricingRowInput[]) {
   const snapshots = { taxRatePercent: 5, depositPercent: null, depositThresholdDollars: null };
-  const draftState = { isQuoteRequest: false, isDone: false, localStatus: "draft" };
+  const seed = withReconstructionGate(calculateContractorPricing(rows, snapshots), rows).complete;
 
-  // Page load: the server's gated completeness seeds EstimateActions.
-  const estimateComplete = withReconstructionGate(calculateContractorPricing(rows, snapshots), rows).complete;
-  expect(estimateComplete).toBe(true);
-  let liveComplete = estimateComplete;
+  // EstimateActions
+  let liveComplete = seed;
   const target = new EventTarget();
   target.addEventListener(PRICING_CHANGE_EVENT, (e) => {
     liveComplete = readPricingComplete(e);
   });
-  const sendBarVisible = () => shouldShowStickyActionBar({ ...draftState, sendBlocked: !liveComplete });
-  expect(sendBarVisible()).toBe(true);
 
-  // Editor mount: clean against the loaded rows, so nothing is dispatched.
-  const editor = initContractorPricingEditorState(rows, { label: "GST", rate: 5 }, { labourRate: 95, markupPercent: 20 });
-  let lastSavedSnapshot = editor.savedSnapshot;
-  let isDirty = hasUnsavedPricingChanges(editor.form, lastSavedSnapshot);
-  expect(isDirty).toBe(false);
-  expect(sendBarVisible()).toBe(true);
-
-  // The editor's dirty effect, exactly: dispatch complete:false when isDirty
-  // turns true.
-  function applyEdit(form: typeof editor.form) {
-    const wasDirty = isDirty;
-    isDirty = hasUnsavedPricingChanges(form, lastSavedSnapshot);
-    if (isDirty && !wasDirty) {
-      target.dispatchEvent(new CustomEvent(PRICING_CHANGE_EVENT, { detail: { complete: false } }));
-    }
+  // ContractorPricingEditor
+  const initial = initContractorPricingEditorState(rows, { label: "GST", rate: 5 }, { labourRate: 95, markupPercent: 20 });
+  let form = initial.form;
+  let savedSnapshot = initial.savedSnapshot;
+  let status: "idle" | "saving" | "saved" | "error" = "idle";
+  let persistedComplete = seed;
+  const sendReady = () =>
+    isPricingSendReady({ status, isDirty: hasUnsavedPricingChanges(form, savedSnapshot), persistedComplete });
+  let published = sendReady();
+  function commit() {
+    const ready = sendReady();
+    if (ready === published) return;
+    published = ready;
+    target.dispatchEvent(new CustomEvent(PRICING_CHANGE_EVENT, { detail: { complete: ready } }));
   }
 
-  // First substantive edit, no save: the bar is gone immediately.
-  const edited = updateConfirmedItem(editor.form, editor.form.confirmedItems[0].id, "labourUnitPrice", "120");
-  applyEdit(edited);
-  expect(isDirty).toBe(true);
-  expect(sendBarVisible()).toBe(false);
+  return {
+    get form() {
+      return form;
+    },
+    edit(next: ContractorPricingFormState) {
+      form = next;
+      commit();
+    },
+    /** save(): status "saving", and the draft as sent. */
+    startSave(): ContractorPricingFormState {
+      status = "saving";
+      commit();
+      return form;
+    },
+    /** The PUT /pricing response for `sent`, computed the way the route does. */
+    finishSave(sent: ContractorPricingFormState, ok: boolean) {
+      if (ok) {
+        persistedComplete = calculateContractorPricing(toCanonicalRows(parseSavedPayload(sent)), snapshots).complete;
+        savedSnapshot = formSnapshot(sent);
+        status = "saved";
+      } else {
+        status = "error";
+      }
+      commit();
+    },
+    screen() {
+      const draftSaveBar = !sendReady(); // ContractorPricingDraftEditor
+      const sendBar = shouldShowStickyActionBar({
+        isQuoteRequest: false,
+        isDone: false,
+        localStatus: "draft",
+        sendBlocked: !liveComplete,
+      });
+      return { draftSaveBar, sendBar, saving: status === "saving" };
+    },
+  };
+}
 
-  // Successful re-save: the snapshot moves to the saved draft, and the
-  // save's own dispatch carries the server's complete for the new rows.
-  const savedRows = toCanonicalRows(parseSavedPayload(edited));
-  lastSavedSnapshot = formSnapshot(edited);
-  isDirty = hasUnsavedPricingChanges(edited, lastSavedSnapshot);
-  expect(isDirty).toBe(false);
-  const serverComplete = calculateContractorPricing(savedRows, snapshots).complete;
-  expect(serverComplete).toBe(true);
-  target.dispatchEvent(new CustomEvent(PRICING_CHANGE_EVENT, { detail: { complete: serverComplete } }));
-  expect(sendBarVisible()).toBe(true);
+const completeGeneric: ContractorPricingRowInput[] = [
+  { item_type: "labour", unit: null, quantity: 1, unit_price: 400, markup_percent: null, description: "Labour", display_order: 0, taxable: true },
+  { item_type: "material", unit: null, quantity: 1, unit_price: 100, markup_percent: 20, description: "Materials", display_order: 1, taxable: true },
+];
 
-  // A re-save that leaves pricing incomplete keeps it hidden.
-  const removed = removeConfirmedItem(edited, edited.confirmedItems[0].id);
-  applyEdit(removed);
-  expect(sendBarVisible()).toBe(false);
-  target.dispatchEvent(
-    new CustomEvent(PRICING_CHANGE_EVENT, {
-      detail: { complete: calculateContractorPricing([], snapshots).complete },
-    })
-  );
-  expect(sendBarVisible()).toBe(false);
+test("detail page draft: exactly one primary action at every step -- Send when clean and complete, Save Pricing when dirty, saving, incomplete or failed", () => {
+  const page = detailPageDraft(completeGeneric);
+
+  // 1. Reopened clean + complete: Send, no Save bar.
+  expect(page.screen()).toEqual({ draftSaveBar: false, sendBar: true, saving: false });
+
+  // 2. First substantive edit: Save Pricing, Send (and every delivery path behind it) gone.
+  page.edit({ ...page.form, fixedAmount: "450" });
+  expect(page.screen()).toEqual({ draftSaveBar: true, sendBar: false, saving: false });
+
+  // Saving: still Save Pricing (disabled, "Saving..."), still no Send.
+  const sent = page.startSave();
+  expect(page.screen()).toEqual({ draftSaveBar: true, sendBar: false, saving: true });
+
+  // 3. Successful complete save: Send again, Save bar gone.
+  page.finishSave(sent, true);
+  expect(page.screen()).toEqual({ draftSaveBar: false, sendBar: true, saving: false });
+
+  // 4. Successful incomplete save: Save Pricing.
+  page.edit({ ...page.form, materialsCost: "" });
+  const incomplete = page.startSave();
+  page.finishSave(incomplete, true);
+  expect(page.screen()).toEqual({ draftSaveBar: true, sendBar: false, saving: false });
+
+  // 5. Failed save: Save Pricing, no Send.
+  page.edit({ ...page.form, materialsCost: "100" });
+  const failed = page.startSave();
+  page.finishSave(failed, false);
+  expect(page.screen()).toEqual({ draftSaveBar: true, sendBar: false, saving: false });
+
+  // ...and a retry that succeeds complete restores Send.
+  const retry = page.startSave();
+  page.finishSave(retry, true);
+  expect(page.screen()).toEqual({ draftSaveBar: false, sendBar: true, saving: false });
+});
+
+test("detail page draft: a clean but incomplete draft opens on Save Pricing, never Send", () => {
+  const page = detailPageDraft([]);
+  expect(page.screen()).toEqual({ draftSaveBar: true, sendBar: false, saving: false });
+});
+
+test("detail page draft: an edit typed while a save is in flight keeps Send hidden after that save succeeds", () => {
+  // The race the old save()-time dispatch of data.pricing.complete lost: it
+  // re-enabled Send although the screen held edits the server never saw.
+  const page = detailPageDraft(completeGeneric);
+  page.edit({ ...page.form, fixedAmount: "450" });
+  const sent = page.startSave();
+  page.edit({ ...page.form, fixedAmount: "500" }); // typed during the save
+  page.finishSave(sent, true);
+  expect(page.screen()).toEqual({ draftSaveBar: true, sendBar: false, saving: false });
+});
+
+test("detail page draft: editing back to exactly the persisted values restores Send, so the page is never left with no primary action", () => {
+  const page = detailPageDraft(completeGeneric);
+  const original = page.form;
+  page.edit({ ...original, fixedAmount: "450" });
+  expect(page.screen().sendBar).toBe(false);
+  page.edit(original);
+  expect(page.screen()).toEqual({ draftSaveBar: false, sendBar: true, saving: false });
+});
+
+test("detail page draft: a reopened saved-item estimate behaves the same (first edit hides Send, complete re-save restores it)", () => {
+  const page = detailPageDraft([
+    { item_type: "labour", unit: "ea", quantity: 1, unit_price: 110, markup_percent: null, description: "Kitchen faucet replacement", display_order: 0, taxable: true },
+    { item_type: "material", unit: "ea", quantity: 1, unit_price: 0, markup_percent: 0, description: "Kitchen faucet replacement", display_order: 1, taxable: true },
+  ]);
+  expect(page.screen().sendBar).toBe(true);
+  page.edit(updateConfirmedItem(page.form, page.form.confirmedItems[0].id, "labourUnitPrice", "120"));
+  expect(page.screen()).toEqual({ draftSaveBar: true, sendBar: false, saving: false });
+  const sent = page.startSave();
+  page.finishSave(sent, true);
+  expect(page.screen()).toEqual({ draftSaveBar: false, sendBar: true, saving: false });
+  page.edit(removeConfirmedItem(page.form, page.form.confirmedItems[0].id));
+  expect(page.screen().sendBar).toBe(false);
+});
+
+test("delivery entry points: for an undelivered draft, every control that can reach PATCH /api/estimates delivery, send-sms or send-email sits inside the sticky bar that sendBlocked hides", () => {
+  const actions = code("app/components/estimate-actions.tsx");
+  const barStart = actions.indexOf("{showStickyActionBar && (");
+  const barEnd = actions.indexOf("<SendEstimateSheet", barStart);
+  expect(barStart).toBeGreaterThan(-1);
+  expect(barEnd).toBeGreaterThan(barStart);
+
+  // Opening the send sheet (Copy Link -> PATCH /api/estimates, SMS ->
+  // /api/send-sms, Email -> /api/send-email) happens only from inside the bar.
+  const opens = [...actions.matchAll(/setShowSendSheet\(true\)|onClick=\{handleSendClick\}/g)].map((m) => m.index ?? -1);
+  expect(opens.length).toBeGreaterThan(0);
+  for (const index of opens) {
+    if (actions.slice(index - 40, index).includes("function handleSendClick")) continue;
+    expect(index).toBeGreaterThan(barStart);
+    expect(index).toBeLessThan(barEnd);
+  }
+  // The sheet only opens on that state.
+  expect(actions).toContain("isOpen={showSendSheet}");
+
+  // Mark Job Done (PATCH status: "done", which the route treats as a
+  // delivery) is also inside the bar, and only in its already-sent branch.
+  const markDone = actions.indexOf("onClick={handleMarkDone}");
+  expect(markDone).toBeGreaterThan(actions.indexOf(') : localStatus === "sent" ? (', barStart));
+  expect(markDone).toBeLessThan(barEnd);
+
+  // The draft branch of that bar does not render while sendBlocked.
+  expect(shouldShowStickyActionBar({ isQuoteRequest: false, isDone: false, localStatus: "draft", sendBlocked: true })).toBe(false);
+});
+
+test("ContractorPricingDraftEditor: owns the editor ref, hides the inline Save, awaits the editor's own save(), and requests nothing through a window event", () => {
+  const wrapper = code("app/components/contractor-pricing-draft-editor.tsx");
+  expect(wrapper.startsWith('"use client";')).toBe(true);
+  expect(wrapper).toContain("const editorRef = useRef<ContractorPricingEditorHandle>(null);");
+  expect(wrapper).toContain("ref={editorRef}");
+  expect(wrapper).toContain("hideInlineSaveButton");
+  expect(wrapper).toContain("onStateChange={setEditorState}");
+  expect(wrapper).toContain("await editorRef.current?.save();");
+  expect(wrapper).toContain("const showSaveBar = editorState !== null && !editorState.sendReady;");
+  expect(wrapper).toContain('{saving ? "Saving..." : "Save Pricing"}');
+  // Only the editor's projection is stored; no parallel dirty/saving/error state.
+  expect([...wrapper.matchAll(/useState</g)]).toHaveLength(1);
+  // No save-request event of any kind.
+  expect(wrapper).not.toContain("dispatchEvent");
+  expect(wrapper).not.toContain("addEventListener");
+  expect(wrapper).not.toMatch(/import[^;]*PRICING_CHANGE_EVENT/);
+  expect(wrapper).not.toContain("new CustomEvent");
+
+  const editor = code("app/components/contractor-pricing-editor.tsx");
+  expect(editor).toContain("save: () => Promise<void>;");
+
+  // Used only for an undelivered contractor_pricing draft.
+  const page = code("app/estimates/[id]/page.tsx");
+  expect([...page.matchAll(/<ContractorPricingDraftEditor/g)]).toHaveLength(1);
+  const draftIndex = page.indexOf("<ContractorPricingDraftEditor");
+  expect(page.lastIndexOf("{isDelivered(estimate) ? (", draftIndex)).toBeGreaterThan(page.lastIndexOf("isContractorPricing && contractorPricing ? (", draftIndex));
 });
 
 test("shouldShowStickyActionBar still shows the bar for every other state regardless of sendBlocked", () => {
@@ -217,24 +365,20 @@ test("shouldShowStickyActionBar still shows the bar for every other state regard
 // ── Source-level wiring: connects the proven function above to React state
 // and to the JSX Send button, which cannot be exercised without a DOM ------
 
-test("ContractorPricingEditor dispatches the shared event and the server's own completeness, never a recomputed one", () => {
+test("ContractorPricingEditor dispatches the shared event with its resolved sendReady, built from the server's own completeness, never a recomputed total", () => {
   const editor = code("app/components/contractor-pricing-editor.tsx");
 
   expect(editor).toContain('import { PRICING_CHANGE_EVENT } from "@/app/components/estimate-actions";');
-  const dispatchIndex = editor.indexOf("new CustomEvent(PRICING_CHANGE_EVENT");
-  expect(dispatchIndex).toBeGreaterThan(-1);
-
-  // The dispatched detail is read straight off the PUT /pricing response
-  // this exact save just received (data.pricing), not derived from form
-  // state, not a second total>0 guess.
-  expect(editor).toContain("detail: { complete: data.pricing.complete }");
-
-  // Dispatched only on the success path, after the response is known to
-  // carry a pricing object (the same `if (!response.ok || !data.pricing)`
-  // guard above already throws otherwise).
-  const successGuardIndex = editor.indexOf("if (!response.ok || !data.pricing) {");
-  expect(successGuardIndex).toBeGreaterThan(-1);
-  expect(dispatchIndex).toBeGreaterThan(successGuardIndex);
+  // One dispatch, carrying sendReady.
+  expect([...editor.matchAll(/new CustomEvent\(PRICING_CHANGE_EVENT/g)]).toHaveLength(1);
+  expect(editor).toContain("new CustomEvent(PRICING_CHANGE_EVENT, { detail: { complete: sendReady } })");
+  // sendReady's persisted completeness is `pricing`, which only ever holds
+  // the page's server-computed initialPricing or the PUT /pricing response
+  // (setPricing(data.pricing), after the `if (!response.ok || !data.pricing)`
+  // guard) -- never a total>0 guess.
+  expect(editor).toContain("persistedComplete: pricing.complete");
+  expect([...editor.matchAll(/setPricing\(/g)]).toHaveLength(1);
+  expect(editor.indexOf("setPricing(data.pricing);")).toBeGreaterThan(editor.indexOf("if (!response.ok || !data.pricing) {"));
 });
 
 test("EstimateActions wires the proven handler to React state and to the sticky bar's own show/hide decision, with no second completeness definition", () => {

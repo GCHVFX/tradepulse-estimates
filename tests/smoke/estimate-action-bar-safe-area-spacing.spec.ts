@@ -61,8 +61,10 @@ test("the estimate detail page's bottom padding accounts for both bars' real mea
   // values alone (200 + 87 - 3 + 24 = 308) reduce to the same shape the old
   // formula had (barHeight + 108, with 87 - 3 + 24 = 108), so nothing
   // regresses for a device this fix doesn't need to change anything for.
+  // The draft editor's Save Pricing bar publishes its own property, 0px by
+  // default; the two bars never show together, so the sum is the visible one.
   expect(page).toContain(
-    'paddingBottom:\n            "calc(var(--tp-estimate-action-bar-height, 200px) + var(--tp-bottom-nav-height, 87px) - 3px + 24px)",'
+    'paddingBottom:\n            "calc(var(--tp-estimate-action-bar-height, 200px) + var(--tp-pricing-action-bar-height, 0px) + var(--tp-bottom-nav-height, 87px) - 3px + 24px)",'
   );
 });
 

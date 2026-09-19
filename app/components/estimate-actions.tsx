@@ -51,8 +51,9 @@ interface EstimateActionsProps {
   smsOptedOut?: boolean;
 }
 
-/** The event ContractorPricingEditor dispatches after a successful pricing
- * save, and this component listens for. One name, shared by both files. */
+/** The event ContractorPricingEditor dispatches whenever its resolved send
+ * readiness changes, and this component listens for. One name, shared by
+ * both files. */
 export const PRICING_CHANGE_EVENT = "estimate-total-change";
 
 /**
@@ -127,12 +128,12 @@ export function EstimateActions({
   const [liveComplete, setLiveComplete] = useState(estimateComplete ?? false);
   const [sendSheetInitialPanel, setSendSheetInitialPanel] = useState<"menu" | "email">("menu");
 
-  // ContractorPricingEditor dispatches this after every successful pricing
-  // save, carrying the server's own calculated state -- the same PUT
-  // /api/estimates/[id]/pricing response body it just received. Nothing here
-  // recomputes completeness from a total; `complete` is forwarded exactly as
-  // the server returned it, so this component and the server can never
-  // disagree about whether the estimate is ready to send. estimateTotal
+  // ContractorPricingEditor dispatches this whenever its resolved send
+  // readiness changes (isPricingSendReady: the server's own `complete` from
+  // the last save or page load, AND no unsaved edit, AND no save in flight).
+  // Nothing here recomputes completeness from a total; `complete` is taken
+  // exactly as the editor resolved it, so this Send and the draft editor's
+  // Save Pricing bar can never show together. estimateTotal
   // itself (used below for the invoice prefill) needs no live counterpart:
   // it is a prop, not mirrored into state, so it already refreshes with the
   // rest of this page's server data on the editor's router.refresh().
