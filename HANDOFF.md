@@ -1,30 +1,33 @@
 # TradePulse handoff
 
-Updated: 2026-09-18 23:26 PT.
+Updated: 2026-09-18 23:53 PT.
 
-## Current production and local state (2026-09-18 23:26 PT)
+## Current production and local state (2026-09-18 23:53 PT)
 
-**Production/`origin/main` is `f0fac3e082b5309e18b5c91e27a83591d3dab4fa`**, deployed as
-`dpl_3CEFPq9BUmY5W7S7jUrLYUJw5Xmy` and production phone-verified (see "Single sticky primary action on the
-draft detail page" below).
+**Production/`origin/main` is `e36c97a645f020ac981aca2cc131b7cf2d0b18ce`**, deployed as
+`dpl_6jifedbZbfkzpjbqxZ2YXKHctXKw` and production phone-verified (see "Delivered pricing shown locked" below).
 
 Deployment history, newest first:
 
 | Deployment | Commit | What it shipped |
 | --- | --- | --- |
-| `dpl_3CEFPq9BUmY5W7S7jUrLYUJw5Xmy` (current) | `f0fac3e` | `9953a6a` single draft CTA + `a215db8` refresh after first Copy Link, plus their HANDOFF commits |
-| `dpl_GxRiXpXzm6THAYXAMDWnVAU84sVy` (rollback reference) | `c36bd17` | Failure A and B hotfix |
+| `dpl_6jifedbZbfkzpjbqxZ2YXKHctXKw` (current) | `e36c97a` | `11245ac` delivered pricing locked + `38b92c4` draft-with-marker actions, plus their HANDOFF commits |
+| `dpl_3CEFPq9BUmY5W7S7jUrLYUJw5Xmy` (rollback reference) | `f0fac3e` | `9953a6a` single draft CTA + `a215db8` refresh after first Copy Link |
+| `dpl_GxRiXpXzm6THAYXAMDWnVAU84sVy` | `c36bd17` | Failure A and B hotfix |
 | `dpl_27F41RjL3LPohh22zDnVHXPPnS22` | `607fc25` | `b7ff124` + `d71ecee` sticky Save Pricing + `607fc25` HANDOFF |
 | `dpl_6tQCKUP9L4RovihAZzg9VunYfP86` | `3d05370` | Phase 2 Slice 4 |
 | `dpl_2smDAv85tPTgeYdDkdsziqc5pM2j` | `beca4999` | earlier Phase 2 state |
 
-**Next change, in commit order on top of `f0fac3e`** (see "Delivered pricing shown locked" below):
-1. Implementation commit `11245ac7ab4576b0a14f19de00bcb30ae7905e35` exists (delivered contractor_pricing
-   pricing shown locked on `/estimates/[id]`); production verification pending.
-2. `4405ec08e7df60b8f7a72a8e586ccbcee81f19ee`: HANDOFF only.
-3. Implementation commit `38b92c4209df0ca2120167d9f4a2ce1e4c686e62` exists (a draft with a delivery marker
-   gets delivered actions, never draft Send beside locked pricing); production verification pending.
-4. The HANDOFF commit recording item 3 and the test-harness debt.
+**Next change:** implementation commit `21a4a9b8f327074f3063d5ec4fe165d37fe0e617` exists (PATCH
+`/api/estimates` refuses a delivery marker without status sent/done, see "PATCH delivery-state hardening"
+below); production verification pending. The HANDOFF commit recording it sits on top of it.
+
+**Open follow-up, not implemented: database-level delivery-state constraint.** `PATCH /api/estimates`
+validates by read-then-write with no row lock, so two concurrent requests could in theory race between its
+validation and its UPDATE. Durable protection would be a Postgres CHECK constraint on `tpe_estimates`
+equivalent to `(copied_at is null and sent_at is null) or status in ('sent', 'done')`. All production rows
+satisfied that invariant when checked read-only on 2026-09-18. Not added: it needs a full migration and
+constraint review (including every writer, and the legacy rows) before it is applied.
 
 **Required focused regression set for any shared-editor or `/new` change:** include
 `tests/smoke/generation-contractor-pricing.spec.ts` alongside `contractor-pricing-form.spec.ts`,
@@ -267,10 +270,49 @@ Future hard stops should be worded: "Do not implement. Return findings only."
   Slice 4; fix separately with a tiny isolated commit.
 - 14 June/July orphan Storage objects remain a separate follow-up.
 
-## Delivered pricing shown locked on /estimates/[id] (implementation commit exists; production verification pending)
+## PATCH delivery-state hardening (implementation commit exists; production verification pending)
 
-Implementation commit `11245ac7ab4576b0a14f19de00bcb30ae7905e35` exists (parent `f0fac3e`); production
+Implementation commit `21a4a9b8f327074f3063d5ec4fe165d37fe0e617` exists (parent `e36c97a`); production
 verification pending.
+
+- **Invariant:** the resulting row (the existing row merged with the request's `status` and `copied_at`) must
+  never have a delivery marker (`sent_at` or `copied_at`) with a status other than `sent` or `done`.
+  `PATCH /api/estimates` (`app/api/estimates/route.ts`) now refuses any such result with 409 ("A sent or
+  copied estimate must stay marked as sent or done"), for every estimate class, after the existing
+  contractor_pricing gates and before any write (including the structured-items sync).
+- **One definition:** `violatesDeliveryStatusInvariant()` in `lib/estimate-delivery.ts`, built on the existing
+  `applyDeliveryPatch`. `isDelivered()` is unchanged in meaning; it is now expressed through the same two
+  parts, `hasDeliveryMarker()` and `isDeliveredStatus()`.
+- **Refused now:** `copied_at` written without status `sent` on a draft; `status` moved to `draft`,
+  `needs_review` or anything else while `sent_at` or `copied_at` is set. `sent_at` itself cannot be PATCHed.
+- **Still accepted (every current caller):** Copy Link (`copied_at` + `status: "sent"`, or `copied_at` alone
+  re-copying a sent or done estimate), Mark Job Done (`status: "done"` on a delivered estimate), the
+  website-quote conversion (`status: "draft"`, no marker), and the customer-details, deposit and
+  `include_photos` PATCHes. SMS/email, Resend, pricing locking, `/new`, schema and migrations are unchanged.
+- **Tests:** `contractor-pricing-delivery-lock.spec.ts` covers the ten request shapes through the real helper,
+  that `isDelivered` is unchanged, and the check's placement (merged request, all classes, after the
+  contractor_pricing gates, before every write, 409). The `38b92c4` test in
+  `estimate-actions-send-state-sync.spec.ts` now records both old constructions as refused. The route handler
+  itself is not executed (no safe Supabase mock in this harness), so its wiring is pinned from source.
+- **Verification for `21a4a9b`:** 9 specs in `playwright.unit.config.ts` -- 145 passed, 0 skipped, 1 known
+  `unit-suite-completeness` failure (same three specs). `npx tsc --noEmit` clean. `eslint` on the 4 changed
+  files clean. `git diff --check` clean. `npm run build` belongs in the push gate.
+- **Phone verification needed after deploy:** Copy Link a complete draft (still delivers); Mark Job Done on a
+  delivered estimate if a Pro account is available; customer-details and photo toggles on a draft still save.
+
+## Delivered pricing shown locked on /estimates/[id] (shipped in `e36c97a`, production-verified)
+
+`11245ac7ab4576b0a14f19de00bcb30ae7905e35` (parent `f0fac3e`) and `38b92c4` shipped in
+`e36c97a645f020ac981aca2cc131b7cf2d0b18ce` as `dpl_6jifedbZbfkzpjbqxZ2YXKHctXKw`.
+
+**Production phone verification passed:** draft one-action flow; an unsaved edit changes to Save Pricing; a
+re-save restores Send Estimate; Copy Link moves into the delivered state; delivered pricing is readable but
+locked, with no Save pricing, Add charge, Remove or Switch controls; the locked guidance appears; Resend
+Estimate appears; a reload keeps the locked view; the `/new` flow still works. Mark Job Done was absent
+because the test account was not Pro, which is expected.
+
+**Cleanup:** Verified read-only by Claude Chat on 2026-09-18: no estimates created, copied or sent in the prior
+6 hours remained; zero orphan rows in tpe_estimate_items, tpe_estimate_line_items and tpe_payment_reminders.
 
 **Defect (pre-existing).** The server already locks pricing once an estimate is delivered, but the detail page
 rendered a delivered contractor_pricing estimate with editable fields, Switch, Add charge, Remove, saved-item
@@ -320,9 +362,9 @@ known `unit-suite-completeness` guard, same three specs); `generation-contractor
 `npx tsc --noEmit` clean. `eslint` on the 2 changed files clean. `git diff --check` clean. `npm run build` not
 run yet; it belongs in the push gate.
 
-**Edge state: draft status with a delivery marker (implementation commit `38b92c4`; production verification
-pending).** Implementation commit `38b92c4209df0ca2120167d9f4a2ce1e4c686e62` exists (parent `4405ec0`);
-production verification pending.
+**Edge state: draft status with a delivery marker (`38b92c4`, shipped in `e36c97a`).** Commit
+`38b92c4209df0ca2120167d9f4a2ce1e4c686e62` (parent `4405ec0`). The route-level cause below is now closed by
+`21a4a9b` ("PATCH delivery-state hardening" above); this UI guard stays as defence in depth.
 - `11245ac` locks pricing on `isDelivered()`, but `EstimateActions` chose its actions from the stored status
   alone (`useState(status ?? "")`). For `status = 'draft'` with `copied_at` or `sent_at` set, the page would
   show locked pricing while `EstimateActions`' draft branch offered Send Estimate (and hid Resend and Mark Job
@@ -350,9 +392,8 @@ production verification pending.
   `npx tsc --noEmit` clean; `eslint` on the 3 changed files shows only the pre-existing `<a>` to `/estimates`
   error at `app/estimates/[id]/page.tsx:201`; `git diff --check` clean. `npm run build` belongs in the push
   gate.
-- Possible follow-up, not done: make `PATCH /api/estimates` refuse these two constructions server-side (for
-  example require `status: "sent"` with a first `copied_at`, and refuse `status: "draft"` once delivered).
-  That changes server delivery semantics, so it was out of scope here.
+- Route-level follow-up: closed by `21a4a9b`, which refuses both constructions server-side. The remaining
+  database-level constraint follow-up is recorded at the top of this file.
 
 **Test-harness debt: the real-editor render shim.** `tests/smoke/contractor-pricing-delivery-lock.spec.ts`
 (added in `11245ac`) renders the real `ContractorPricingEditor` with `react-dom/server`. It was written against
@@ -365,10 +406,8 @@ behaviour is unchanged. If they fail after an upgrade (for example "Objects are 
 or an empty render), diagnose it as test-harness compatibility first, by checking
 `node_modules/playwright/jsx-runtime.js`, before treating it as a product regression.
 
-**Phone verification needed after deploy:** open a sent estimate (values visible and not editable, no Save,
-Add charge or Remove, locked notice shown, Resend and Mark Job Done unchanged); open a draft (fully editable,
-one sticky primary action as before); Copy Link a complete draft (lands on the locked view). The draft-with-
-marker edge state cannot be produced through the UI, so it is covered by tests only.
+**Phone verification:** passed in production on `e36c97a`; see the summary at the top of this section. The
+draft-with-marker edge state cannot be produced through the UI, so it is covered by tests only.
 
 ## Single sticky primary action on the draft detail page (shipped in `f0fac3e`, production-verified)
 
