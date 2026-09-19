@@ -4,18 +4,23 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatCentsAsCurrency, type Currency } from "@/lib/currency";
 import type { ContractorPricing } from "@/lib/contractor-pricing";
+import type { PriceBookSuggestion } from "@/lib/pricebook-suggestions";
 import { PRICING_CHANGE_EVENT } from "@/app/components/estimate-actions";
 import {
+  acceptSuggestedItem,
   addCharge,
   chooseLabourMethod,
   editTax,
+  hasEnteredGenericPricing,
   initContractorPricingForm,
   removeCharge,
+  removeConfirmedItem,
   resolveContractorPricingGuidance,
   resolveContractorPricingPreview,
   shouldScrollToPricing,
   toPricingRequestPayload,
   updateCharge,
+  updateConfirmedItem,
   type BusinessPricingDefaults,
   type ContractorPricingFormState,
   type ContractorPricingRowInput,
@@ -47,6 +52,7 @@ export function ContractorPricingEditor({
   isDelivered,
   depositPercent,
   depositThresholdDollars,
+  suggestions: initialSuggestions,
 }: {
   estimateId: string;
   /** The estimate's own snapshot, never the business setting. */
@@ -60,6 +66,14 @@ export function ContractorPricingEditor({
   /** The estimate's own deposit snapshot, the same values Save resolves against. */
   depositPercent: number | null;
   depositThresholdDollars: number | null;
+  /**
+   * Saved-item suggestions matched against the contractor's own job text
+   * (Phase 2 slice 4). Omitted wherever that text is not available for this
+   * page load (e.g. the detail page's own server render, which has no
+   * session job text and must not fall back to generated prose) -- absent or
+   * empty is the same valid "no suggestions" state either way.
+   */
+  suggestions?: PriceBookSuggestion[];
 }) {
   const router = useRouter();
   const [form, setForm] = useState<ContractorPricingFormState>(() =>
@@ -68,6 +82,69 @@ export function ContractorPricingEditor({
   const [pricing, setPricing] = useState<ContractorPricing>(initialPricing);
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
+
+  // Suggestions (Phase 2 slice 4). Local state so an accepted suggestion can
+  // be removed from the visible list immediately -- the only mechanism that
+  // prevents the same saved item being accepted twice.
+  const [suggestions, setSuggestions] = useState<PriceBookSuggestion[]>(initialSuggestions ?? []);
+  const [pendingSuggestionId, setPendingSuggestionId] = useState<string | null>(null);
+  const [resolvingSuggestionId, setResolvingSuggestionId] = useState<string | null>(null);
+  const [suggestionError, setSuggestionError] = useState("");
+
+  /**
+   * Tap order (specs/contractor-owned-pricing.md's "acceptance order around
+   * confirmation"): ask for the destructive mode-switch confirmation first,
+   * when one is needed, before ever calling the resolve endpoint. This
+   * avoids an authoritative-price request the contractor is only going to
+   * cancel.
+   */
+  function handleTapSuggestion(suggestion: PriceBookSuggestion) {
+    setSuggestionError("");
+    if (form.confirmedItems.length === 0 && hasEnteredGenericPricing(form)) {
+      setPendingSuggestionId(suggestion.id);
+      return;
+    }
+    void acceptSuggestion(suggestion);
+  }
+
+  /**
+   * Resolve the item's current authoritative values, then -- only on success
+   * -- clear generic pricing and add the confirmed item in one atomic form
+   * update. A resolve failure never touches `form`, so generic pricing can
+   * never be destroyed by a failed lookup (the "no partial destructive
+   * switch" rule).
+   */
+  async function acceptSuggestion(suggestion: PriceBookSuggestion) {
+    setPendingSuggestionId(null);
+    setResolvingSuggestionId(suggestion.id);
+    setSuggestionError("");
+    try {
+      const response = await fetch(`/api/price-book-items/${suggestion.id}`);
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        item?: {
+          description: string;
+          labourUnitPrice: number;
+          materialUnitPrice: number;
+          taxable: boolean;
+        };
+      };
+      if (!response.ok || !data.item) {
+        throw new Error(data.error ?? "Could not add this saved item. Try again.");
+      }
+
+      setForm((current) => acceptSuggestedItem(current, data.item!));
+      setSuggestions((current) => current.filter((candidate) => candidate.id !== suggestion.id));
+    } catch (error) {
+      setSuggestionError(error instanceof Error ? error.message : "Could not add this saved item. Try again.");
+    } finally {
+      setResolvingSuggestionId(null);
+    }
+  }
+
+  function cancelPendingSuggestion() {
+    setPendingSuggestionId(null);
+  }
 
   // Add Pricing on /new links here as /estimates/{id}#pricing, but plain
   // browser hash navigation to this client-rendered section proved
@@ -144,8 +221,149 @@ export function ContractorPricingEditor({
     }
   }
 
+  // Defensive only (specs/contractor-owned-pricing.md's "defensive reload
+  // rule"): persisted 'ea' rows that could not be reliably reconstructed
+  // into confirmed items. No editable pricing draft is shown -- this is not
+  // a recovery flow, just the smallest existing attention pattern applied to
+  // a state that should not occur from normal use of this app.
+  if (form.pricingAttentionNeeded) {
+    return (
+      <div id="pricing" ref={pricingRef} className="mb-4 scroll-mt-6">
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3.5">
+          <p className="text-sm font-medium text-red-800">Pricing needs attention</p>
+          <p className="mt-1 text-sm text-red-700">
+            This estimate&apos;s saved pricing could not be read reliably. Contact support before pricing this
+            estimate.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div id="pricing" ref={pricingRef} className="mb-4 flex flex-col gap-6 scroll-mt-6">
+      {/* Saved-item suggestions (Phase 2 slice 4). Independent of mode: shown
+          whenever there are candidates left, whether or not the contractor
+          has already accepted one -- accepting removes it from this list. */}
+      {suggestions.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <h3 className="text-base font-bold text-zinc-900">Saved items</h3>
+          <div className="flex flex-col gap-2">
+            {suggestions.map((suggestion) => (
+              <div key={suggestion.id} className="rounded-lg border border-zinc-200 px-3 py-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-medium text-zinc-900">{suggestion.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleTapSuggestion(suggestion)}
+                    disabled={resolvingSuggestionId === suggestion.id}
+                    className="min-h-[44px] shrink-0 whitespace-nowrap rounded-lg border border-amber-500 px-3 text-sm font-semibold text-amber-600 hover:bg-amber-50 disabled:opacity-50"
+                  >
+                    {resolvingSuggestionId === suggestion.id ? "Adding..." : "Add"}
+                  </button>
+                </div>
+                {pendingSuggestionId === suggestion.id && (
+                  <div className="mt-2.5 rounded-lg bg-amber-50 px-3 py-2.5">
+                    <p className="text-sm text-amber-800">
+                      Use saved line items instead? This will replace your current Labour and Materials values.
+                      Other charges and tax will stay.
+                    </p>
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void acceptSuggestion(suggestion)}
+                        className="min-h-[40px] rounded-lg bg-amber-500 px-3 text-sm font-semibold text-zinc-950 hover:bg-amber-400"
+                      >
+                        Use saved line items
+                      </button>
+                      <button
+                        type="button"
+                        onClick={cancelPendingSuggestion}
+                        className="min-h-[40px] rounded-lg border border-zinc-300 px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-100"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          {suggestionError && <p className="text-sm text-red-600">{suggestionError}</p>}
+        </section>
+      )}
+
+      {form.confirmedItems.length > 0 ? (
+        /* Saved line items (Phase 2 slice 4). Replaces generic Labour and
+            Materials entirely while any confirmed item exists (Option C).
+            Taxability is copied from the saved item and is not editable
+            here. */
+        <section className="flex flex-col gap-3">
+          <h3 className="text-base font-bold text-zinc-900">Saved line items</h3>
+          {form.confirmedItems.map((item) => (
+            <div key={item.id} className="flex flex-col gap-2 rounded-lg border border-zinc-200 p-3">
+              <label className="flex flex-col gap-1.5">
+                <span className={LABEL}>Description</span>
+                <input
+                  type="text"
+                  className={INPUT}
+                  value={item.description}
+                  onChange={(event) =>
+                    setForm(updateConfirmedItem(form, item.id, "description", event.target.value))
+                  }
+                />
+              </label>
+              <div className="flex gap-3">
+                <label className="flex w-24 flex-col gap-1.5">
+                  <span className={LABEL}>Qty</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className={INPUT}
+                    value={item.quantity}
+                    onChange={(event) =>
+                      setForm(updateConfirmedItem(form, item.id, "quantity", event.target.value))
+                    }
+                  />
+                </label>
+                <label className="flex flex-1 flex-col gap-1.5">
+                  <span className={LABEL}>Labour</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className={INPUT}
+                    value={item.labourUnitPrice}
+                    onChange={(event) =>
+                      setForm(updateConfirmedItem(form, item.id, "labourUnitPrice", event.target.value))
+                    }
+                  />
+                </label>
+                <label className="flex flex-1 flex-col gap-1.5">
+                  <span className={LABEL}>Materials</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className={INPUT}
+                    value={item.materialUnitPrice}
+                    onChange={(event) =>
+                      setForm(updateConfirmedItem(form, item.id, "materialUnitPrice", event.target.value))
+                    }
+                  />
+                </label>
+              </div>
+              <button
+                type="button"
+                aria-label={`Remove ${item.description || "line item"}`}
+                onClick={() => setForm(removeConfirmedItem(form, item.id))}
+                className="self-start text-sm font-medium text-red-500 hover:text-red-600 min-h-[44px]"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </section>
+      ) : (
+        <>
       {/* Labour */}
       <section className="flex flex-col gap-3">
         <h3 className="text-base font-bold text-zinc-900">Labour</h3>
@@ -253,6 +471,8 @@ export function ContractorPricingEditor({
           Customer sees {money(preview.materialsCents)} at {form.markupPercent.trim() === "" ? "0" : form.markupPercent}% markup
         </p>
       </section>
+        </>
+      )}
 
       {/* Optional charges */}
       <section className="flex flex-col gap-3">

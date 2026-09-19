@@ -213,3 +213,120 @@ test("E: the route passes the authenticated business id into the ownership-first
   // silent drop).
   expect(route).toContain('if (!user) return applyTo(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));');
 });
+
+// ── Phase 2 slice 4: saved-item suggestions wired into this same read ──────
+//
+// Suggestion ranking itself is fully covered by pricebook-suggestions.spec.ts.
+// These cases cover only the wiring: whether loadSuggestionCandidates runs at
+// all, what it is called with, and that a suggestion failure/absence never
+// blocks or changes the rest of this read.
+
+function makeDepsWithSuggestions(
+  estimate: OwnedEstimateForPricingInit | null,
+  rows: PricingInitRow[],
+  candidates: Array<{ id: string; name: string; description: string | null; category: string }>
+) {
+  const calls: string[] = [];
+  const deps: EstimatePricingInitDependencies = {
+    async findOwnedEstimate(estimateId, businessId) {
+      calls.push(`findOwnedEstimate:${estimateId}:${businessId}`);
+      return estimate && estimate.id === estimateId && businessId === OWNER_BUSINESS ? estimate : null;
+    },
+    async loadRows(estimateId) {
+      calls.push(`loadRows:${estimateId}`);
+      return rows;
+    },
+    async loadSuggestionCandidates(businessId) {
+      calls.push(`loadSuggestionCandidates:${businessId}`);
+      return candidates;
+    },
+  };
+  return { deps, calls };
+}
+
+const SUGGESTION_CANDIDATES = [
+  { id: "faucet", name: "Kitchen faucet replacement", description: "Replace kitchen faucet", category: "Faucets" },
+];
+
+test("F: blank or absent job text never calls loadSuggestionCandidates, and returns no suggestions", async () => {
+  const { deps, calls } = makeDepsWithSuggestions(completeContractorPricingEstimate(), [], SUGGESTION_CANDIDATES);
+
+  const withoutJobText = await loadEstimatePricingInit(ESTIMATE_ID, OWNER_BUSINESS, deps);
+  expect(withoutJobText.ok).toBe(true);
+  if (withoutJobText.ok) expect(withoutJobText.suggestions).toEqual([]);
+
+  const withBlankJobText = await loadEstimatePricingInit(ESTIMATE_ID, OWNER_BUSINESS, deps, "   ");
+  expect(withBlankJobText.ok).toBe(true);
+  if (withBlankJobText.ok) expect(withBlankJobText.suggestions).toEqual([]);
+
+  expect(calls.some((c) => c.startsWith("loadSuggestionCandidates:"))).toBe(false);
+});
+
+test("G: non-blank job text calls loadSuggestionCandidates exactly once, scoped to this business, and returns the matcher's ranking", async () => {
+  const { deps, calls } = makeDepsWithSuggestions(completeContractorPricingEstimate(), [], SUGGESTION_CANDIDATES);
+
+  const result = await loadEstimatePricingInit(
+    ESTIMATE_ID,
+    OWNER_BUSINESS,
+    deps,
+    "Replace the kitchen faucet, it is leaking"
+  );
+
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(result.suggestions.map((s) => s.id)).toContain("faucet");
+  expect(calls.filter((c) => c.startsWith("loadSuggestionCandidates:"))).toEqual([
+    `loadSuggestionCandidates:${OWNER_BUSINESS}`,
+  ]);
+});
+
+test("H: a business with no matching candidates gets an empty, non-error suggestions list", async () => {
+  const { deps } = makeDepsWithSuggestions(completeContractorPricingEstimate(), [], []);
+
+  const result = await loadEstimatePricingInit(ESTIMATE_ID, OWNER_BUSINESS, deps, "replace the kitchen faucet");
+
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(result.suggestions).toEqual([]);
+});
+
+test("I: an estimate refused for ownership or legacy reasons never calls loadSuggestionCandidates either", async () => {
+  const { deps: deniedDeps, calls: deniedCalls } = makeDepsWithSuggestions(
+    completeContractorPricingEstimate(),
+    [],
+    SUGGESTION_CANDIDATES
+  );
+  await loadEstimatePricingInit(ESTIMATE_ID, "business-attacker", deniedDeps, "kitchen faucet");
+  expect(deniedCalls.some((c) => c.startsWith("loadSuggestionCandidates:"))).toBe(false);
+
+  const legacy: OwnedEstimateForPricingInit = { ...completeContractorPricingEstimate(), pricing_source: "markdown" };
+  const { deps: legacyDeps, calls: legacyCalls } = makeDepsWithSuggestions(legacy, [], SUGGESTION_CANDIDATES);
+  await loadEstimatePricingInit(ESTIMATE_ID, OWNER_BUSINESS, legacyDeps, "kitchen faucet");
+  expect(legacyCalls.some((c) => c.startsWith("loadSuggestionCandidates:"))).toBe(false);
+});
+
+test("J: the deployed route queries no money field and filters to active = true when loading suggestion candidates", async () => {
+  const { readFileSync } = await import("node:fs");
+  const path = await import("node:path");
+  const route = readFileSync(path.join(__dirname, "../../app/api/estimates/[id]/pricing/route.ts"), "utf8");
+
+  const fnStart = route.indexOf("async loadSuggestionCandidates(businessId) {");
+  expect(fnStart).toBeGreaterThan(-1);
+  const fnEnd = route.indexOf("},", fnStart);
+  const fn = route.slice(fnStart, fnEnd);
+
+  // The select() call itself carries no money or taxability field -- the
+  // structural guarantee, checked on the call, not on the surrounding
+  // comment prose (which legitimately names those fields to explain why).
+  const selectMatch = fn.match(/\.select\("([^"]*)"\)/);
+  expect(selectMatch, "the candidates query selects explicit columns").not.toBeNull();
+  expect(selectMatch![1]).toBe("id, name, description, category");
+  expect(fn).toContain('.eq("business_id", businessId)');
+  expect(fn).toContain('.eq("active", true)');
+
+  // The response actually carries the suggestions this wiring produced.
+  expect(route).toContain("suggestions: result.suggestions,");
+  // jobText is read from the query string, capped defensively, and never
+  // required.
+  expect(route).toContain('searchParams.get("jobText")');
+});

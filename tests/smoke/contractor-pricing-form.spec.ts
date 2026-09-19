@@ -1,18 +1,23 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import {
+  acceptSuggestedItem,
   addCharge,
   chooseLabourMethod,
   centsToDollars,
   editTax,
+  hasEnteredGenericPricing,
   initContractorPricingForm,
   missingLabels,
+  reconstructConfirmedItems,
   removeCharge,
+  removeConfirmedItem,
   resolveContractorPricingGuidance,
   resolveContractorPricingPreview,
   shouldScrollToPricing,
   toPricingRequestPayload,
   updateCharge,
+  updateConfirmedItem,
   type BusinessPricingDefaults,
   type ContractorPricingRowInput,
 } from "../../lib/contractor-pricing-form";
@@ -43,6 +48,7 @@ function row(overrides: Partial<ContractorPricingRowInput>): ContractorPricingRo
     markup_percent: null,
     description: "Labour",
     display_order: 0,
+    taxable: true,
     ...overrides,
   };
 }
@@ -199,9 +205,13 @@ test("26: the markup field is on the estimate itself, and is editable", () => {
   expect(markupBlock).not.toContain("readOnly");
   expect(markupBlock).not.toContain("disabled");
 
-  // The contractor is never sent elsewhere to change it.
+  // The contractor is never sent elsewhere (navigated away) to change it.
+  // Phase 2 slice 4 does call the price-book-items resolve API from this
+  // component (to price an accepted saved-item suggestion, unrelated to
+  // markup), so the check is narrowed to navigation, not every occurrence
+  // of the substring.
   expect(editor).not.toContain("/rates");
-  expect(editor).not.toContain("price-book");
+  expect(editor).not.toMatch(/href=\{?["'`][^"'`}]*price-book/);
 });
 
 test("27: editing markup changes the next PUT payload and leaves the rest alone", () => {
@@ -420,10 +430,13 @@ test("24: a failed save reports the failure and does not claim success", () => {
   expect(editor).toMatch(/if\s*\(!response\.ok/);
   expect(editor).toContain('setStatus("error")');
   expect(editor).toContain('setStatus("saved")');
-  // The error path must not also mark it saved. Anchored on the catch clause
-  // itself: the first "catch" in the file is the .catch() guarding the JSON
-  // parse, which sits above the success path.
-  const catchIndex = editor.indexOf("} catch (error) {");
+  // The error path must not also mark it saved. Anchored on save()'s own
+  // catch clause specifically: Phase 2 slice 4 added a second, earlier
+  // "} catch (error) {" inside acceptSuggestion(), so this must not match
+  // the first one in the file anymore.
+  const saveStart = editor.indexOf("async function save() {");
+  expect(saveStart, "the save function exists").toBeGreaterThan(-1);
+  const catchIndex = editor.indexOf("} catch (error) {", saveStart);
   expect(catchIndex, "the save has a catch clause").toBeGreaterThan(-1);
   expect(editor.slice(catchIndex)).not.toContain('setStatus("saved")');
 });
@@ -533,8 +546,8 @@ test("preview 3: undelivered materials preview is cost plus markup, same as a sa
 
 test("preview 4: a delivered estimate previews the persisted pricing, never the unsaved draft", () => {
   const persistedRows: ContractorPricingRowInput[] = [
-    { item_type: "labour", unit: null, quantity: 1, unit_price: 500, markup_percent: null, description: "Labour", display_order: 0 },
-    { item_type: "material", unit: null, quantity: 1, unit_price: 100, markup_percent: 10, description: "Materials", display_order: 1 },
+    { item_type: "labour", unit: null, quantity: 1, unit_price: 500, markup_percent: null, description: "Labour", display_order: 0, taxable: true },
+    { item_type: "material", unit: null, quantity: 1, unit_price: 100, markup_percent: 10, description: "Materials", display_order: 1, taxable: true },
   ];
   const persistedPricing: ContractorPricing = calculateContractorPricing(persistedRows, PREVIEW_SNAPSHOTS);
 
@@ -690,8 +703,8 @@ test("guidance: undelivered, draft complete, persisted still incomplete -> save-
 
 test("guidance: undelivered, persisted complete and draft still complete -> none", () => {
   const persistedRows: ContractorPricingRowInput[] = [
-    { item_type: "labour", unit: null, quantity: 1, unit_price: 100, markup_percent: null, description: "Labour", display_order: 0 },
-    { item_type: "material", unit: null, quantity: 1, unit_price: 20, markup_percent: 25, description: "Materials", display_order: 1 },
+    { item_type: "labour", unit: null, quantity: 1, unit_price: 100, markup_percent: null, description: "Labour", display_order: 0, taxable: true },
+    { item_type: "material", unit: null, quantity: 1, unit_price: 20, markup_percent: 25, description: "Materials", display_order: 1, taxable: true },
   ];
   const persistedPricing = calculateContractorPricing(persistedRows, PREVIEW_SNAPSHOTS);
   const draftForm = typedFixedLabourMaterialsForm("100", "20", "25"); // matches the saved state
@@ -712,8 +725,8 @@ test("guidance precedence fix: undelivered, persisted complete but the unsaved d
   // persisted-first precedence returned "none" here, silently hiding that
   // the current unsaved draft cannot be sent.
   const persistedRows: ContractorPricingRowInput[] = [
-    { item_type: "labour", unit: null, quantity: 1, unit_price: 100, markup_percent: null, description: "Labour", display_order: 0 },
-    { item_type: "material", unit: null, quantity: 1, unit_price: 20, markup_percent: 25, description: "Materials", display_order: 1 },
+    { item_type: "labour", unit: null, quantity: 1, unit_price: 100, markup_percent: null, description: "Labour", display_order: 0, taxable: true },
+    { item_type: "material", unit: null, quantity: 1, unit_price: 20, markup_percent: 25, description: "Materials", display_order: 1, taxable: true },
   ];
   const persistedPricing = calculateContractorPricing(persistedRows, PREVIEW_SNAPSHOTS); // complete
   let form = initContractorPricingForm(persistedRows, GST_5, NO_DEFAULTS);
@@ -732,8 +745,8 @@ test("guidance precedence fix: undelivered, persisted complete but the unsaved d
 
 test("guidance: delivered, with a very different unsaved draft -> guidance still reflects persisted pricing only", () => {
   const persistedRows: ContractorPricingRowInput[] = [
-    { item_type: "labour", unit: null, quantity: 1, unit_price: 100, markup_percent: null, description: "Labour", display_order: 0 },
-    { item_type: "material", unit: null, quantity: 1, unit_price: 20, markup_percent: 25, description: "Materials", display_order: 1 },
+    { item_type: "labour", unit: null, quantity: 1, unit_price: 100, markup_percent: null, description: "Labour", display_order: 0, taxable: true },
+    { item_type: "material", unit: null, quantity: 1, unit_price: 20, markup_percent: 25, description: "Materials", display_order: 1, taxable: true },
   ];
   const persistedPricing = calculateContractorPricing(persistedRows, PREVIEW_SNAPSHOTS); // complete
   const draftForm = initContractorPricingForm(NO_ROWS, GST_5, NO_DEFAULTS); // labourMethod null: incomplete draft
@@ -776,8 +789,8 @@ test("guidance: delivered state never returns save-to-send", () => {
   // different complete draft -- neither combination may ever suggest saving,
   // since a delivered estimate cannot be repriced at all.
   const completeRows: ContractorPricingRowInput[] = [
-    { item_type: "labour", unit: null, quantity: 1, unit_price: 100, markup_percent: null, description: "Labour", display_order: 0 },
-    { item_type: "material", unit: null, quantity: 1, unit_price: 20, markup_percent: 25, description: "Materials", display_order: 1 },
+    { item_type: "labour", unit: null, quantity: 1, unit_price: 100, markup_percent: null, description: "Labour", display_order: 0, taxable: true },
+    { item_type: "material", unit: null, quantity: 1, unit_price: 20, markup_percent: 25, description: "Materials", display_order: 1, taxable: true },
   ];
   const completePersisted = calculateContractorPricing(completeRows, PREVIEW_SNAPSHOTS);
   const incompletePersisted = calculateContractorPricing(NO_ROWS, PREVIEW_SNAPSHOTS);
@@ -866,4 +879,510 @@ test("shouldScrollToPricing decides only from the #pricing hash", () => {
   expect(shouldScrollToPricing("")).toBe(false);
   expect(shouldScrollToPricing(undefined)).toBe(false);
   expect(shouldScrollToPricing("#other")).toBe(false);
+});
+
+// ── Phase 2 slice 4: saved line-item acceptance, editing and reload ────────
+//
+// specs/contractor-owned-pricing.md's Phase 2 slice 4 instructions. Suggestion
+// generation and ranking are already fully covered by pricebook-suggestions.
+// spec.ts; these cases cover what happens once the contractor accepts one:
+// mode switching, the confirmed-item draft, reload reconstruction of
+// persisted 'ea' pairs, and the live-preview/payload pipeline.
+
+function lineItemRow(overrides: Partial<ContractorPricingRowInput>): ContractorPricingRowInput {
+  return {
+    item_type: "labour",
+    unit: "ea",
+    quantity: 2,
+    unit_price: 145,
+    markup_percent: null,
+    description: "Quarter-turn shutoff valve replacement",
+    display_order: 0,
+    taxable: true,
+    ...overrides,
+  };
+}
+
+function pairRows(overrides: {
+  description?: string;
+  quantity?: number;
+  labourPrice?: number;
+  materialPrice?: number;
+  taxable?: boolean;
+  displayOrder?: number;
+} = {}): ContractorPricingRowInput[] {
+  const {
+    description = "Quarter-turn shutoff valve replacement",
+    quantity = 2,
+    labourPrice = 145,
+    materialPrice = 18,
+    taxable = true,
+    displayOrder = 0,
+  } = overrides;
+  return [
+    lineItemRow({ description, quantity, unit_price: labourPrice, display_order: displayOrder, taxable }),
+    lineItemRow({
+      item_type: "material",
+      description,
+      quantity,
+      unit_price: materialPrice,
+      markup_percent: 0,
+      display_order: displayOrder + 1,
+      taxable,
+    }),
+  ];
+}
+
+// ── Reload reconstruction ───────────────────────────────────────────────────
+
+test("39: a valid adjacent ea labour/material pair reconstructs one confirmed item", () => {
+  const result = reconstructConfirmedItems(pairRows());
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(result.items).toHaveLength(1);
+  expect(result.items[0]).toMatchObject({
+    description: "Quarter-turn shutoff valve replacement",
+    quantity: "2",
+    labourUnitPrice: "145",
+    materialUnitPrice: "18",
+    taxable: true,
+  });
+});
+
+test("40: two valid pairs reconstruct two confirmed items", () => {
+  const rows = [
+    ...pairRows({ description: "Kitchen faucet replacement", quantity: 1, labourPrice: 325, materialPrice: 0, displayOrder: 0 }),
+    ...pairRows({ description: "Braided supply line replacement", quantity: 2, labourPrice: 55, materialPrice: 15, displayOrder: 2 }),
+  ];
+  const result = reconstructConfirmedItems(rows);
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(result.items.map((item) => item.description)).toEqual([
+    "Kitchen faucet replacement",
+    "Braided supply line replacement",
+  ]);
+});
+
+test("41: two identical descriptions in separate adjacent pairs remain separate items", () => {
+  const rows = [
+    ...pairRows({ description: "Shutoff valve replacement", quantity: 1, displayOrder: 0 }),
+    ...pairRows({ description: "Shutoff valve replacement", quantity: 3, displayOrder: 2 }),
+  ];
+  const result = reconstructConfirmedItems(rows);
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(result.items).toHaveLength(2);
+  expect(result.items.map((item) => item.quantity)).toEqual(["1", "3"]);
+});
+
+test("42: a malformed orphan ea labour row refuses reconstruction", () => {
+  const result = reconstructConfirmedItems([lineItemRow({})]);
+  expect(result).toEqual({ ok: false });
+});
+
+test("43: a malformed orphan ea material row refuses reconstruction", () => {
+  const result = reconstructConfirmedItems([
+    lineItemRow({ item_type: "material", markup_percent: 0 }),
+  ]);
+  expect(result).toEqual({ ok: false });
+});
+
+test("44: a mismatched pair (quantity, description or taxable) refuses reconstruction", () => {
+  const mismatchedQuantity = pairRows();
+  mismatchedQuantity[1] = { ...mismatchedQuantity[1], quantity: 3 };
+  expect(reconstructConfirmedItems(mismatchedQuantity)).toEqual({ ok: false });
+
+  const mismatchedDescription = pairRows();
+  mismatchedDescription[1] = { ...mismatchedDescription[1], description: "Something else" };
+  expect(reconstructConfirmedItems(mismatchedDescription)).toEqual({ ok: false });
+
+  const mismatchedTaxable = pairRows();
+  mismatchedTaxable[1] = { ...mismatchedTaxable[1], taxable: false };
+  expect(reconstructConfirmedItems(mismatchedTaxable)).toEqual({ ok: false });
+
+  // An odd count is itself a malformed pairing.
+  expect(reconstructConfirmedItems([lineItemRow({}), lineItemRow({}), lineItemRow({})])).toEqual({ ok: false });
+
+  // Swapped order (material before labour) never fits the pairing shape.
+  const swapped = [
+    lineItemRow({ item_type: "material", markup_percent: 0, display_order: 0 }),
+    lineItemRow({ item_type: "labour", display_order: 1 }),
+  ];
+  expect(reconstructConfirmedItems(swapped)).toEqual({ ok: false });
+});
+
+test("45: generic rows still reconstruct existing generic mode unchanged, with no confirmed items", () => {
+  const result = reconstructConfirmedItems([HOURLY_ROW, MATERIALS_ROW]);
+  expect(result).toEqual({ ok: true, items: [] });
+
+  const form = initContractorPricingForm([HOURLY_ROW, MATERIALS_ROW], GST_5, DEFAULTS);
+  expect(form.confirmedItems).toEqual([]);
+  expect(form.pricingAttentionNeeded).toBe(false);
+  expect(form.labourMethod).toBe("hourly");
+});
+
+test("'ea' rows coexisting with a generic labour/material row refuse reconstruction (Option C on reload)", () => {
+  const result = reconstructConfirmedItems([...pairRows(), HOURLY_ROW]);
+  expect(result).toEqual({ ok: false });
+});
+
+test("initContractorPricingForm enters a pricing-attention state on malformed rows, with no editable draft manufactured", () => {
+  const form = initContractorPricingForm([lineItemRow({})], GST_5, DEFAULTS);
+
+  expect(form.pricingAttentionNeeded).toBe(true);
+  expect(form.confirmedItems).toEqual([]);
+  expect(form.labourMethod).toBeNull();
+  expect(form.materialsCost).toBe("");
+  expect(form.charges).toEqual([]);
+});
+
+test("initContractorPricingForm reconstructs confirmed items directly from valid persisted pairs", () => {
+  const form = initContractorPricingForm(pairRows(), GST_5, DEFAULTS);
+
+  expect(form.pricingAttentionNeeded).toBe(false);
+  expect(form.confirmedItems).toHaveLength(1);
+  expect(form.labourMethod).toBeNull(); // no generic labour row when using confirmed items
+  expect(toPricingRequestPayload(form).lineItems).toEqual([
+    {
+      description: "Quarter-turn shutoff valve replacement",
+      quantity: 2,
+      labourUnitPrice: 145,
+      materialUnitPrice: 18,
+      taxable: true,
+    },
+  ]);
+});
+
+// ── Acceptance, editing, removal, duplicate prevention ──────────────────────
+
+test("21 and 22: an accepted item starts at quantity 1 with labour/material/taxable copied from the resolved values", () => {
+  const form = acceptSuggestedItem(initContractorPricingForm([], GST_5, DEFAULTS), {
+    description: "Kitchen faucet replacement",
+    labourUnitPrice: 325,
+    materialUnitPrice: 0,
+    taxable: false,
+  });
+
+  expect(form.confirmedItems).toHaveLength(1);
+  expect(form.confirmedItems[0]).toMatchObject({
+    description: "Kitchen faucet replacement",
+    quantity: "1",
+    labourUnitPrice: "325",
+    materialUnitPrice: "0",
+    taxable: false,
+  });
+});
+
+test("23, 24, 25 and 26: description, quantity, labour price and material price are all editable", () => {
+  let form = acceptSuggestedItem(initContractorPricingForm([], GST_5, DEFAULTS), {
+    description: "Kitchen faucet replacement",
+    labourUnitPrice: 325,
+    materialUnitPrice: 0,
+    taxable: true,
+  });
+  const id = form.confirmedItems[0].id;
+
+  form = updateConfirmedItem(form, id, "description", "Kitchen faucet replacement (premium)");
+  form = updateConfirmedItem(form, id, "quantity", "3");
+  form = updateConfirmedItem(form, id, "labourUnitPrice", "400");
+  form = updateConfirmedItem(form, id, "materialUnitPrice", "50");
+
+  expect(form.confirmedItems[0]).toMatchObject({
+    description: "Kitchen faucet replacement (premium)",
+    quantity: "3",
+    labourUnitPrice: "400",
+    materialUnitPrice: "50",
+  });
+});
+
+test("27: Remove removes only that confirmed item, leaving other confirmed items, charges and tax untouched", () => {
+  let form = acceptSuggestedItem(initContractorPricingForm([], GST_5, DEFAULTS), {
+    description: "Kitchen faucet replacement",
+    labourUnitPrice: 325,
+    materialUnitPrice: 0,
+    taxable: true,
+  });
+  form = acceptSuggestedItem(form, {
+    description: "Braided supply line replacement",
+    labourUnitPrice: 55,
+    materialUnitPrice: 15,
+    taxable: true,
+  });
+  form = addCharge(form);
+  form = updateCharge(form, form.charges[0].id, "description", "Permit");
+  form = updateCharge(form, form.charges[0].id, "amount", "150");
+  form = editTax(form, "taxRate", "13");
+
+  const [first, second] = form.confirmedItems;
+  form = removeConfirmedItem(form, first.id);
+
+  expect(form.confirmedItems).toHaveLength(1);
+  expect(form.confirmedItems[0].id).toBe(second.id);
+  expect(form.charges).toHaveLength(1);
+  expect(form.charges[0].description).toBe("Permit");
+  expect(form.taxRate).toBe("13");
+});
+
+test("28: removing the last confirmed item returns to generic mode without restoring the discarded generic values", () => {
+  let form = typedFixedLabourMaterialsForm("200", "50", "15"); // real generic values entered
+  form = acceptSuggestedItem(form, {
+    description: "Kitchen faucet replacement",
+    labourUnitPrice: 325,
+    materialUnitPrice: 0,
+    taxable: true,
+  });
+  // Generic values were cleared by acceptance, not just hidden.
+  expect(form.labourMethod).toBeNull();
+  expect(form.fixedAmount).toBe("");
+  expect(form.materialsCost).toBe("");
+
+  form = removeConfirmedItem(form, form.confirmedItems[0].id);
+
+  expect(form.confirmedItems).toEqual([]);
+  // Back to generic mode, but genuinely empty -- the old $200/$50/15% values
+  // are gone, not restored from a hidden backup.
+  expect(form.labourMethod).toBeNull();
+  expect(form.fixedAmount).toBe("");
+  expect(form.materialsCost).toBe("");
+  expect(toPricingRequestPayload(form).labour).toBeNull();
+  expect(toPricingRequestPayload(form).materials).toBeNull();
+});
+
+test("29 and 30: the editor prevents the same suggestion being added twice by removing it from the visible list; quantity is the only multiples mechanism", () => {
+  const editor = readFileSync("app/components/contractor-pricing-editor.tsx", "utf8");
+
+  // Acceptance removes the just-accepted suggestion from local state, the
+  // structural mechanism that makes a second tap on the same suggestion
+  // impossible (it is no longer rendered).
+  expect(editor).toContain(
+    "setSuggestions((current) => current.filter((candidate) => candidate.id !== suggestion.id));"
+  );
+
+  // A second instance of the same saved item is expressed as quantity, not a
+  // second confirmed item: acceptSuggestedItem() always appends at quantity 1
+  // and there is no merge-by-description path anywhere in this module.
+  const form = readFileSync("lib/contractor-pricing-form.ts", "utf8");
+  expect(form).not.toContain("find((item) => item.description ===");
+});
+
+// ── Mode-switch confirmation semantics ──────────────────────────────────────
+
+test("12: a selected labour method with no actual amount does not count as entered generic pricing", () => {
+  let form = chooseLabourMethod(initContractorPricingForm([], GST_5, DEFAULTS), "hourly", DEFAULTS);
+  expect(form.hourlyRate).toBe("95"); // business default prefilled, but no hours typed
+  expect(hasEnteredGenericPricing(form)).toBe(false);
+
+  form = chooseLabourMethod(initContractorPricingForm([], GST_5, DEFAULTS), "fixed", DEFAULTS);
+  expect(hasEnteredGenericPricing(form)).toBe(false);
+});
+
+test("13: a default material markup with no materials cost does not count as entered generic pricing", () => {
+  const form = initContractorPricingForm([], GST_5, DEFAULTS);
+  expect(form.markupPercent).toBe("20"); // business default, no cost typed
+  expect(hasEnteredGenericPricing(form)).toBe(false);
+});
+
+test("14: an actual labour value counts as entered generic pricing", () => {
+  let form = chooseLabourMethod(initContractorPricingForm([], GST_5, DEFAULTS), "hourly", DEFAULTS);
+  form = { ...form, hours: "6" };
+  expect(hasEnteredGenericPricing(form)).toBe(true);
+
+  let fixed = chooseLabourMethod(initContractorPricingForm([], GST_5, DEFAULTS), "fixed", DEFAULTS);
+  fixed = { ...fixed, fixedAmount: "0" }; // an explicit $0 still counts as entered
+  expect(hasEnteredGenericPricing(fixed)).toBe(true);
+});
+
+test("15: an actual materials value counts as entered generic pricing", () => {
+  const form = { ...initContractorPricingForm([], GST_5, DEFAULTS), materialsCost: "0" };
+  expect(hasEnteredGenericPricing(form)).toBe(true);
+});
+
+test("11: accepting the first suggestion into empty generic pricing needs no warning", () => {
+  const editor = readFileSync("app/components/contractor-pricing-editor.tsx", "utf8");
+  expect(editor).toContain("if (form.confirmedItems.length === 0 && hasEnteredGenericPricing(form)) {");
+  expect(editor).toContain("setPendingSuggestionId(suggestion.id);");
+  expect(editor).toContain("void acceptSuggestion(suggestion);");
+});
+
+test("the mode-switch confirmation copy names what is kept and what is replaced", () => {
+  const editor = readFileSync("app/components/contractor-pricing-editor.tsx", "utf8");
+  expect(editor).toContain(
+    "Use saved line items instead? This will replace your current Labour and Materials values."
+  );
+  expect(editor).toContain("Other charges and tax will stay.");
+  expect(editor).toContain("Use saved line items");
+  expect(editor).toContain("Cancel");
+  expect(editor).toContain("cancelPendingSuggestion");
+});
+
+test("16, 17, 18 and 19: Cancel preserves every generic value and adds nothing; Confirm clears only Labour/Materials and preserves charges and tax", () => {
+  const before = typedFixedLabourMaterialsForm("200", "50", "15");
+  const withCharge = { ...addCharge(before) };
+  const withChargeFilled = updateCharge(withCharge, withCharge.charges[0].id, "description", "Permit");
+
+  // Cancel: modelled as simply not calling acceptSuggestedItem at all -- the
+  // form after cancellation is byte-identical to the form before the tap.
+  expect(withChargeFilled.confirmedItems).toEqual([]);
+  expect(withChargeFilled.fixedAmount).toBe("200");
+  expect(withChargeFilled.materialsCost).toBe("50");
+
+  // Confirm: acceptSuggestedItem clears Labour/Materials only.
+  const confirmed = acceptSuggestedItem(withChargeFilled, {
+    description: "Kitchen faucet replacement",
+    labourUnitPrice: 325,
+    materialUnitPrice: 0,
+    taxable: true,
+  });
+  expect(confirmed.labourMethod).toBeNull();
+  expect(confirmed.fixedAmount).toBe("");
+  expect(confirmed.materialsCost).toBe("");
+  expect(confirmed.markupPercent).toBe("");
+  // Other charges preserved.
+  expect(confirmed.charges).toHaveLength(1);
+  expect(confirmed.charges[0].description).toBe("Permit");
+});
+
+test("20: a resolve failure after confirmation never clears generic pricing or adds a confirmed item", () => {
+  const editor = readFileSync("app/components/contractor-pricing-editor.tsx", "utf8");
+
+  // acceptSuggestion() only mutates `form` inside the try block's success
+  // path -- setForm(acceptSuggestedItem(...)) is the only call to
+  // acceptSuggestedItem in the whole file, and it happens after the response
+  // is confirmed ok and to carry an item.
+  const acceptCalls = [...editor.matchAll(/acceptSuggestedItem\(/g)];
+  expect(acceptCalls).toHaveLength(1);
+
+  const fnStart = editor.indexOf("async function acceptSuggestion(");
+  const fnEnd = editor.indexOf("\n  }\n", editor.indexOf("finally {", fnStart));
+  const fn = editor.slice(fnStart, fnEnd);
+
+  const ifOkIndex = fn.indexOf("if (!response.ok || !data.item)");
+  const acceptIndex = fn.indexOf("acceptSuggestedItem");
+  const throwIndex = fn.indexOf("throw new Error", ifOkIndex);
+  expect(ifOkIndex).toBeGreaterThan(-1);
+  expect(throwIndex).toBeGreaterThan(ifOkIndex);
+  expect(acceptIndex).toBeGreaterThan(throwIndex); // form mutation is unreachable from the thrown branch
+
+  // The catch clause only ever sets the error message and never touches form.
+  const catchStart = fn.indexOf("} catch (error) {");
+  const catchEnd = fn.indexOf("} finally {", catchStart);
+  const catchBody = fn.slice(catchStart, catchEnd);
+  expect(catchBody).not.toContain("setForm");
+});
+
+// ── Live preview / payload pipeline ─────────────────────────────────────────
+
+const LINE_ITEM_SNAPSHOTS = { taxRatePercent: 5, depositPercent: null, depositThresholdDollars: null };
+
+test("31 and 38: confirmed items flow through the existing request/canonical/calculator pipeline, the same PUT contract as everything else", () => {
+  let form = acceptSuggestedItem(initContractorPricingForm([], GST_5, DEFAULTS), {
+    description: "Quarter-turn shutoff valve replacement",
+    labourUnitPrice: 145,
+    materialUnitPrice: 18,
+    taxable: true,
+  });
+  form = updateConfirmedItem(form, form.confirmedItems[0].id, "quantity", "2");
+
+  const payload = payloadOf(form); // asserts the route would accept it
+  expect(payload.labour).toBeNull();
+  expect(payload.materials).toBeNull();
+  expect(payload.lineItems).toEqual([
+    { description: "Quarter-turn shutoff valve replacement", quantity: 2, labourUnitPrice: 145, materialUnitPrice: 18, taxable: true },
+  ]);
+
+  const rows = toCanonicalRows(payload);
+  const direct = calculateContractorPricing(rows, LINE_ITEM_SNAPSHOTS);
+  const preview = resolveContractorPricingPreview(form, {
+    isDelivered: false,
+    persistedPricing: calculateContractorPricing([], LINE_ITEM_SNAPSHOTS),
+    snapshots: LINE_ITEM_SNAPSHOTS,
+  });
+  expect(preview).toEqual(direct);
+  // 2 x $145 labour + 2 x $18 material = $290 + $36 = $326, taxed at 5%.
+  expect(preview.labourCents).toBe(29000);
+  expect(preview.materialsCents).toBe(3600);
+  expect(preview.taxCents).toBe(1630);
+});
+
+test("32, 33 and 34: editing quantity, labour price or material price immediately changes the live preview", () => {
+  const base = acceptSuggestedItem(initContractorPricingForm([], GST_5, DEFAULTS), {
+    description: "Quarter-turn shutoff valve replacement",
+    labourUnitPrice: 145,
+    materialUnitPrice: 18,
+    taxable: true,
+  });
+  const id = base.confirmedItems[0].id;
+
+  function previewOf(form: typeof base) {
+    return resolveContractorPricingPreview(form, {
+      isDelivered: false,
+      persistedPricing: calculateContractorPricing([], LINE_ITEM_SNAPSHOTS),
+      snapshots: LINE_ITEM_SNAPSHOTS,
+    });
+  }
+
+  const beforeCents = previewOf(base).subtotalCents;
+
+  const quantityChanged = updateConfirmedItem(base, id, "quantity", "3");
+  expect(previewOf(quantityChanged).subtotalCents).not.toBe(beforeCents);
+
+  const labourChanged = updateConfirmedItem(base, id, "labourUnitPrice", "200");
+  expect(previewOf(labourChanged).subtotalCents).not.toBe(beforeCents);
+
+  const materialChanged = updateConfirmedItem(base, id, "materialUnitPrice", "40");
+  expect(previewOf(materialChanged).subtotalCents).not.toBe(beforeCents);
+});
+
+test("35: a saved-item material row still gets markup_percent = 0, through the same encoding as the request contract", () => {
+  const form = acceptSuggestedItem(initContractorPricingForm([], GST_5, DEFAULTS), {
+    description: "Kitchen faucet replacement",
+    labourUnitPrice: 325,
+    materialUnitPrice: 50,
+    taxable: true,
+  });
+  const rows = toCanonicalRows(toPricingRequestPayload(form));
+  const materialRow = rows.find((row) => row.item_type === "material");
+  expect(materialRow?.markup_percent).toBe(0);
+});
+
+test("36: a zero-valued labour or material counterpart on a confirmed item remains valid", () => {
+  const zeroMaterial = acceptSuggestedItem(initContractorPricingForm([], GST_5, DEFAULTS), {
+    description: "Kitchen faucet replacement",
+    labourUnitPrice: 325,
+    materialUnitPrice: 0,
+    taxable: true,
+  });
+  expect(payloadOf(zeroMaterial).lineItems![0]).toMatchObject({ materialUnitPrice: 0 });
+
+  const zeroLabour = acceptSuggestedItem(initContractorPricingForm([], GST_5, DEFAULTS), {
+    description: "Materials-only allowance",
+    labourUnitPrice: 0,
+    materialUnitPrice: 75,
+    taxable: true,
+  });
+  expect(payloadOf(zeroLabour).lineItems![0]).toMatchObject({ labourUnitPrice: 0 });
+});
+
+test("37: a non-taxable confirmed item excludes both its labour and material amounts from the taxable subtotal, but keeps them in subtotal", () => {
+  const form = acceptSuggestedItem(initContractorPricingForm([], GST_5, DEFAULTS), {
+    description: "Kitchen faucet replacement",
+    labourUnitPrice: 325,
+    materialUnitPrice: 50,
+    taxable: false,
+  });
+  const rows = toCanonicalRows(toPricingRequestPayload(form));
+  const pricing = calculateContractorPricing(
+    rows.map((row) => ({
+      item_type: row.item_type,
+      unit: row.unit,
+      quantity: row.quantity,
+      unit_price: row.unit_price,
+      markup_percent: row.markup_percent,
+      taxable: row.taxable,
+    })),
+    LINE_ITEM_SNAPSHOTS
+  );
+
+  expect(pricing.subtotalCents).toBe(37500); // 325 + 50 = 375.00
+  expect(pricing.taxCents).toBe(0); // excluded from tax entirely
 });

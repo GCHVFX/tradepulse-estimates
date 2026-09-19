@@ -16,6 +16,7 @@ import { ContractorPricingEditor } from "@/app/components/contractor-pricing-edi
 import { PRICING_CHANGE_EVENT, readPricingComplete } from "@/app/components/estimate-actions";
 import type { ContractorPricing } from "@/lib/contractor-pricing";
 import type { BusinessPricingDefaults, ContractorPricingRowInput, EstimateTaxSnapshot } from "@/lib/contractor-pricing-form";
+import type { PriceBookSuggestion } from "@/lib/pricebook-suggestions";
 import { currencyOrDefault, type Currency } from "@/lib/currency";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { useBusinessProfile } from "@/lib/hooks/use-business-profile";
@@ -41,6 +42,12 @@ interface PricingInit {
   defaults: BusinessPricingDefaults;
   depositPercent: number | null;
   depositThresholdDollars: number | null;
+  /**
+   * Saved-item suggestions matched against the job text this generation
+   * actually used (Phase 2 slice 4). Only /new can supply this: it is the
+   * one surface still holding the contractor's own job text in session.
+   */
+  suggestions: PriceBookSuggestion[];
 }
 
 type PricingLoadState = "idle" | "loading" | "ready" | "error" | "legacy" | "delivered";
@@ -450,6 +457,7 @@ function EstimateView({
                     isDelivered={pricingInit.isDelivered}
                     depositPercent={pricingInit.depositPercent}
                     depositThresholdDollars={pricingInit.depositThresholdDollars}
+                    suggestions={pricingInit.suggestions}
                   />
                 </div>
               )}
@@ -1112,6 +1120,12 @@ function NewPageInner() {
   const [pricingLoadState, setPricingLoadState] = useState<PricingLoadState>("idle");
   const [pricingInit, setPricingInit] = useState<PricingInit | null>(null);
   const [pricingRetryToken, setPricingRetryToken] = useState(0);
+  // The exact job text this generation/regeneration used (jobDescription.trim()
+  // || photoAnalysis, set once at the top of handleGenerate) -- the only
+  // surface where the contractor's own job text is still available once
+  // pricing loads. Used only to ask for suggestions on the pricing-init
+  // fetch below; never displayed and never sent anywhere else.
+  const [generationJobText, setGenerationJobText] = useState("");
   // Persisted-pricing completeness for the estimate currently shown.
   // Initialized from the same authoritative fetch above, then kept current
   // by a successful ContractorPricingEditor Save (PRICING_CHANGE_EVENT) --
@@ -1199,10 +1213,20 @@ function NewPageInner() {
       };
       rows?: ContractorPricingRowInput[];
       pricing?: ContractorPricing;
+      suggestions?: PriceBookSuggestion[];
       defaults?: { labourRate?: number; markupPercent?: number };
     };
 
-    fetch(`/api/estimates/${savedEstimateId}/pricing`)
+    // Phase 2 slice 4: ask the estimate's own pricing-init route for
+    // suggestions too, using the exact job text this generation used --
+    // the one surface where that text is still available. No job text
+    // (photo-only input) simply means no suggestions, the same as the
+    // detail page, which never has this text at all.
+    const pricingInitUrl = generationJobText.trim()
+      ? `/api/estimates/${savedEstimateId}/pricing?jobText=${encodeURIComponent(generationJobText.trim())}`
+      : `/api/estimates/${savedEstimateId}/pricing`;
+
+    fetch(pricingInitUrl)
       .then(async (res) => {
         // A legacy (non contractor_pricing) estimate is refused with this
         // distinct, documented code -- never a transient failure, and never
@@ -1246,6 +1270,7 @@ function NewPageInner() {
           },
           depositPercent: est.depositPercent ?? null,
           depositThresholdDollars: est.depositThreshold ?? null,
+          suggestions: d.suggestions ?? [],
         });
         // Initializes from the persisted response itself, not only from a
         // later Save -- a regenerated estimate that was already saved
@@ -1262,6 +1287,12 @@ function NewPageInner() {
     return () => {
       cancelled = true;
     };
+    // generationJobText is deliberately excluded: it is read once, at the
+    // moment savedEstimateId actually changes, via this render's closure --
+    // adding it here would refetch the whole pricing-init payload (rows,
+    // pricing, defaults) on every regenerate, which the comment above this
+    // effect already establishes must not happen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedEstimateId, pricingRetryToken]);
 
   function retryPricingInit() {
@@ -1350,6 +1381,7 @@ function NewPageInner() {
 
     const description = jobDescription.trim() || photoAnalysis;
     if (!description) return;
+    setGenerationJobText(description);
 
     // Regenerate replaces the wording on the estimate that already exists.
     // Its id is kept, so the server updates that row instead of inserting a

@@ -43,6 +43,12 @@ export async function GET(
   if (!user) return applyTo(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
 
   const { id } = await params;
+  // Phase 2 slice 4: the contractor's own job text, sent only by a caller
+  // that actually has it in session (today: /new, right after generation).
+  // Absent here, this simply yields no suggestions -- see
+  // lib/estimate-pricing-init.ts's field comment for why that is never a
+  // fallback to generated prose.
+  const jobText = new URL(request.url).searchParams.get("jobText")?.slice(0, 2000) ?? undefined;
 
   const { data: business } = await supabaseAdmin
     .from("tpe_businesses")
@@ -72,7 +78,18 @@ export async function GET(
       return data ?? null;
     },
     loadRows: loadContractorPricingRows,
-  });
+    async loadSuggestionCandidates(businessId) {
+      // Price-free by construction: no labour_price, material_price or
+      // taxable column is selected here. Nothing the matcher sees can
+      // carry a dollar value.
+      const { data } = await supabaseAdmin
+        .from("tpe_pricebook_items")
+        .select("id, name, description, category")
+        .eq("business_id", businessId)
+        .eq("active", true);
+      return data ?? [];
+    },
+  }, jobText);
 
   if (!result.ok) {
     const body: Record<string, unknown> = { error: result.error };
@@ -85,6 +102,7 @@ export async function GET(
       estimate: result.estimate,
       rows: result.rows,
       pricing: result.pricing,
+      suggestions: result.suggestions,
       // Business-level defaults only -- offered to a new/empty labour or
       // materials row, never a substitute for the estimate's own snapshot.
       defaults: {

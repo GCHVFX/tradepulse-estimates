@@ -76,7 +76,12 @@ test("the /new editor instance uses the estimate's own authoritative delivered s
 test("authoritative pricing-init data comes from the estimate's own GET route, not the business's current Rates", () => {
   const newPage = code("app/new/page.tsx");
 
-  expect(newPage).toContain("fetch(`/api/estimates/${savedEstimateId}/pricing`)");
+  // Phase 2 slice 4: the base URL is unchanged, only extended with an
+  // optional jobText query param when the contractor's own job text is
+  // available in session.
+  expect(newPage).toContain("fetch(pricingInitUrl)");
+  expect(newPage).toContain("`/api/estimates/${savedEstimateId}/pricing`");
+  expect(newPage).toContain("`/api/estimates/${savedEstimateId}/pricing?jobText=");
   // The earlier, corrected mistake: /new must never call /api/price-book
   // (current business Rates) to initialize this editor.
   expect(newPage).not.toContain("/api/price-book");
@@ -101,7 +106,7 @@ test("the estimate_currency addition to /api/price-book was reverted", () => {
 test("the authoritative fetch runs once per estimate id (and on an explicit retry), not on every pricing-input change", () => {
   const newPage = code("app/new/page.tsx");
 
-  const effectStart = newPage.indexOf("fetch(`/api/estimates/${savedEstimateId}/pricing`)");
+  const effectStart = newPage.indexOf("fetch(pricingInitUrl)");
   const depsIndex = newPage.indexOf("}, [savedEstimateId, pricingRetryToken]);", effectStart);
   expect(effectStart).toBeGreaterThan(-1);
   expect(depsIndex).toBeGreaterThan(effectStart);

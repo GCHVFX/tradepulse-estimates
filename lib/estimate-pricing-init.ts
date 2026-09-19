@@ -14,6 +14,7 @@
 import { isDelivered } from "./estimate-delivery";
 import { calculateContractorPricing, type ContractorPricing, type PricingRow, type PricingSnapshots } from "./contractor-pricing";
 import { currencyOrDefault, type Currency } from "./currency";
+import { suggestPriceBookItems, type PriceBookSuggestion, type PriceBookSuggestionItem } from "./pricebook-suggestions";
 
 /** One stored contractor-pricing row, as the editor needs it. */
 export interface PricingInitRow {
@@ -46,6 +47,15 @@ export interface EstimatePricingInitDependencies {
   findOwnedEstimate(estimateId: string, businessId: string): Promise<OwnedEstimateForPricingInit | null>;
   /** Only ever called once ownership and pricing_source have both passed. */
   loadRows(estimateId: string): Promise<PricingInitRow[]>;
+  /**
+   * Phase 2 slice 4: price-free saved-item candidates for this business, only
+   * ever called when the caller supplied non-blank job text. The matcher's
+   * own input type (PriceBookSuggestionItem) cannot carry a price field, so
+   * this dependency structurally cannot leak money into a suggestion either.
+   * Optional so every existing caller/test that predates slice 4 keeps
+   * working unchanged.
+   */
+  loadSuggestionCandidates?(businessId: string): Promise<PriceBookSuggestionItem[]>;
 }
 
 export const ESTIMATE_NOT_FOUND_OR_DENIED = "Estimate not found or access denied";
@@ -67,6 +77,13 @@ export type EstimatePricingInitResult =
       };
       rows: PricingInitRow[];
       pricing: ContractorPricing;
+      /**
+       * Inert saved-item suggestions for the job text supplied to this call.
+       * Always [] when no job text was supplied, or when the business has no
+       * candidates scoring above the matcher's own floor -- both valid,
+       * non-error states (specs/contractor-owned-pricing.md Phase 2 slice 4).
+       */
+      suggestions: PriceBookSuggestion[];
     }
   | { ok: false; status: 404; error: string }
   | { ok: false; status: 409; error: string; code: typeof ESTIMATE_READ_ONLY_CODE };
@@ -74,7 +91,10 @@ export type EstimatePricingInitResult =
 export async function loadEstimatePricingInit(
   estimateId: string,
   businessId: string,
-  deps: EstimatePricingInitDependencies
+  deps: EstimatePricingInitDependencies,
+  /** The contractor's own job text, when the caller has it. See the field
+   * comment on EstimatePricingInitDependencies.loadSuggestionCandidates. */
+  jobText?: string
 ): Promise<EstimatePricingInitResult> {
   const owned = await deps.findOwnedEstimate(estimateId, businessId);
 
@@ -107,8 +127,18 @@ export async function loadEstimatePricingInit(
   // The one arithmetic implementation. Never duplicated here or in SQL.
   const pricing = calculateContractorPricing(pricingRows, snapshots);
 
+  // Suggestions never gate or fail this read: a missing dependency or blank
+  // job text both simply mean no suggestions, never an error the rest of
+  // this response would need to be withheld for.
+  const trimmedJobText = jobText?.trim() ?? "";
+  const suggestions =
+    trimmedJobText && deps.loadSuggestionCandidates
+      ? suggestPriceBookItems(trimmedJobText, await deps.loadSuggestionCandidates(businessId))
+      : [];
+
   return {
     ok: true,
+    suggestions,
     estimate: {
       id: owned.id,
       pricingSource: owned.pricing_source,

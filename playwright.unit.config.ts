@@ -65,6 +65,7 @@ export default defineConfig({
     "estimate-deletion.spec.ts",
     "tax-rate-from-rates-not-ai.spec.ts",
     "pricebook-suggestions.spec.ts",
+    "pricebook-suggestion-resolve.spec.ts",
     "unit-suite-completeness.spec.ts",
   ],
   fullyParallel: false,
