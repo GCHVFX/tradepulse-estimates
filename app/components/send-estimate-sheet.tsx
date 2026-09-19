@@ -112,6 +112,8 @@ export function SendEstimateSheet({
   async function handleCopyLink() {
     if (!shareUrl) return;
     setCopyError("");
+    // True only once this tap's PATCH has actually delivered the estimate.
+    let deliveredNow = false;
 
     // Already delivered (or nothing to deliver): copy is the only step left.
     if (estimateId && currentStatus !== "done") {
@@ -142,10 +144,20 @@ export function SendEstimateSheet({
         return;
       }
 
-      if (isFirstDelivery) onSent?.();
+      if (isFirstDelivery) {
+        onSent?.();
+        deliveredNow = true;
+      }
     }
 
     const copiedOk = await writeToClipboard(shareUrl);
+    // A first delivery changes what the detail page must render (the draft
+    // pricing editor and its Save Pricing bar give way to the delivered
+    // view), so re-read it from the server. SMS and email get the same
+    // re-read from their router.push below. refresh() keeps this sheet and
+    // EstimateActions mounted, so "Copied!" or the copy error stays on
+    // screen, and it re-renders only; it never calls this handler again.
+    if (deliveredNow) router.refresh();
     if (!copiedOk) {
       setCopyError(
         estimateId && currentStatus !== "done"

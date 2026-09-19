@@ -20,6 +20,7 @@ import {
 } from "../../lib/contractor-pricing-form";
 import { parseContractorPricingRequest, toCanonicalRows } from "../../lib/contractor-pricing-request";
 import { calculateContractorPricing } from "../../lib/contractor-pricing";
+import { isDelivered } from "../../lib/estimate-delivery";
 
 /**
  * Phase 1 slice 5C: the isZeroTotal/estimate-total-change staleness
@@ -480,4 +481,132 @@ test("legacy's send-gating is unchanged: still total > 0, no completeness concep
   // ternary's false branch -- estimateTotal > 0 -- is exactly the same
   // check EstimateActions used to compute inline as isZeroTotal.
   expect(page).toContain("contractorPricing ? contractorPricing.complete : estimateTotal > 0");
+});
+
+// ── First delivery from /estimates/[id] re-reads the page from the server ──
+//
+// After the first delivery, page.tsx must re-render from persisted state so
+// the draft editor (and its Save Pricing bar) gives way to the delivered
+// view. Copy Link calls router.refresh(); SMS and email already navigate with
+// router.push(`/estimates/${id}?sent=1`), which re-renders the same page from
+// the server. Source-level: the harness has no router or React renderer.
+
+function sheetFunction(name: string): string {
+  const sheet = code("app/components/send-estimate-sheet.tsx");
+  const start = sheet.indexOf(`async function ${name}() {`);
+  expect(start, `${name} exists`).toBeGreaterThan(-1);
+  const end = sheet.indexOf("\n  }\n", start);
+  return sheet.slice(start, end);
+}
+
+test("Copy Link: a successful first delivery refreshes the page once, after the PATCH succeeded and after the copy attempt", () => {
+  const fn = sheetFunction("handleCopyLink");
+  expect(fn).toContain("let deliveredNow = false;");
+  expect([...fn.matchAll(/router\.refresh\(\)/g)]).toHaveLength(1);
+  expect(fn).toContain("if (deliveredNow) router.refresh();");
+
+  const refusal = fn.indexOf("if (!res.ok) {");
+  const setDelivered = fn.indexOf("deliveredNow = true;");
+  const firstDeliveryBranch = fn.indexOf("if (isFirstDelivery) {\n        onSent?.();");
+  const clipboard = fn.indexOf("const copiedOk = await writeToClipboard(shareUrl);");
+  const refresh = fn.indexOf("if (deliveredNow) router.refresh();");
+  expect(refusal).toBeGreaterThan(-1);
+  expect(firstDeliveryBranch).toBeGreaterThan(refusal);
+  expect(setDelivered).toBeGreaterThan(firstDeliveryBranch);
+  expect(clipboard).toBeGreaterThan(setDelivered);
+  expect(refresh).toBeGreaterThan(clipboard);
+  // A clipboard failure still refreshes: the delivery already happened.
+  expect(refresh).toBeLessThan(fn.indexOf("if (!copiedOk) {"));
+});
+
+test("Copy Link: a failed delivery (network error or refused PATCH) returns before anything can mark it delivered or refresh", () => {
+  const fn = sheetFunction("handleCopyLink");
+  const setDelivered = fn.indexOf("deliveredNow = true;");
+  const networkCatch = fn.indexOf("} catch {");
+  const networkReturn = fn.indexOf("return;", networkCatch);
+  const refusal = fn.indexOf("if (!res.ok) {");
+  const refusalReturn = fn.indexOf("return;", refusal);
+  expect(networkCatch).toBeGreaterThan(-1);
+  expect(networkReturn).toBeLessThan(setDelivered);
+  expect(refusalReturn).toBeLessThan(setDelivered);
+  // A re-copy of an already-delivered estimate is not a first delivery.
+  expect(fn).toContain('const isFirstDelivery = !currentStatus || currentStatus === "draft";');
+});
+
+for (const [name, route] of [
+  ["handleSendSMS", "/api/send-sms"],
+  ["handleSendEmail", "/api/send-email"],
+] as const) {
+  test(`${name}: only a successful ${route} response re-reads the page (router.push to ?sent=1); a failure throws first and never navigates`, () => {
+    const fn = sheetFunction(name);
+    expect(fn).toContain(`fetch("${route}", {`);
+    const refusal = fn.indexOf("if (!res.ok) {");
+    const throwIndex = fn.indexOf("throw new Error(", refusal);
+    const push = fn.indexOf("router.push(`/estimates/${estimateId}?sent=1`);");
+    const catchIndex = fn.indexOf("} catch (err) {");
+    expect(refusal).toBeGreaterThan(-1);
+    expect(throwIndex).toBeGreaterThan(refusal);
+    expect(push).toBeGreaterThan(throwIndex);
+    expect(push).toBeLessThan(catchIndex);
+    expect(fn.slice(catchIndex)).not.toContain("router.");
+    // No second re-read racing the navigation.
+    expect(fn).not.toContain("router.refresh()");
+  });
+}
+
+test("a page re-read never re-triggers a delivery: the three delivery handlers run only from their buttons, and the sheet has no effect that sends", () => {
+  const sheet = code("app/components/send-estimate-sheet.tsx");
+  for (const name of ["handleCopyLink", "handleSendSMS", "handleSendEmail"]) {
+    const uses = [...sheet.matchAll(new RegExp(`\\b${name}\\b`, "g"))].length;
+    expect(uses, `${name}: its definition plus exactly one onClick`).toBe(2);
+    expect(sheet).toContain(`onClick={${name}}`);
+  }
+  // The sheet's only effects reset form fields and panels; none of them fetch.
+  const effects = [...sheet.matchAll(/useEffect\(\(\) => \{[\s\S]*?\}, \[[^\]]*\]\);/g)].map((m) => m[0]);
+  expect(effects.length).toBeGreaterThan(0);
+  for (const effect of effects) expect(effect).not.toContain("fetch(");
+});
+
+test("the delivery confirmation survives the re-read: the sheet and EstimateActions stay mounted through router.refresh() and a search-param-only router.push", () => {
+  // The confirmation ("Copied!", the copy error, "Estimate sent") is the
+  // sheet's own state. The sheet is rendered by EstimateActions outside its
+  // sticky bar, so it stays mounted whichever bar branch shows.
+  const actions = code("app/components/estimate-actions.tsx");
+  const barStart = actions.indexOf("{showStickyActionBar && (");
+  const sheetIndex = actions.indexOf("<SendEstimateSheet");
+  const barClose = actions.lastIndexOf("      )}", sheetIndex);
+  expect(sheetIndex).toBeGreaterThan(barClose);
+  expect(barClose).toBeGreaterThan(barStart);
+
+  // router.refresh() keeps the URL, so nothing is re-keyed. For SMS/email's
+  // push to ?sent=1, this installed Next.js keys the page segment without
+  // search params, so the same page instance (and its client state) is
+  // reconciled with fresh server data rather than remounted. Pinned to the
+  // framework source, so an upgrade that changes it fails here.
+  const layoutRouter = readFileSync(
+    path.join(root, "node_modules/next/dist/client/components/layout-router.js"),
+    "utf8"
+  );
+  expect(layoutRouter).toContain("createRouterCacheKey)(activeSegment, true) // no search params");
+
+  const sheet = code("app/components/send-estimate-sheet.tsx");
+  expect(sheet).toContain('{copied ? "Copied!" : "Copy Link"}');
+  expect(sheet).toContain("Estimate sent");
+});
+
+test("after a first delivery the draft Save Pricing bar cannot coexist with Resend: the persisted state the refresh reads is delivered, and page.tsx renders the draft editor only when undelivered", () => {
+  // What each first-delivery route persists, read by the one delivery predicate.
+  expect(isDelivered({ status: "sent", copied_at: "2026-09-18T00:00:00Z", sent_at: null })).toBe(true); // Copy Link
+  expect(isDelivered({ status: "sent", copied_at: null, sent_at: "2026-09-18T00:00:00Z" })).toBe(true); // SMS / email
+  expect(isDelivered({ status: "draft", copied_at: null, sent_at: null })).toBe(false);
+
+  const page = code("app/estimates/[id]/page.tsx");
+  const branch = page.indexOf("{isDelivered(estimate) ? (");
+  const draftEditor = page.indexOf("<ContractorPricingDraftEditor");
+  expect(branch).toBeGreaterThan(-1);
+  expect(draftEditor).toBeGreaterThan(page.indexOf(") : (", branch));
+  // The Save Pricing bar lives only inside ContractorPricingDraftEditor,
+  // which that branch unmounts for a delivered estimate.
+  expect(code("app/components/contractor-pricing-draft-editor.tsx")).toContain('{saving ? "Saving..." : "Save Pricing"}');
+  expect(page).not.toContain('"use client"');
 });
