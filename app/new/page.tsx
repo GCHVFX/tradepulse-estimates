@@ -43,14 +43,22 @@ interface PricingInit {
   depositPercent: number | null;
   depositThresholdDollars: number | null;
   /**
-   * Saved-item suggestions matched against the job text this generation
-   * actually used (Phase 2 slice 4). Only /new can supply this: it is the
-   * one surface still holding the contractor's own job text in session.
+   * Saved-item suggestions matched against the contractor's own typed job
+   * description only, never photoAnalysis (Phase 2 slice 4). Only /new can
+   * supply this: it is the one surface still holding that text in session.
    */
   suggestions: PriceBookSuggestion[];
 }
 
 type PricingLoadState = "idle" | "loading" | "ready" | "error" | "legacy" | "delivered";
+
+/**
+ * Client-side cap on the job text sent as the jobText match query param,
+ * applied before it is placed in the query string (the truncation point).
+ * The route applies its own defensive 2000-char cap server-side; this is a
+ * separate, smaller, deliberate limit on what a legitimate client ever sends.
+ */
+const MATCH_JOB_TEXT_MAX_LENGTH = 1000;
 
 const inputClass =
   "w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3.5 text-white placeholder-zinc-600 text-base focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 min-h-[44px]";
@@ -1120,10 +1128,13 @@ function NewPageInner() {
   const [pricingLoadState, setPricingLoadState] = useState<PricingLoadState>("idle");
   const [pricingInit, setPricingInit] = useState<PricingInit | null>(null);
   const [pricingRetryToken, setPricingRetryToken] = useState(0);
-  // The exact job text this generation/regeneration used (jobDescription.trim()
-  // || photoAnalysis, set once at the top of handleGenerate) -- the only
-  // surface where the contractor's own job text is still available once
-  // pricing loads. Used only to ask for suggestions on the pricing-init
+  // The contractor's own typed job description ONLY (jobDescription.trim(),
+  // set once at the top of handleGenerate) -- deliberately never
+  // photoAnalysis, which is AI-generated prose, not contractor-authored
+  // text, and must not be used to match saved items. Empty when the
+  // contractor used photo-only input, which correctly yields no jobText and
+  // zero suggestions. The only surface where this text is still available
+  // once pricing loads. Used only to ask for suggestions on the pricing-init
   // fetch below; never displayed and never sent anywhere else.
   const [generationJobText, setGenerationJobText] = useState("");
   // Persisted-pricing completeness for the estimate currently shown.
@@ -1218,12 +1229,14 @@ function NewPageInner() {
     };
 
     // Phase 2 slice 4: ask the estimate's own pricing-init route for
-    // suggestions too, using the exact job text this generation used --
-    // the one surface where that text is still available. No job text
-    // (photo-only input) simply means no suggestions, the same as the
-    // detail page, which never has this text at all.
-    const pricingInitUrl = generationJobText.trim()
-      ? `/api/estimates/${savedEstimateId}/pricing?jobText=${encodeURIComponent(generationJobText.trim())}`
+    // suggestions too, using the contractor's own typed job text -- the one
+    // surface where that text is still available. No job text (photo-only
+    // input) simply means no suggestions, the same as the detail page,
+    // which never has this text at all. Capped here, client-side, before it
+    // ever enters the query string -- this is the truncation point.
+    const matchJobText = generationJobText.trim().slice(0, MATCH_JOB_TEXT_MAX_LENGTH);
+    const pricingInitUrl = matchJobText
+      ? `/api/estimates/${savedEstimateId}/pricing?jobText=${encodeURIComponent(matchJobText)}`
       : `/api/estimates/${savedEstimateId}/pricing`;
 
     fetch(pricingInitUrl)
@@ -1381,7 +1394,10 @@ function NewPageInner() {
 
     const description = jobDescription.trim() || photoAnalysis;
     if (!description) return;
-    setGenerationJobText(description);
+    // Match source is the contractor's own typed text only -- never
+    // photoAnalysis, which is generated prose. Empty here (photo-only input)
+    // correctly means no jobText is sent below and zero suggestions return.
+    setGenerationJobText(jobDescription.trim());
 
     // Regenerate replaces the wording on the estimate that already exists.
     // Its id is kept, so the server updates that row instead of inserting a

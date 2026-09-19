@@ -330,3 +330,47 @@ test("J: the deployed route queries no money field and filters to active = true 
   // required.
   expect(route).toContain('searchParams.get("jobText")');
 });
+
+// ── Pre-push audit fix: a thrown suggestion-candidate lookup degrades to
+// an empty suggestion list instead of failing the whole read ───────────────
+//
+// The route's actual loadSuggestionCandidates implementation reads via
+// Supabase, which resolves with { data: null, error } rather than rejecting
+// on an ordinary query failure -- but a genuine exception (a network fault,
+// or any other unexpected throw) was not previously caught here at all, and
+// neither the route nor this function wrapped the call in its own
+// try/catch, so it would have failed the entire GET (rows, pricing,
+// currency, tax, deposit -- everything), taking the generic Labour/
+// Materials editor down with it, not just suggestions.
+
+test("K: a loadSuggestionCandidates rejection degrades to an empty suggestion list, without failing the rest of the read", async () => {
+  const calls: string[] = [];
+  const deps: EstimatePricingInitDependencies = {
+    async findOwnedEstimate(estimateId, businessId) {
+      calls.push(`findOwnedEstimate:${estimateId}:${businessId}`);
+      const estimate = completeContractorPricingEstimate();
+      return estimate.id === estimateId && businessId === OWNER_BUSINESS ? estimate : null;
+    },
+    async loadRows(estimateId) {
+      calls.push(`loadRows:${estimateId}`);
+      return completeRows();
+    },
+    async loadSuggestionCandidates(businessId) {
+      calls.push(`loadSuggestionCandidates:${businessId}`);
+      throw new Error("network exploded");
+    },
+  };
+
+  const result = await loadEstimatePricingInit(ESTIMATE_ID, OWNER_BUSINESS, deps, "kitchen faucet");
+
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  // Suggestions degrade to empty...
+  expect(result.suggestions).toEqual([]);
+  // ...but everything else this read is responsible for still comes back
+  // intact and correct, exactly as if suggestions had never been requested.
+  expect(result.rows).toHaveLength(2);
+  expect(result.pricing.complete).toBe(true);
+  expect(result.estimate.id).toBe(ESTIMATE_ID);
+  expect(calls).toContain(`loadSuggestionCandidates:${OWNER_BUSINESS}`);
+});

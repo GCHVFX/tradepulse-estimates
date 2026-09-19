@@ -130,6 +130,13 @@ export function ContractorPricingEditor({
         };
       };
       if (!response.ok || !data.item) {
+        // 404 means the item is now inactive or gone -- it will never
+        // resolve again, so it comes off the visible list here too, not
+        // just on success. Every other failure (network, 401, 500) leaves
+        // it in place, since a retry of the same tap could still succeed.
+        if (response.status === 404) {
+          setSuggestions((current) => current.filter((candidate) => candidate.id !== suggestion.id));
+        }
         throw new Error(data.error ?? "Could not add this saved item. Try again.");
       }
 

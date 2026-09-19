@@ -1011,6 +1011,32 @@ test("44: a mismatched pair (quantity, description or taxable) refuses reconstru
   expect(reconstructConfirmedItems(swapped)).toEqual({ ok: false });
 });
 
+// ── Pre-push audit fix: the material row's markup_percent = 0 invariant ────
+//
+// toCanonicalRows() always writes a confirmed item's material row with an
+// explicit markup_percent of 0 -- never null, never a real markup --
+// because tpe_pricebook_items.material_price is already a final selling
+// price. A material 'ea' row carrying anything else was not written by this
+// feature and must not be silently treated as a valid pair (it would either
+// apply a markup a second time, or paper over unknown/corrupt data as 0).
+
+test("a material row with a non-zero, null or NaN markup_percent refuses reconstruction", () => {
+  const nonZero = pairRows();
+  nonZero[1] = { ...nonZero[1], markup_percent: 20 };
+  expect(reconstructConfirmedItems(nonZero)).toEqual({ ok: false });
+
+  const nullMarkup = pairRows();
+  nullMarkup[1] = { ...nullMarkup[1], markup_percent: null };
+  expect(reconstructConfirmedItems(nullMarkup)).toEqual({ ok: false });
+
+  const nanMarkup = pairRows();
+  nanMarkup[1] = { ...nanMarkup[1], markup_percent: NaN };
+  expect(reconstructConfirmedItems(nanMarkup)).toEqual({ ok: false });
+
+  // Explicit 0 (the only value toCanonicalRows() ever writes) still passes.
+  expect(reconstructConfirmedItems(pairRows()).ok).toBe(true);
+});
+
 test("45: generic rows still reconstruct existing generic mode unchanged, with no confirmed items", () => {
   const result = reconstructConfirmedItems([HOURLY_ROW, MATERIALS_ROW]);
   expect(result).toEqual({ ok: true, items: [] });
@@ -1163,6 +1189,40 @@ test("29 and 30: the editor prevents the same suggestion being added twice by re
   // and there is no merge-by-description path anywhere in this module.
   const form = readFileSync("lib/contractor-pricing-form.ts", "utf8");
   expect(form).not.toContain("find((item) => item.description ===");
+});
+
+// ── Pre-push audit fix: a resolve 404 also removes the now-stale suggestion ─
+//
+// A resolve failure must never clear generic pricing or add a confirmed item
+// (already covered by test 20 above). This is the separate, narrower
+// question the audit raised: once the resolve endpoint says an item is
+// unavailable (404 -- inactive or deleted), it will never resolve again, so
+// the suggestion must come off the visible list right then, not just on a
+// later successful accept of a different one. A non-404 failure (network,
+// 401, 500) is different: the item may still be genuinely resolvable, so it
+// must stay in the list for a retry.
+
+test("a 404 (item unavailable) resolve failure removes the stale suggestion from the local list; other failures leave it in place for retry", () => {
+  const editor = readFileSync("app/components/contractor-pricing-editor.tsx", "utf8");
+
+  const fnStart = editor.indexOf("async function acceptSuggestion(");
+  const fnEnd = editor.indexOf("\n  }\n", editor.indexOf("finally {", fnStart));
+  const fn = editor.slice(fnStart, fnEnd);
+
+  const ifOkIndex = fn.indexOf("if (!response.ok || !data.item)");
+  const statusCheckIndex = fn.indexOf("response.status === 404", ifOkIndex);
+  const throwIndex = fn.indexOf("throw new Error", ifOkIndex);
+  expect(ifOkIndex).toBeGreaterThan(-1);
+  expect(statusCheckIndex, "the failure branch checks for 404 specifically").toBeGreaterThan(ifOkIndex);
+  expect(statusCheckIndex).toBeLessThan(throwIndex); // the removal check runs before the error is thrown
+
+  // Exactly the removal filter, present inside the 404-specific branch, not
+  // unconditionally on every failure.
+  const failureBranch = fn.slice(ifOkIndex, throwIndex);
+  expect(failureBranch).toContain(
+    "setSuggestions((current) => current.filter((candidate) => candidate.id !== suggestion.id));"
+  );
+  expect(failureBranch).toContain("if (response.status === 404) {");
 });
 
 // ── Mode-switch confirmation semantics ──────────────────────────────────────

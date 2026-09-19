@@ -129,12 +129,20 @@ export async function loadEstimatePricingInit(
 
   // Suggestions never gate or fail this read: a missing dependency or blank
   // job text both simply mean no suggestions, never an error the rest of
-  // this response would need to be withheld for.
+  // this response would need to be withheld for. Isolated in its own
+  // try/catch too -- an exception thrown by loadSuggestionCandidates (a
+  // network failure, not just a query-error response) must degrade to an
+  // empty suggestion list, not take down rows/pricing/currency/tax/deposit
+  // with it, since nothing calls this with its own try/catch above it.
   const trimmedJobText = jobText?.trim() ?? "";
-  const suggestions =
-    trimmedJobText && deps.loadSuggestionCandidates
-      ? suggestPriceBookItems(trimmedJobText, await deps.loadSuggestionCandidates(businessId))
-      : [];
+  let suggestions: PriceBookSuggestion[] = [];
+  if (trimmedJobText && deps.loadSuggestionCandidates) {
+    try {
+      suggestions = suggestPriceBookItems(trimmedJobText, await deps.loadSuggestionCandidates(businessId));
+    } catch (error) {
+      console.error("[estimate-pricing-init] suggestion loading failed, degrading to empty", error);
+    }
+  }
 
   return {
     ok: true,

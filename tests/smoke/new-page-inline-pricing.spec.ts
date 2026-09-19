@@ -329,3 +329,33 @@ test("the sticky bar treats legacy and delivered identically: a plain View Estim
   expect(branch).not.toContain("Add Pricing");
   expect(branch).not.toContain("Continue to Send");
 });
+
+// ── Pre-push audit fixes (Phase 2 slice 4, post-0229e5a) ────────────────────
+
+test("the suggestion match source is the contractor's typed jobDescription only, never photoAnalysis", () => {
+  const newPage = code("app/new/page.tsx");
+
+  // generationJobText is set from jobDescription alone -- not the
+  // description || photoAnalysis fallback the generation request itself
+  // still legitimately uses for its own, unrelated purpose.
+  expect(newPage).toContain("setGenerationJobText(jobDescription.trim());");
+  expect(newPage).not.toContain("setGenerationJobText(description);");
+
+  // The generation request itself is untouched: it still legitimately
+  // falls back to photoAnalysis for photo-only input.
+  expect(newPage).toContain("const description = jobDescription.trim() || photoAnalysis;");
+});
+
+test("jobText is capped client-side at 1000 characters before it enters the query string", () => {
+  const newPage = code("app/new/page.tsx");
+
+  expect(newPage).toContain("const MATCH_JOB_TEXT_MAX_LENGTH = 1000;");
+  // The exact truncation point: matchJobText is built by slicing
+  // generationJobText to the cap, and pricingInitUrl is built from
+  // matchJobText, never from the uncapped generationJobText directly.
+  expect(newPage).toContain(
+    "const matchJobText = generationJobText.trim().slice(0, MATCH_JOB_TEXT_MAX_LENGTH);"
+  );
+  expect(newPage).toContain("encodeURIComponent(matchJobText)");
+  expect(newPage).not.toContain("encodeURIComponent(generationJobText.trim())");
+});

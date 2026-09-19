@@ -181,6 +181,13 @@ export function reconstructConfirmedItems(
     if (labourRow.description !== materialRow.description) return { ok: false };
     if (labourRow.quantity !== materialRow.quantity) return { ok: false };
     if (labourRow.taxable !== materialRow.taxable) return { ok: false };
+    // toCanonicalRows() always writes a confirmed item's material row with
+    // markup_percent = 0 explicitly (never null, never anything else) --
+    // tpe_pricebook_items.material_price is already a final selling price.
+    // Anything else here (null, NaN, or a real markup) is not a row this
+    // feature wrote, so it is not a valid pair, not a value to silently
+    // zero out. `!== 0` alone also catches NaN, which is never `=== 0`.
+    if (materialRow.markup_percent !== 0) return { ok: false };
 
     items.push({
       id: nextLineItemId(),
