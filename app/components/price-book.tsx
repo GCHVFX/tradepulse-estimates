@@ -531,7 +531,7 @@ export function PriceBook() {
       <div className="border-t border-zinc-800" />
 
       {/* Common line items + CSV import, merged into one section: this is
-          the data every future AI-generated estimate draws from, so it
+          the data the contractor draws from when pricing a job, so it
           gets more visual weight than a field label above -- via
           typography and spacing only (no colour block/badge/tint), reusing
           the h2 sub-heading treatment already established in
@@ -590,7 +590,7 @@ export function PriceBook() {
         )}
 
         {items.length === 0 && !showAddForm && (
-          <p className="text-zinc-400 text-sm">No items yet. Add your common line items and the AI will use them when estimating.</p>
+          <p className="text-zinc-400 text-sm">No items yet. Add your common line items and they&apos;ll be ready when you price a job.</p>
         )}
 
         {items.map((item) =>

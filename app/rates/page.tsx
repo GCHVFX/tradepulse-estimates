@@ -15,7 +15,7 @@ export default async function RatesPage() {
         <Logo />
         <h1 className="text-2xl font-bold mt-5">Rates</h1>
         <p className="text-zinc-400 text-sm mt-1">
-          Set your rates and the AI will use them when generating estimates.
+          Set your rates and common line items once. They&apos;ll be ready when you price a job.
         </p>
       </header>
 
