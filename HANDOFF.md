@@ -1,6 +1,6 @@
 # TradePulse handoff
 
-Updated: 2026-09-18 PT.
+Updated: 2026-09-18 21:00 PT.
 
 ## Phase 2 shipped state (production, current)
 
@@ -243,6 +243,88 @@ Future hard stops should be worded: "Do not implement. Return findings only."
   (`20260918000000_...` vs. the actual `20260918160315_...`) introduced before Slice 4. Not fixed as part of
   Slice 4; fix separately with a tiny isolated commit.
 - 14 June/July orphan Storage objects remain a separate follow-up.
+
+## Sticky Save Pricing CTA and dirty-after-save fix (local only, not pushed or deployed)
+
+Commit `d71ecee6b55738f0dbdb466d59546429f72f8721` on top of `b7ff1243caef93328db02dec37b8329dccd97385`, which
+is itself on top of the pushed/deployed Slice 4 stack. `origin/main` is still `3d05370d60d451df88d312e9aa2380c30b5d617b`.
+Local `main` is currently 2 commits ahead of `origin/main`.
+
+### Sticky pricing CTA
+
+- On `/new`, the persistent mobile CTA now follows three states in order: Add Pricing -> Save Pricing ->
+  Continue to Send.
+- Once pricing has been entered, the sticky Save Pricing button invokes the exact same save implementation
+  owned by `ContractorPricingEditor` (`app/components/contractor-pricing-editor.tsx`), exposed to the parent
+  through a `forwardRef`/`useImperativeHandle` handle. There is still only one save function, one validation
+  path, and one request.
+- `/new` suppresses only the editor's duplicate inline Save button, via a `hideInlineSaveButton` prop, for
+  that flow.
+- `/estimates/[id]` keeps its existing inline Save action and label unchanged; it does not pass
+  `hideInlineSaveButton`.
+
+### Dirty-after-save invariant
+
+- Before this fix, a successful save could expose Send, and a later unsaved pricing edit could leave Send
+  visible while the screen showed newer, unsaved draft values. This was a pre-existing delivery-readiness
+  defect, not merely a CTA-label problem, and it existed identically on both `/new` and `/estimates/[id]`.
+- `ContractorPricingEditor` now owns dirty/unsaved-change state itself, via a serialized form snapshot
+  (`formSnapshot()`/`hasUnsavedPricingChanges()` in `lib/contractor-pricing-form.ts`) compared against the
+  last successfully saved snapshot. The comparison deliberately excludes the non-substantive `taxEdited` flag.
+- Any substantive pricing edit after a successful save (labour, materials, charges, tax, adding/removing a
+  saved item, or editing an already-accepted saved item) immediately removes Send readiness until pricing is
+  saved again.
+- This same fix also resolves the identical stale-Send condition on `/estimates/[id]`, through the existing
+  `PRICING_CHANGE_EVENT` readiness event path that `EstimateActions` already listens for. `estimate-actions.tsx`
+  itself was not changed.
+- Do not reintroduce a parent-owned, independent copy of dirty/`isSaving`/`saveError` state. The editor is the
+  single source of truth for all three.
+
+### State ownership
+
+- `ContractorPricingEditor` remains the single owner of: save pending, save error, and dirty/unsaved changes.
+- `/new` receives only a read-only state projection via an `onStateChange({status, isDirty, sendReady})`
+  callback, where `sendReady` is fully resolved inside the editor (`pricing.complete && !isDirty`). `/new`
+  never computes or infers this itself, and calls the editor's save only through its exposed imperative
+  handle.
+- A successful but incomplete save leaves the sticky CTA at Save Pricing.
+- A failed save keeps the editor in pricing mode and scrolls the same authoritative validation/save-error
+  element into view, reachable from either the inline or the sticky save path since both call the same
+  `save()`.
+
+### Back to Description
+
+- Leaving pricing via Back to Description fully unmounts `EstimateView` (the parent toggles between
+  `<FormView>` and `<EstimateView>`), so the pricing-entry CTA state (`pricingEntered`, and the editor's own
+  local state) resets naturally to Add Pricing with no explicit reset code required.
+
+### Production status
+
+- This CTA and dirty-after-save fix has **not** been deployed or phone-verified yet. Treat it as local only,
+  awaiting push, deploy, and a real-phone production smoke test. Do not claim it as shipped or verified in
+  production until that smoke test has actually run.
+
+### Pre-push smoke still required (real phone, after deployment)
+
+1. Add Pricing -> Save Pricing appears.
+2. Tap Save with incomplete pricing -> error scrolls into view.
+3. Enter valid pricing -> Save -> Send appears.
+4. Edit a price -> Send disappears and Save Pricing returns.
+5. Save again -> Send returns.
+6. Back to Description -> Add Pricing returns.
+7. `/estimates/[id]` still retains and successfully uses its inline Save action.
+
+### Verification actually run (local, before this commit)
+
+- `npx playwright test --config=playwright.unit.config.ts tests/smoke/new-page-inline-pricing.spec.ts
+  tests/smoke/contractor-pricing-form.spec.ts` -- 120 passed (29 + 91).
+- `npx tsc --noEmit` -- clean.
+- `eslint` on the 5 changed files -- 0 errors, 1 pre-existing unrelated warning (`handleSignOut` unused,
+  confirmed untouched by this change).
+- `git diff --check` -- clean.
+- The 16 unrelated dirty/untracked paths remained untouched.
+- `npm run build` was not run for this commit; it is required again before any later push, per existing
+  project convention.
 
 ## Phase 2 Slices 1-3B technical record (shipped, 2026-09-18 PT)
 
